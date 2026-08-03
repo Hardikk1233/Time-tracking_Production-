@@ -22,11 +22,13 @@ import type {
 import type {
   Client,
   ClientHours,
+  ClientHoursTrendPoint,
   ClientInput,
   ClientUpdate,
   DashboardSummary,
   ErrorResponse,
   GetClientHoursParams,
+  GetClientHoursTrendParams,
   GetDashboardSummaryParams,
   GetRecentActivityParams,
   GetTeamUtilizationParams,
@@ -3227,6 +3229,90 @@ export function useGetRecentActivity<TData = Awaited<ReturnType<typeof getRecent
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetRecentActivityQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetClientHoursTrendUrl = (params: GetClientHoursTrendParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dashboard/client-hours-trend?${stringifiedParams}` : `/api/dashboard/client-hours-trend`
+}
+
+/**
+ * @summary Billable/non-billable hours for a client bucketed by week or month
+ */
+export const getClientHoursTrend = async (params: GetClientHoursTrendParams, options?: Parameters<typeof customFetch>[1]): Promise<ClientHoursTrendPoint[]> => {
+
+  return customFetch<ClientHoursTrendPoint[]>(getGetClientHoursTrendUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClientHoursTrendQueryKey = (params?: GetClientHoursTrendParams,) => {
+    return [
+    `/api/dashboard/client-hours-trend`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetClientHoursTrendQueryOptions = <TData = Awaited<ReturnType<typeof getClientHoursTrend>>, TError = ErrorType<unknown>>(params: GetClientHoursTrendParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClientHoursTrend>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClientHoursTrendQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClientHoursTrend>>> = ({ signal }) => getClientHoursTrend(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClientHoursTrend>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetClientHoursTrendQueryResult = NonNullable<Awaited<ReturnType<typeof getClientHoursTrend>>>
+export type GetClientHoursTrendQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Billable/non-billable hours for a client bucketed by week or month
+ */
+
+export function useGetClientHoursTrend<TData = Awaited<ReturnType<typeof getClientHoursTrend>>, TError = ErrorType<unknown>>(
+ params: GetClientHoursTrendParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClientHoursTrend>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetClientHoursTrendQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

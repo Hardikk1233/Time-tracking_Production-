@@ -1,57 +1,101 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   useGetDashboardSummary,
-  useGetClientHours,
+  useGetClientHoursTrend,
   useGetTeamUtilization,
   useGetRecentActivity,
-  useGetPendingApprovals
+  useGetPendingApprovals,
+  useListClients,
 } from '@workspace/api-client-react';
 import { useAuth } from '@/lib/auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
-import { Clock, Briefcase, AlertCircle, Activity, User } from 'lucide-react';
+import {
+  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip as RechartsTooltip, ResponsiveContainer, Legend,
+} from 'recharts';
+import { Clock, Briefcase, AlertCircle, Activity, User, BarChart2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { format, startOfMonth, differenceInCalendarDays } from 'date-fns';
 import { Link } from 'wouter';
 import { Badge } from '@/components/ui/badge';
 
-type DateRange = 'this_month' | 'last_month' | 'this_year' | 'all_time';
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function todayStr() {
+  return format(new Date(), 'yyyy-MM-dd');
+}
+
+function monthStartStr() {
+  return format(startOfMonth(new Date()), 'yyyy-MM-dd');
+}
+
+/** Determine granularity from the date range span */
+function getGranularity(startDate: string, endDate: string): 'week' | 'month' {
+  const diff = differenceInCalendarDays(new Date(endDate), new Date(startDate));
+  return diff <= 56 ? 'week' : 'month';
+}
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const [range, setRange] = useState<DateRange>('this_month');
 
-  const getDates = () => {
-    const today = new Date();
-    switch (range) {
-      case 'this_month':
-        return { startDate: format(startOfMonth(today), 'yyyy-MM-dd'), endDate: format(endOfMonth(today), 'yyyy-MM-dd') };
-      case 'last_month': {
-        const lastMonth = subMonths(today, 1);
-        return { startDate: format(startOfMonth(lastMonth), 'yyyy-MM-dd'), endDate: format(endOfMonth(lastMonth), 'yyyy-MM-dd') };
-      }
-      case 'this_year':
-        return { startDate: format(new Date(today.getFullYear(), 0, 1), 'yyyy-MM-dd'), endDate: format(new Date(today.getFullYear(), 11, 31), 'yyyy-MM-dd') };
-      case 'all_time':
-      default:
-        return { startDate: undefined, endDate: undefined };
-    }
-  };
+  const [startDate, setStartDate] = useState(monthStartStr());
+  const [endDate, setEndDate] = useState(todayStr());
+  const [selectedClientId, setSelectedClientId] = useState<string>('');
 
-  const { startDate, endDate } = getDates();
-  const { data: summary, isLoading: isLoadingSummary } = useGetDashboardSummary({ startDate, endDate });
-  const { data: clientHours, isLoading: isLoadingClients } = useGetClientHours({ startDate, endDate });
-  const { data: teamUtil, isLoading: isLoadingTeam } = useGetTeamUtilization({ startDate, endDate });
+  // Clamp end to not go before start
+  const safeEnd = endDate < startDate ? startDate : endDate;
+  const granularity = getGranularity(startDate, safeEnd);
+
+  const { data: summary, isLoading: isLoadingSummary } = useGetDashboardSummary({ startDate, endDate: safeEnd });
+  const { data: clients, isLoading: isLoadingClients } = useListClients();
+  const { data: trendData, isLoading: isLoadingTrend } = useGetClientHoursTrend(
+    { clientId: selectedClientId ? Number(selectedClientId) : 0, startDate, endDate: safeEnd, granularity },
+    { query: { enabled: !!selectedClientId } as any },
+  );
+  const { data: teamUtil, isLoading: isLoadingTeam } = useGetTeamUtilization({ startDate, endDate: safeEnd });
   const { data: activity, isLoading: isLoadingActivity } = useGetRecentActivity({ limit: 5 });
   const { data: pendingApprovals, isLoading: isLoadingPending } = useGetPendingApprovals();
 
-  const isManager = user?.role === 'avp' || user?.role === 'md';
   const canApprove = ['associate', 'avp', 'md'].includes(user?.role || '');
+
+  // Pre-select first client when list loads and nothing is selected
+  const clientsLoaded = !isLoadingClients && clients && clients.length > 0;
+  React.useEffect(() => {
+    if (clientsLoaded && !selectedClientId) {
+      setSelectedClientId(String(clients![0].id));
+    }
+  }, [clientsLoaded]);
+
+  const selectedClient = clients?.find(c => String(c.id) === selectedClientId);
+
+  // Stats for the utilization callout in the chart area
+  const workingDaysInRange = useMemo(() => {
+    if (!startDate || !safeEnd) return 0;
+    let count = 0;
+    const cur = new Date(startDate);
+    const end = new Date(safeEnd);
+    while (cur <= end) {
+      const d = cur.getDay();
+      if (d > 0 && d < 6) count++;
+      cur.setDate(cur.getDate() + 1);
+    }
+    return count;
+  }, [startDate, safeEnd]);
+
+  const myUtilization = useMemo(() => {
+    if (!summary || workingDaysInRange === 0) return 0;
+    const capacity = workingDaysInRange * 8;
+    return Math.round((summary.billableHours / capacity) * 100);
+  }, [summary, workingDaysInRange]);
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Command Center</h1>
@@ -60,27 +104,37 @@ export default function Dashboard() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap justify-end">
           {canApprove && !isLoadingPending && pendingApprovals && pendingApprovals.length > 0 && (
             <Link href="/approvals">
               <Button variant="outline" className="border-amber-500/50 bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 shadow-sm">
                 <AlertCircle className="w-4 h-4 mr-2" />
-                {pendingApprovals.length} Pending Approvals
+                {pendingApprovals.length} Pending
               </Button>
             </Link>
           )}
 
-          <Select value={range} onValueChange={(val: DateRange) => setRange(val)}>
-            <SelectTrigger className="w-[180px] bg-card border-border shadow-sm font-mono text-xs">
-              <SelectValue placeholder="Select range" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="this_month">This Month</SelectItem>
-              <SelectItem value="last_month">Last Month</SelectItem>
-              <SelectItem value="this_year">This Year</SelectItem>
-              <SelectItem value="all_time">All Time</SelectItem>
-            </SelectContent>
-          </Select>
+          {/* Custom date range */}
+          <div className="flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-1.5 shadow-sm">
+            <span className="text-xs font-mono text-muted-foreground uppercase tracking-wide">From</span>
+            <Input
+              type="date"
+              value={startDate}
+              onChange={e => setStartDate(e.target.value)}
+              className="h-7 w-36 border-0 bg-transparent p-0 text-sm font-mono focus-visible:ring-0 focus-visible:ring-offset-0"
+            />
+            <span className="text-xs font-mono text-muted-foreground">→</span>
+            <Input
+              type="date"
+              value={safeEnd}
+              min={startDate}
+              onChange={e => setEndDate(e.target.value)}
+              className="h-7 w-36 border-0 bg-transparent p-0 text-sm font-mono focus-visible:ring-0 focus-visible:ring-offset-0"
+            />
+            <span className="text-[10px] font-mono text-muted-foreground/60 uppercase border border-border rounded px-1.5 py-0.5">
+              {granularity === 'week' ? 'Weekly' : 'Monthly'}
+            </span>
+          </div>
 
           <Link href="/time-entries">
             <Button className="shadow-md font-semibold tracking-tight" data-testid="button-log-time">
@@ -90,56 +144,124 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <SummaryCard title="Total Hours" value={summary?.totalHours} icon={Clock} loading={isLoadingSummary} subtext="Logged in period" />
-        <SummaryCard
-          title="Billable Hours"
-          value={summary?.billableHours}
-          icon={Briefcase}
-          loading={isLoadingSummary}
-          subtext={`${summary?.totalHours ? Math.round((summary.billableHours / summary.totalHours) * 100) : 0}% efficiency`}
-          highlight
-        />
-        <SummaryCard title="Non-Billable" value={summary?.nonBillableHours} icon={Activity} loading={isLoadingSummary} subtext="Internal / Admin" />
-        <SummaryCard
-          title="Pending Approval"
-          value={summary?.pendingApprovalCount}
-          icon={AlertCircle}
-          loading={isLoadingSummary}
-          subtext="Entries waiting"
-          alert={summary !== undefined && summary.pendingApprovalCount > 0}
-          valueType="count"
-        />
+      {/* Summary Cards — always your own numbers */}
+      <div>
+        <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-3">
+          Your stats · {workingDaysInRange} working days in range · Capacity {workingDaysInRange * 8}h
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <SummaryCard title="Total Hours" value={summary?.totalHours} icon={Clock} loading={isLoadingSummary} subtext="Hours you logged" />
+          <SummaryCard
+            title="Billable Hours"
+            value={summary?.billableHours}
+            icon={Briefcase}
+            loading={isLoadingSummary}
+            subtext={`${myUtilization}% utilization`}
+            highlight
+          />
+          <SummaryCard title="Non-Billable" value={summary?.nonBillableHours} icon={Activity} loading={isLoadingSummary} subtext="Internal / Admin" />
+          <SummaryCard
+            title="Pending Approval"
+            value={summary?.pendingApprovalCount}
+            icon={AlertCircle}
+            loading={isLoadingSummary}
+            subtext="Your entries waiting"
+            alert={summary !== undefined && summary.pendingApprovalCount > 0}
+            valueType="count"
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Client Hours Chart */}
+        {/* Client Hours Trend Chart */}
         <Card className="lg:col-span-2 shadow-sm border-border">
           <CardHeader className="border-b border-border/50 bg-muted/20">
-            <CardTitle className="text-lg font-bold">Client Hours Distribution</CardTitle>
-            <CardDescription className="font-mono text-xs">Billable vs Non-Billable by Client</CardDescription>
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <CardTitle className="text-lg font-bold">Client Hours Distribution</CardTitle>
+                <CardDescription className="font-mono text-xs mt-0.5">
+                  Billable vs Non-Billable · {granularity === 'week' ? 'Weekly' : 'Monthly'} · Utilization = Billable ÷ (8 × working days)
+                </CardDescription>
+              </div>
+              <div className="w-52 shrink-0">
+                {isLoadingClients ? (
+                  <Skeleton className="h-9 w-full" />
+                ) : (
+                  <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+                    <SelectTrigger className="h-9 text-xs font-mono bg-background">
+                      <SelectValue placeholder="Select client…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients?.map(c => (
+                        <SelectItem key={c.id} value={String(c.id)} className="text-xs font-mono">
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="pt-6">
-            {isLoadingClients ? (
+            {!selectedClientId ? (
+              <div className="h-[300px] flex items-center justify-center text-muted-foreground font-mono text-sm border border-dashed border-border rounded-md gap-2">
+                <BarChart2 className="w-4 h-4" />
+                SELECT A CLIENT TO VIEW TREND
+              </div>
+            ) : isLoadingTrend ? (
               <Skeleton className="h-[300px] w-full" />
-            ) : clientHours && clientHours.length > 0 ? (
+            ) : trendData && trendData.length > 0 ? (
               <div className="h-[300px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={clientHours} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <ComposedChart data={trendData} margin={{ top: 10, right: 40, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                    <XAxis dataKey="clientName" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12, fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12, fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} />
-                    <RechartsTooltip cursor={{ fill: 'hsl(var(--muted))' }} contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '0.5rem', fontFamily: 'var(--font-mono)', fontSize: '12px' }} />
-                    <Legend iconType="circle" wrapperStyle={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }} />
-                    <Bar dataKey="billableHours" name="Billable" stackId="a" fill="hsl(var(--primary))" radius={[0, 0, 4, 4]} />
-                    <Bar dataKey="nonBillableHours" name="Non-Billable" stackId="a" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
-                  </BarChart>
+                    <XAxis
+                      dataKey="label"
+                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11, fontFamily: 'var(--font-mono)' }}
+                      axisLine={false} tickLine={false}
+                    />
+                    <YAxis
+                      yAxisId="hours"
+                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11, fontFamily: 'var(--font-mono)' }}
+                      axisLine={false} tickLine={false}
+                      label={{ value: 'hrs', angle: -90, position: 'insideLeft', fill: 'hsl(var(--muted-foreground))', fontSize: 10, fontFamily: 'var(--font-mono)', dy: 20 }}
+                    />
+                    <YAxis
+                      yAxisId="util"
+                      orientation="right"
+                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11, fontFamily: 'var(--font-mono)' }}
+                      axisLine={false} tickLine={false}
+                      tickFormatter={v => `${v}%`}
+                      domain={[0, 'auto']}
+                    />
+                    <RechartsTooltip
+                      cursor={{ fill: 'hsl(var(--muted))' }}
+                      contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '0.5rem', fontFamily: 'var(--font-mono)', fontSize: '12px' }}
+                      formatter={(value: number, name: string) => {
+                        if (name === 'Utilization') return [`${value}%`, name];
+                        return [`${value.toFixed(1)}h`, name];
+                      }}
+                    />
+                    <Legend iconType="circle" wrapperStyle={{ fontFamily: 'var(--font-mono)', fontSize: '11px' }} />
+                    <Bar yAxisId="hours" dataKey="billableHours" name="Billable" stackId="a" fill="hsl(var(--primary))" radius={[0, 0, 4, 4]} />
+                    <Bar yAxisId="hours" dataKey="nonBillableHours" name="Non-Billable" stackId="a" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
+                    <Line
+                      yAxisId="util"
+                      type="monotone"
+                      dataKey="utilization"
+                      name="Utilization"
+                      stroke="hsl(var(--chart-3))"
+                      strokeWidth={2}
+                      dot={{ r: 3, fill: 'hsl(var(--chart-3))' }}
+                      activeDot={{ r: 5 }}
+                    />
+                  </ComposedChart>
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className="h-[300px] w-full flex items-center justify-center text-muted-foreground font-mono text-sm border border-dashed border-border rounded-md">
-                NO DATA AVAILABLE
+              <div className="h-[300px] flex items-center justify-center text-muted-foreground font-mono text-sm border border-dashed border-border rounded-md">
+                NO DATA FOR {selectedClient?.name?.toUpperCase() ?? 'THIS CLIENT'} IN SELECTED PERIOD
               </div>
             )}
           </CardContent>
@@ -197,14 +319,14 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Team Utilization — Associate+ can see their team; AVP/MD see all */}
+      {/* Team Utilization — Associate+ only */}
       {canApprove && (
         <Card className="shadow-sm border-border">
           <CardHeader className="border-b border-border/50 bg-muted/20 flex flex-row items-center justify-between">
             <div>
               <CardTitle className="text-lg font-bold">Team Utilization</CardTitle>
               <CardDescription className="font-mono text-xs mt-1">
-                Capacity = 8h/day × 5 days/week · Efficiency = Billable ÷ Total
+                Capacity = 8h/day × 5 days/week · Utilization = Billable ÷ (8 × working days)
               </CardDescription>
             </div>
             <User className="w-5 h-5 text-muted-foreground" />
@@ -212,7 +334,7 @@ export default function Dashboard() {
           <CardContent className="p-0">
             {isLoadingTeam ? (
               <div className="p-6"><Skeleton className="h-48 w-full" /></div>
-            ) : teamUtil && teamUtil.length > 0 ? (
+            ) : teamUtil && teamUtil.filter(m => m.totalHours > 0).length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -230,22 +352,22 @@ export default function Dashboard() {
                     {teamUtil
                       .filter(m => m.totalHours > 0)
                       .map((member) => (
-                      <tr key={member.userId} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors">
-                        <td className="px-6 py-3 font-medium text-foreground">{member.userName}</td>
-                        <td className="px-6 py-3">
-                          <Badge variant="outline" className="font-mono font-normal text-[10px] capitalize">{member.role}</Badge>
-                        </td>
-                        <td className="px-6 py-3 text-right font-mono text-sm">{member.totalHours.toFixed(1)}h</td>
-                        <td className="px-6 py-3 text-right font-mono text-sm text-primary">{member.billableHours.toFixed(1)}h</td>
-                        <td className="px-6 py-3 text-right font-mono text-sm text-muted-foreground">{member.nonBillableHours.toFixed(1)}h</td>
-                        <td className="px-6 py-3 text-right">
-                          <PercentBar value={member.utilization} color="primary" />
-                        </td>
-                        <td className="px-6 py-3 text-right">
-                          <PercentBar value={member.efficiency} color={member.efficiency >= 70 ? 'emerald' : member.efficiency >= 40 ? 'amber' : 'red'} />
-                        </td>
-                      </tr>
-                    ))}
+                        <tr key={member.userId} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors">
+                          <td className="px-6 py-3 font-medium text-foreground">{member.userName}</td>
+                          <td className="px-6 py-3">
+                            <Badge variant="outline" className="font-mono font-normal text-[10px] capitalize">{member.role}</Badge>
+                          </td>
+                          <td className="px-6 py-3 text-right font-mono text-sm">{member.totalHours.toFixed(1)}h</td>
+                          <td className="px-6 py-3 text-right font-mono text-sm text-primary">{member.billableHours.toFixed(1)}h</td>
+                          <td className="px-6 py-3 text-right font-mono text-sm text-muted-foreground">{member.nonBillableHours.toFixed(1)}h</td>
+                          <td className="px-6 py-3 text-right">
+                            <PercentBar value={member.utilization} color="primary" />
+                          </td>
+                          <td className="px-6 py-3 text-right">
+                            <PercentBar value={member.efficiency} color={member.efficiency >= 70 ? 'emerald' : member.efficiency >= 40 ? 'amber' : 'red'} />
+                          </td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>
@@ -258,6 +380,8 @@ export default function Dashboard() {
     </div>
   );
 }
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function PercentBar({ value, color }: { value: number; color: string }) {
   const colorMap: Record<string, string> = {
@@ -301,8 +425,12 @@ function SummaryCard({
           <Skeleton className={`h-8 w-24 mb-2 ${highlight ? 'bg-primary-foreground/20' : ''}`} />
         ) : (
           <div className="flex items-baseline gap-1">
-            <span className={`text-3xl font-bold font-mono tracking-tighter ${alert ? 'text-amber-600' : ''}`}>{value ?? 0}</span>
-            <span className={`text-sm font-medium ${highlight ? 'text-primary-foreground/70' : 'text-muted-foreground'} ${alert ? 'text-amber-600/70' : ''}`}>{valueType === 'hours' ? 'h' : ''}</span>
+            <span className={`text-3xl font-bold font-mono tracking-tighter ${alert ? 'text-amber-600' : ''}`}>
+              {valueType === 'hours' ? (value ?? 0).toFixed(1) : (value ?? 0)}
+            </span>
+            <span className={`text-sm font-medium ${highlight ? 'text-primary-foreground/70' : 'text-muted-foreground'} ${alert ? 'text-amber-600/70' : ''}`}>
+              {valueType === 'hours' ? 'h' : ''}
+            </span>
           </div>
         )}
         {subtext && (

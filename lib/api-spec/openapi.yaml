@@ -836,6 +836,43 @@ paths:
                 items:
                   $ref: "#/components/schemas/TimeEntry"
 
+  /dashboard/client-hours-trend:
+    get:
+      operationId: getClientHoursTrend
+      tags: [dashboard]
+      summary: Billable/non-billable hours for a client bucketed by week or month
+      parameters:
+        - name: clientId
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: granularity
+          in: query
+          schema:
+            type: string
+            enum: [week, month]
+            default: month
+      responses:
+        "200":
+          description: Trend data points
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClientHoursTrendPoint"
+
   /dashboard/pending-approvals:
     get:
       operationId: getPendingApprovals
@@ -1219,6 +1256,28 @@ components:
           type: number
         nonBillableHours:
           type: number
+
+    ClientHoursTrendPoint:
+      type: object
+      required: [period, label, billableHours, nonBillableHours, totalHours, workingDays, utilization]
+      properties:
+        period:
+          type: string
+          description: "ISO key: YYYY-Www for weekly, YYYY-MM for monthly"
+        label:
+          type: string
+          description: "Human-readable: 'Jan 2025' or 'W3 Jan'"
+        billableHours:
+          type: number
+        nonBillableHours:
+          type: number
+        totalHours:
+          type: number
+        workingDays:
+          type: integer
+        utilization:
+          type: number
+          description: "billableHours / (workingDays × 8) × 100"
 
     MemberUtilization:
       type: object

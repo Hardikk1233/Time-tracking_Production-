@@ -8,11 +8,14 @@
 
 export * from './client';
 export * from './clientHours';
+export * from './clientHoursTrendPoint';
 export * from './clientInput';
 export * from './clientUpdate';
 export * from './dashboardSummary';
 export * from './errorResponse';
 export * from './getClientHoursParams';
+export * from './getClientHoursTrendGranularity';
+export * from './getClientHoursTrendParams';
 export * from './getDashboardSummaryParams';
 export * from './getRecentActivityParams';
 export * from './getTeamUtilizationParams';

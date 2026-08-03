@@ -249,6 +249,19 @@ export interface ClientHours {
   nonBillableHours: number;
 }
 
+export interface ClientHoursTrendPoint {
+  /** ISO key: YYYY-Www for weekly, YYYY-MM for monthly */
+  period: string;
+  /** Human-readable: 'Jan 2025' or 'W3 Jan' */
+  label: string;
+  billableHours: number;
+  nonBillableHours: number;
+  totalHours: number;
+  workingDays: number;
+  /** billableHours / (workingDays × 8) × 100 */
+  utilization: number;
+}
+
 export type MemberUtilizationRole = typeof MemberUtilizationRole[keyof typeof MemberUtilizationRole];
 
 
@@ -334,4 +347,19 @@ endDate?: string;
 export type GetRecentActivityParams = {
 limit?: number;
 };
+
+export type GetClientHoursTrendParams = {
+clientId: number;
+startDate?: string;
+endDate?: string;
+granularity?: GetClientHoursTrendGranularity;
+};
+
+export type GetClientHoursTrendGranularity = typeof GetClientHoursTrendGranularity[keyof typeof GetClientHoursTrendGranularity];
+
+
+export const GetClientHoursTrendGranularity = {
+  week: 'week',
+  month: 'month',
+} as const;
 

@@ -886,6 +886,30 @@ export const GetRecentActivityResponse = zod.array(GetRecentActivityResponseItem
 
 
 /**
+ * @summary Billable/non-billable hours for a client bucketed by week or month
+ */
+export const getClientHoursTrendQueryGranularityDefault = `month`;
+
+export const GetClientHoursTrendQueryParams = zod.object({
+  "clientId": zod.coerce.number().int(),
+  "startDate": zod.date().optional(),
+  "endDate": zod.date().optional(),
+  "granularity": zod.enum(['week', 'month']).default(getClientHoursTrendQueryGranularityDefault)
+})
+
+export const GetClientHoursTrendResponseItem = zod.object({
+  "period": zod.string().describe('ISO key: YYYY-Www for weekly, YYYY-MM for monthly'),
+  "label": zod.string().describe('Human-readable: \'Jan 2025\' or \'W3 Jan\''),
+  "billableHours": zod.number(),
+  "nonBillableHours": zod.number(),
+  "totalHours": zod.number(),
+  "workingDays": zod.int(),
+  "utilization": zod.number().describe('billableHours \/ (workingDays × 8) × 100')
+})
+export const GetClientHoursTrendResponse = zod.array(GetClientHoursTrendResponseItem)
+
+
+/**
  * @summary Time entries pending approval
  */
 export const GetPendingApprovalsResponseItem = zod.object({
