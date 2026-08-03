@@ -111,6 +111,7 @@ router.get("/dashboard/client-hours", async (req, res): Promise<void> => {
 // ─── Team utilization ─────────────────────────────────────────────────────────
 
 router.get("/dashboard/utilization", async (req, res): Promise<void> => {
+  const currentUserId = req.session.userId!;
   const { startDate, endDate } = req.query as {
     startDate?: string;
     endDate?: string;
@@ -121,6 +122,23 @@ router.get("/dashboard/utilization", async (req, res): Promise<void> => {
   if (endDate) entryConditions.push(lte(timeEntriesTable.date, endDate));
   const entryWhere =
     entryConditions.length > 0 ? and(...entryConditions) : undefined;
+
+  // Role-based visibility: MD/AVP see full team; Associate sees self + direct Analysts; Analyst sees only self
+  const [currentUser] = await db
+    .select({ role: usersTable.role })
+    .from(usersTable)
+    .where(eq(usersTable.id, currentUserId));
+
+  let userWhereClause;
+  const currentRole = currentUser?.role ?? "analyst";
+
+  if (currentRole === "analyst") {
+    userWhereClause = eq(usersTable.id, currentUserId);
+  } else if (currentRole === "associate") {
+    // Self + Analysts who report to this associate
+    userWhereClause = sql`(${usersTable.id} = ${currentUserId} OR (${usersTable.role} = 'analyst' AND ${usersTable.reportingToId} = ${currentUserId}))`;
+  }
+  // avp and md see everyone (no filter)
 
   const rows = await db
     .select({
@@ -137,6 +155,7 @@ router.get("/dashboard/utilization", async (req, res): Promise<void> => {
       timeEntriesTable,
       and(eq(timeEntriesTable.userId, usersTable.id), entryWhere),
     )
+    .where(userWhereClause)
     .groupBy(usersTable.id, usersTable.name, usersTable.role)
     .orderBy(sql`COALESCE(SUM(${timeEntriesTable.hours}), 0) DESC`);
 

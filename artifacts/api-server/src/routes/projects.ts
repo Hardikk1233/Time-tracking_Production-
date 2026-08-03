@@ -1,17 +1,53 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import {
   db,
   projectsTable,
   clientsTable,
   projectUsersTable,
+  clientUsersTable,
   usersTable,
 } from "@workspace/db";
 
 const router: IRouter = Router();
 
+async function getVisibleClientIds(userId: number): Promise<number[] | null> {
+  const [u] = await db
+    .select({ role: usersTable.role })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId));
+
+  if (u?.role === "md") return null;
+
+  const rows = await db
+    .select({ clientId: clientUsersTable.clientId })
+    .from(clientUsersTable)
+    .where(eq(clientUsersTable.userId, userId));
+
+  return rows.map((r) => r.clientId);
+}
+
 router.get("/projects", async (req, res): Promise<void> => {
   const { clientId } = req.query as { clientId?: string };
+
+  const visibleClientIds = await getVisibleClientIds(req.session.userId!);
+
+  let whereClause;
+  if (clientId) {
+    const cId = parseInt(clientId, 10);
+    // If user doesn't have access to this specific client, return empty
+    if (visibleClientIds !== null && !visibleClientIds.includes(cId)) {
+      res.json([]);
+      return;
+    }
+    whereClause = eq(projectsTable.clientId, cId);
+  } else if (visibleClientIds !== null) {
+    if (visibleClientIds.length === 0) {
+      res.json([]);
+      return;
+    }
+    whereClause = inArray(projectsTable.clientId, visibleClientIds);
+  }
 
   const rows = await db
     .select({
@@ -24,9 +60,7 @@ router.get("/projects", async (req, res): Promise<void> => {
     })
     .from(projectsTable)
     .innerJoin(clientsTable, eq(projectsTable.clientId, clientsTable.id))
-    .where(
-      clientId ? eq(projectsTable.clientId, parseInt(clientId, 10)) : undefined,
-    )
+    .where(whereClause)
     .orderBy(projectsTable.name);
 
   res.json(rows);
@@ -163,7 +197,8 @@ router.delete("/projects/:projectId", async (req, res): Promise<void> => {
   res.json({ message: "Project deleted" });
 });
 
-// Project assignments
+// ─── Project assignments ──────────────────────────────────────────────────────
+
 router.get(
   "/projects/:projectId/assignments",
   async (req, res): Promise<void> => {
@@ -189,16 +224,9 @@ router.get(
       })
       .from(projectUsersTable)
       .innerJoin(usersTable, eq(projectUsersTable.userId, usersTable.id))
-      .where(eq(projectUsersTable.projectId, projectId))
-      .orderBy(usersTable.name);
+      .where(eq(projectUsersTable.projectId, projectId));
 
-    res.json(
-      rows.map((u) => ({
-        ...u,
-        reportingToId: u.reportingToId ?? null,
-        reportingToName: null,
-      })),
-    );
+    res.json(rows);
   },
 );
 
