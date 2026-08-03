@@ -37,7 +37,8 @@ router.get("/clients", async (req, res): Promise<void> => {
   const role = await getCurrentUserRole(req.session.userId!);
   const visibleIds = await getVisibleClientIds(req.session.userId!, role);
 
-  let clients;
+  type ClientRow = typeof clientsTable.$inferSelect;
+  let clients: ClientRow[];
   if (visibleIds === null) {
     clients = await db.select().from(clientsTable).orderBy(clientsTable.name);
   } else if (visibleIds.length === 0) {

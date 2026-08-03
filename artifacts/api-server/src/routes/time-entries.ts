@@ -8,6 +8,7 @@ import {
   projectsTable,
   clientsTable,
   projectUsersTable,
+  clientUsersTable,
 } from "@workspace/db";
 
 const router: IRouter = Router();
@@ -23,7 +24,26 @@ async function getVisibleUserIds(
   if (role === "md") return null;
   if (role === "analyst") return [currentUserId];
 
-  // Associate / AVP: own entries + everyone assigned to the same projects
+  if (role === "avp") {
+    // AVP: own entries + all users assigned to the same clients
+    const myClients = await db
+      .selectDistinct({ clientId: clientUsersTable.clientId })
+      .from(clientUsersTable)
+      .where(eq(clientUsersTable.userId, currentUserId));
+
+    const myClientIds = myClients.map((r) => r.clientId);
+    if (myClientIds.length === 0) return [currentUserId];
+
+    const coWorkers = await db
+      .selectDistinct({ userId: clientUsersTable.userId })
+      .from(clientUsersTable)
+      .where(inArray(clientUsersTable.clientId, myClientIds));
+
+    const ids = new Set([currentUserId, ...coWorkers.map((r) => r.userId)]);
+    return [...ids];
+  }
+
+  // Associate: own entries + everyone assigned to the same projects
   const myProjects = await db
     .selectDistinct({ projectId: projectUsersTable.projectId })
     .from(projectUsersTable)
