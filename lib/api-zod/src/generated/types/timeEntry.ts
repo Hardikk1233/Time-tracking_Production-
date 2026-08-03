@@ -22,7 +22,16 @@ export interface TimeEntry {
   date: Date;
   /** @nullable */
   description?: string | null;
-  billable: boolean;
+  /**
+     * null = not yet split; 0..hours = explicitly split by Associate+
+     * @nullable
+     */
+  billableHours?: number | null;
+  /**
+     * computed: hours - billableHours; null if not yet split
+     * @nullable
+     */
+  nonBillableHours?: number | null;
   status: TimeEntryStatus;
   /** @nullable */
   approvedById?: number | null;

@@ -11,6 +11,29 @@ import {
 
 const router: IRouter = Router();
 
+// ─── Working days calculation ─────────────────────────────────────────────────
+
+function countWorkingDays(startDate?: string, endDate?: string): number {
+  const now = new Date();
+  const start = startDate
+    ? new Date(startDate)
+    : new Date(now.getFullYear(), now.getMonth(), 1);
+  const end = endDate
+    ? new Date(endDate)
+    : new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+  let count = 0;
+  const cur = new Date(start);
+  while (cur <= end) {
+    const d = cur.getDay();
+    if (d > 0 && d < 6) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return Math.max(count, 1); // avoid divide-by-zero
+}
+
+// ─── Summary ─────────────────────────────────────────────────────────────────
+
 router.get("/dashboard/summary", async (req, res): Promise<void> => {
   const { startDate, endDate } = req.query as {
     startDate?: string;
@@ -25,8 +48,8 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
   const [result] = await db
     .select({
       totalHours: sql<number>`COALESCE(SUM(${timeEntriesTable.hours}), 0)`,
-      billableHours: sql<number>`COALESCE(SUM(CASE WHEN ${timeEntriesTable.billable} = true THEN ${timeEntriesTable.hours} ELSE 0 END), 0)`,
-      nonBillableHours: sql<number>`COALESCE(SUM(CASE WHEN ${timeEntriesTable.billable} = false THEN ${timeEntriesTable.hours} ELSE 0 END), 0)`,
+      billableHours: sql<number>`COALESCE(SUM(COALESCE(${timeEntriesTable.billableHours}, 0)), 0)`,
+      nonBillableHours: sql<number>`COALESCE(SUM(${timeEntriesTable.hours} - COALESCE(${timeEntriesTable.billableHours}, 0)), 0)`,
       pendingApprovalCount: sql<number>`COUNT(CASE WHEN ${timeEntriesTable.status} = 'pending' THEN 1 END)`,
       approvedHours: sql<number>`COALESCE(SUM(CASE WHEN ${timeEntriesTable.status} = 'approved' THEN ${timeEntriesTable.hours} ELSE 0 END), 0)`,
     })
@@ -41,6 +64,8 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
     approvedHours: Number(result?.approvedHours ?? 0),
   });
 });
+
+// ─── Client hours ─────────────────────────────────────────────────────────────
 
 router.get("/dashboard/client-hours", async (req, res): Promise<void> => {
   const { startDate, endDate } = req.query as {
@@ -59,8 +84,8 @@ router.get("/dashboard/client-hours", async (req, res): Promise<void> => {
       clientId: clientsTable.id,
       clientName: clientsTable.name,
       totalHours: sql<number>`COALESCE(SUM(${timeEntriesTable.hours}), 0)`,
-      billableHours: sql<number>`COALESCE(SUM(CASE WHEN ${timeEntriesTable.billable} = true THEN ${timeEntriesTable.hours} ELSE 0 END), 0)`,
-      nonBillableHours: sql<number>`COALESCE(SUM(CASE WHEN ${timeEntriesTable.billable} = false THEN ${timeEntriesTable.hours} ELSE 0 END), 0)`,
+      billableHours: sql<number>`COALESCE(SUM(COALESCE(${timeEntriesTable.billableHours}, 0)), 0)`,
+      nonBillableHours: sql<number>`COALESCE(SUM(${timeEntriesTable.hours} - COALESCE(${timeEntriesTable.billableHours}, 0)), 0)`,
     })
     .from(clientsTable)
     .leftJoin(projectsTable, eq(projectsTable.clientId, clientsTable.id))
@@ -83,6 +108,8 @@ router.get("/dashboard/client-hours", async (req, res): Promise<void> => {
   );
 });
 
+// ─── Team utilization ─────────────────────────────────────────────────────────
+
 router.get("/dashboard/utilization", async (req, res): Promise<void> => {
   const { startDate, endDate } = req.query as {
     startDate?: string;
@@ -101,8 +128,8 @@ router.get("/dashboard/utilization", async (req, res): Promise<void> => {
       userName: usersTable.name,
       role: usersTable.role,
       totalHours: sql<number>`COALESCE(SUM(${timeEntriesTable.hours}), 0)`,
-      billableHours: sql<number>`COALESCE(SUM(CASE WHEN ${timeEntriesTable.billable} = true THEN ${timeEntriesTable.hours} ELSE 0 END), 0)`,
-      nonBillableHours: sql<number>`COALESCE(SUM(CASE WHEN ${timeEntriesTable.billable} = false THEN ${timeEntriesTable.hours} ELSE 0 END), 0)`,
+      billableHours: sql<number>`COALESCE(SUM(COALESCE(${timeEntriesTable.billableHours}, 0)), 0)`,
+      nonBillableHours: sql<number>`COALESCE(SUM(${timeEntriesTable.hours} - COALESCE(${timeEntriesTable.billableHours}, 0)), 0)`,
       pendingHours: sql<number>`COALESCE(SUM(CASE WHEN ${timeEntriesTable.status} = 'pending' THEN ${timeEntriesTable.hours} ELSE 0 END), 0)`,
     })
     .from(usersTable)
@@ -113,18 +140,29 @@ router.get("/dashboard/utilization", async (req, res): Promise<void> => {
     .groupBy(usersTable.id, usersTable.name, usersTable.role)
     .orderBy(sql`COALESCE(SUM(${timeEntriesTable.hours}), 0) DESC`);
 
+  const workingDays = countWorkingDays(startDate, endDate);
+  const capacityHours = workingDays * 8;
+
   res.json(
-    rows.map((r) => ({
-      userId: r.userId,
-      userName: r.userName,
-      role: r.role,
-      totalHours: Number(r.totalHours),
-      billableHours: Number(r.billableHours),
-      nonBillableHours: Number(r.nonBillableHours),
-      pendingHours: Number(r.pendingHours),
-    })),
+    rows.map((r) => {
+      const total = Number(r.totalHours);
+      const billable = Number(r.billableHours);
+      return {
+        userId: r.userId,
+        userName: r.userName,
+        role: r.role,
+        totalHours: total,
+        billableHours: billable,
+        nonBillableHours: Number(r.nonBillableHours),
+        pendingHours: Number(r.pendingHours),
+        utilization: Math.round((total / capacityHours) * 100),
+        efficiency: total > 0 ? Math.round((billable / total) * 100) : 0,
+      };
+    }),
   );
 });
+
+// ─── Recent activity ─────────────────────────────────────────────────────────
 
 router.get("/dashboard/recent-activity", async (req, res): Promise<void> => {
   const { limit } = req.query as { limit?: string };
@@ -145,7 +183,7 @@ router.get("/dashboard/recent-activity", async (req, res): Promise<void> => {
       hours: timeEntriesTable.hours,
       date: timeEntriesTable.date,
       description: timeEntriesTable.description,
-      billable: timeEntriesTable.billable,
+      billableHours: timeEntriesTable.billableHours,
       status: timeEntriesTable.status,
       approvedById: timeEntriesTable.approvedById,
       createdAt: timeEntriesTable.createdAt,
@@ -161,10 +199,17 @@ router.get("/dashboard/recent-activity", async (req, res): Promise<void> => {
   res.json(
     rows.map((r) => ({
       ...r,
+      billableHours: r.billableHours ?? null,
+      nonBillableHours:
+        r.billableHours !== null && r.billableHours !== undefined
+          ? r.hours - r.billableHours
+          : null,
       approvedByName: null,
     })),
   );
 });
+
+// ─── Pending approvals ────────────────────────────────────────────────────────
 
 router.get("/dashboard/pending-approvals", async (req, res): Promise<void> => {
   const rows = await db
@@ -182,7 +227,7 @@ router.get("/dashboard/pending-approvals", async (req, res): Promise<void> => {
       hours: timeEntriesTable.hours,
       date: timeEntriesTable.date,
       description: timeEntriesTable.description,
-      billable: timeEntriesTable.billable,
+      billableHours: timeEntriesTable.billableHours,
       status: timeEntriesTable.status,
       approvedById: timeEntriesTable.approvedById,
       createdAt: timeEntriesTable.createdAt,
@@ -198,6 +243,11 @@ router.get("/dashboard/pending-approvals", async (req, res): Promise<void> => {
   res.json(
     rows.map((r) => ({
       ...r,
+      billableHours: r.billableHours ?? null,
+      nonBillableHours:
+        r.billableHours !== null && r.billableHours !== undefined
+          ? r.hours - r.billableHours
+          : null,
       approvedByName: null,
     })),
   );

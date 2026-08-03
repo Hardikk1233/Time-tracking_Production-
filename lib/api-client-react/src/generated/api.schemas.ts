@@ -181,7 +181,16 @@ export interface TimeEntry {
   date: string;
   /** @nullable */
   description?: string | null;
-  billable: boolean;
+  /**
+     * null = not yet split; 0..hours = explicitly split by Associate+
+     * @nullable
+     */
+  billableHours?: number | null;
+  /**
+     * computed: hours - billableHours; null if not yet split
+     * @nullable
+     */
+  nonBillableHours?: number | null;
   status: TimeEntryStatus;
   /** @nullable */
   approvedById?: number | null;
@@ -199,7 +208,6 @@ export interface TimeEntryInput {
   hours: number;
   date: string;
   description?: string;
-  billable?: boolean;
 }
 
 export interface TimeEntryUpdate {
@@ -211,7 +219,14 @@ export interface TimeEntryUpdate {
   date?: string;
   /** @nullable */
   description?: string | null;
-  billable?: boolean;
+}
+
+export interface SplitHoursInput {
+  /**
+     * Hours to mark as billable; remainder becomes non-billable
+     * @minimum 0
+     */
+  billableHours: number;
 }
 
 export interface UserAssignmentInput {
@@ -252,6 +267,10 @@ export interface MemberUtilization {
   billableHours: number;
   nonBillableHours: number;
   pendingHours: number;
+  /** totalHours / (workingDays × 8) × 100 */
+  utilization: number;
+  /** billableHours / totalHours × 100 */
+  efficiency: number;
 }
 
 export type ListUsersParams = {

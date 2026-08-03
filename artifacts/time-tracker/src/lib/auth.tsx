@@ -12,10 +12,9 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [, setLocation] = useLocation();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: user, isLoading, error } = useGetMe({
-    query: {
-      retry: false,
-    }
+    query: { retry: false } as any,
   });
 
   const [mounted, setMounted] = useState(false);

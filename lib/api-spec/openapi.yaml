@@ -687,6 +687,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/MessageResponse"
 
+  /time-entries/{entryId}/split:
+    post:
+      operationId: splitTimeEntry
+      tags: [time-entries]
+      summary: Split entry hours into billable and non-billable (Associate+)
+      parameters:
+        - $ref: "#/components/parameters/EntryId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SplitHoursInput"
+      responses:
+        "200":
+          description: Updated time entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimeEntry"
+
   /time-entries/{entryId}/approve:
     post:
       operationId: approveTimeEntry
@@ -1076,7 +1097,7 @@ components:
     # ─── Time Entries ─────────────────────────────────────────────────────
     TimeEntry:
       type: object
-      required: [id, userId, userName, taskId, taskName, projectId, projectName, clientId, clientName, hours, date, billable, status, createdAt]
+      required: [id, userId, userName, taskId, taskName, projectId, projectName, clientId, clientName, hours, date, status, createdAt]
       properties:
         id:
           type: integer
@@ -1105,8 +1126,12 @@ components:
           format: date
         description:
           type: ["string", "null"]
-        billable:
-          type: boolean
+        billableHours:
+          type: ["number", "null"]
+          description: "null = not yet split; 0..hours = explicitly split by Associate+"
+        nonBillableHours:
+          type: ["number", "null"]
+          description: "computed: hours - billableHours; null if not yet split"
         status:
           type: string
           enum: [pending, approved, rejected]
@@ -1133,9 +1158,6 @@ components:
           format: date
         description:
           type: string
-        billable:
-          type: boolean
-          default: false
 
     TimeEntryUpdate:
       type: object
@@ -1149,8 +1171,15 @@ components:
           format: date
         description:
           type: ["string", "null"]
-        billable:
-          type: boolean
+
+    SplitHoursInput:
+      type: object
+      required: [billableHours]
+      properties:
+        billableHours:
+          type: number
+          minimum: 0
+          description: "Hours to mark as billable; remainder becomes non-billable"
 
     # ─── Assignments ──────────────────────────────────────────────────────
     UserAssignmentInput:
@@ -1193,7 +1222,7 @@ components:
 
     MemberUtilization:
       type: object
-      required: [userId, userName, role, totalHours, billableHours, nonBillableHours, pendingHours]
+      required: [userId, userName, role, totalHours, billableHours, nonBillableHours, pendingHours, utilization, efficiency]
       properties:
         userId:
           type: integer
@@ -1210,3 +1239,9 @@ components:
           type: number
         pendingHours:
           type: number
+        utilization:
+          type: number
+          description: "totalHours / (workingDays × 8) × 100"
+        efficiency:
+          type: number
+          description: "billableHours / totalHours × 100"

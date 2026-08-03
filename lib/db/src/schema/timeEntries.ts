@@ -4,7 +4,6 @@ import {
   text,
   integer,
   timestamp,
-  boolean,
   real,
 } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
@@ -21,7 +20,8 @@ export const timeEntriesTable = pgTable("time_entries", {
   hours: real("hours").notNull(),
   date: text("date").notNull(), // stored as YYYY-MM-DD string
   description: text("description"),
-  billable: boolean("billable").notNull().default(false),
+  // billableHours: null = not yet split by Associate+; 0..hours = explicitly split
+  billableHours: real("billable_hours"),
   status: text("status", { enum: ["pending", "approved", "rejected"] })
     .notNull()
     .default("pending"),

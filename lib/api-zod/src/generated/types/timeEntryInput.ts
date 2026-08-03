@@ -15,5 +15,4 @@ export interface TimeEntryInput {
   hours: number;
   date: Date;
   description?: string;
-  billable?: boolean;
 }

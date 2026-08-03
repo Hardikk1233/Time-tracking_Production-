@@ -30,6 +30,7 @@ export * from './messageResponse';
 export * from './project';
 export * from './projectInput';
 export * from './projectUpdate';
+export * from './splitHoursInput';
 export * from './task';
 export * from './taskInput';
 export * from './taskUpdate';

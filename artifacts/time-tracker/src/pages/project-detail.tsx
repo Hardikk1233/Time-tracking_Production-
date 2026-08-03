@@ -27,7 +27,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, FolderKanban, Users, CheckSquare, UserPlus, UserMinus, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, FolderKanban, Users, CheckSquare, UserPlus, UserMinus, Plus, Trash2, ShieldCheck } from 'lucide-react';
 import { Link } from 'wouter';
 import { format } from 'date-fns';
 
@@ -35,6 +35,9 @@ const taskSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   description: z.string().optional(),
 });
+
+const ROLE_ORDER = ['md', 'avp', 'associate', 'analyst'] as const;
+const ROLE_LABELS: Record<string, string> = { md: 'Managing Directors', avp: 'AVPs', associate: 'Associates', analyst: 'Analysts' };
 
 export default function ProjectDetail() {
   const [, params] = useRoute('/projects/:id');
@@ -61,6 +64,12 @@ export default function ProjectDetail() {
   const assignedIds = new Set((assignments || []).map(u => u.id));
   const unassignedUsers = (allUsers || []).filter(u => !assignedIds.has(u.id));
 
+  // Group assigned users by role
+  const assignmentsByRole = ROLE_ORDER.reduce((acc, role) => {
+    acc[role] = (assignments || []).filter(u => u.role === role);
+    return acc;
+  }, {} as Record<string, typeof assignments>);
+
   const handleAssign = () => {
     if (!selectedUserId) return;
     assignMutation.mutate(
@@ -71,7 +80,7 @@ export default function ProjectDetail() {
           queryClient.invalidateQueries({ queryKey: getListProjectAssignmentsQueryKey(projectId) });
           setSelectedUserId('');
         },
-        onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to assign user.' }),
+        onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to assign.' }),
       }
     );
   };
@@ -84,7 +93,7 @@ export default function ProjectDetail() {
           toast({ title: 'User removed from project' });
           queryClient.invalidateQueries({ queryKey: getListProjectAssignmentsQueryKey(projectId) });
         },
-        onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to remove user.' }),
+        onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to remove.' }),
       }
     );
   };
@@ -101,12 +110,7 @@ export default function ProjectDetail() {
   };
 
   if (isLoadingProject) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-10 w-48" />
-        <Skeleton className="h-32 w-full" />
-      </div>
-    );
+    return <div className="space-y-6"><Skeleton className="h-10 w-48" /><Skeleton className="h-32 w-full" /></div>;
   }
 
   if (!project) {
@@ -135,14 +139,29 @@ export default function ProjectDetail() {
           <div>
             <div className="text-xs font-mono text-primary mb-1 uppercase tracking-wider">{project.clientName}</div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">{project.name}</h1>
-            <p className="text-muted-foreground font-mono text-sm mt-1">
-              {project.description || 'No description provided.'}
-            </p>
-            <p className="text-xs text-muted-foreground font-mono mt-1 opacity-60">
-              Created {format(new Date(project.createdAt), 'MMMM yyyy')}
-            </p>
+            <p className="text-muted-foreground font-mono text-sm mt-1">{project.description || 'No description provided.'}</p>
+            <p className="text-xs text-muted-foreground font-mono mt-1 opacity-60">Created {format(new Date(project.createdAt), 'MMMM yyyy')}</p>
           </div>
         </div>
+      </div>
+
+      {/* Project summary strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {ROLE_ORDER.map(role => {
+          const group = assignmentsByRole[role] || [];
+          return (
+            <div key={role} className="bg-muted/30 border border-border/50 rounded-lg p-3 flex flex-col gap-1">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">{ROLE_LABELS[role]}</span>
+              <span className="text-2xl font-bold font-mono text-foreground">{group.length}</span>
+              <div className="flex flex-wrap gap-1 mt-0.5">
+                {group.slice(0, 3).map(u => (
+                  <span key={u.id} className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-medium truncate max-w-[80px]">{u.name.split(' ')[0]}</span>
+                ))}
+                {group.length > 3 && <span className="text-[10px] text-muted-foreground">+{group.length - 3}</span>}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -153,24 +172,16 @@ export default function ProjectDetail() {
               <CardTitle className="text-base font-bold flex items-center gap-2">
                 <CheckSquare className="w-4 h-4 text-primary" />
                 Tasks
-                <Badge variant="secondary" className="font-mono text-[10px]">
-                  {tasks?.length || 0}
-                </Badge>
+                <Badge variant="secondary" className="font-mono text-[10px]">{tasks?.length || 0}</Badge>
               </CardTitle>
               {isManager && (
-                <CreateTaskInlineDialog
-                  open={isTaskDialogOpen}
-                  onOpenChange={setIsTaskDialogOpen}
-                  projectId={projectId}
-                />
+                <CreateTaskInlineDialog open={isTaskDialogOpen} onOpenChange={setIsTaskDialogOpen} projectId={projectId} />
               )}
             </div>
           </CardHeader>
           <CardContent className="pt-4">
             {isLoadingTasks ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
-              </div>
+              <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
             ) : tasks && tasks.length > 0 ? (
               <div className="space-y-2">
                 {tasks.map(t => (
@@ -179,15 +190,12 @@ export default function ProjectDetail() {
                       <CheckSquare className="w-4 h-4 text-primary/50 shrink-0" />
                       <div>
                         <p className="text-sm font-medium text-foreground">{t.name}</p>
-                        {t.description && (
-                          <p className="text-xs text-muted-foreground">{t.description}</p>
-                        )}
+                        {t.description && <p className="text-xs text-muted-foreground">{t.description}</p>}
                       </div>
                     </div>
                     {isManager && (
                       <Button
-                        variant="ghost"
-                        size="icon"
+                        variant="ghost" size="icon"
                         className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
                         onClick={() => handleDeleteTask(t.id)}
                         disabled={deleteTaskMutation.isPending}
@@ -199,30 +207,28 @@ export default function ProjectDetail() {
                 ))}
               </div>
             ) : (
-              <div className="py-8 text-center text-muted-foreground font-mono text-sm border border-dashed border-border rounded-md">
-                NO TASKS YET
-              </div>
+              <div className="py-8 text-center text-muted-foreground font-mono text-sm border border-dashed border-border rounded-md">NO TASKS YET</div>
             )}
           </CardContent>
         </Card>
 
-        {/* Assigned Team Members */}
+        {/* Team Assignments — grouped by role */}
         <Card className="shadow-sm border-border">
           <CardHeader className="border-b border-border/50 bg-muted/20 pb-4">
-            <CardTitle className="text-base font-bold flex items-center gap-2">
-              <Users className="w-4 h-4 text-primary" />
-              Assigned Team
-              <Badge variant="secondary" className="font-mono text-[10px]">
-                {assignments?.length || 0}
-              </Badge>
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <Users className="w-4 h-4 text-primary" />
+                Project Team
+                <Badge variant="secondary" className="font-mono text-[10px]">{assignments?.length || 0}</Badge>
+              </CardTitle>
+            </div>
           </CardHeader>
           <CardContent className="pt-4 space-y-4">
             {isManager && (
               <div className="flex gap-2">
                 <Select value={selectedUserId} onValueChange={setSelectedUserId}>
                   <SelectTrigger className="flex-1 bg-background">
-                    <SelectValue placeholder="Select a team member..." />
+                    <SelectValue placeholder="Add a team member..." />
                   </SelectTrigger>
                   <SelectContent>
                     {unassignedUsers.length === 0 ? (
@@ -230,58 +236,59 @@ export default function ProjectDetail() {
                     ) : (
                       unassignedUsers.map(u => (
                         <SelectItem key={u.id} value={u.id.toString()}>
-                          {u.name} <span className="text-muted-foreground text-xs">({u.role})</span>
+                          {u.name} <span className="text-muted-foreground text-xs capitalize">({u.role})</span>
                         </SelectItem>
                       ))
                     )}
                   </SelectContent>
                 </Select>
-                <Button
-                  size="sm"
-                  onClick={handleAssign}
-                  disabled={!selectedUserId || assignMutation.isPending}
-                  className="shrink-0"
-                >
+                <Button size="sm" onClick={handleAssign} disabled={!selectedUserId || assignMutation.isPending} className="shrink-0">
                   <UserPlus className="w-4 h-4" />
                 </Button>
               </div>
             )}
 
             {isLoadingAssignments ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
-              </div>
+              <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
             ) : assignments && assignments.length > 0 ? (
-              <div className="space-y-2">
-                {assignments.map(u => (
-                  <div key={u.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-md group">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
-                        {u.name.substring(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{u.name}</p>
-                        <p className="text-xs text-muted-foreground capitalize font-mono">{u.role}</p>
+              <div className="space-y-4">
+                {ROLE_ORDER.map(role => {
+                  const group = assignmentsByRole[role] || [];
+                  if (group.length === 0) return null;
+                  return (
+                    <div key={role}>
+                      <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1">
+                        {role === 'md' && <ShieldCheck className="w-3 h-3 text-amber-500" />}
+                        {ROLE_LABELS[role]}
+                      </p>
+                      <div className="space-y-1.5">
+                        {group.map(u => (
+                          <div key={u.id} className="flex items-center justify-between p-2.5 bg-muted/30 rounded-md group">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-[10px]">
+                                {u.name.substring(0, 2).toUpperCase()}
+                              </div>
+                              <span className="text-sm font-medium text-foreground">{u.name}</span>
+                            </div>
+                            {isManager && (
+                              <Button
+                                variant="ghost" size="icon"
+                                className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={() => handleRemove(u.id)}
+                                disabled={removeMutation.isPending}
+                              >
+                                <UserMinus className="w-3 h-3" />
+                              </Button>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     </div>
-                    {isManager && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => handleRemove(u.id)}
-                        disabled={removeMutation.isPending}
-                      >
-                        <UserMinus className="w-3.5 h-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
-              <div className="py-8 text-center text-muted-foreground font-mono text-sm border border-dashed border-border rounded-md">
-                NO TEAM MEMBERS ASSIGNED
-              </div>
+              <div className="py-8 text-center text-muted-foreground font-mono text-sm border border-dashed border-border rounded-md">NO TEAM MEMBERS ASSIGNED</div>
             )}
           </CardContent>
         </Card>
@@ -290,15 +297,7 @@ export default function ProjectDetail() {
   );
 }
 
-function CreateTaskInlineDialog({
-  open,
-  onOpenChange,
-  projectId,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  projectId: number;
-}) {
+function CreateTaskInlineDialog({ open, onOpenChange, projectId }: { open: boolean; onOpenChange: (v: boolean) => void; projectId: number }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const createMutation = useCreateTask();
@@ -326,10 +325,7 @@ function CreateTaskInlineDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm" className="h-7 text-xs">
-          <Plus className="w-3.5 h-3.5 mr-1" />
-          Add Task
-        </Button>
+        <Button size="sm" className="h-7 text-xs"><Plus className="w-3.5 h-3.5 mr-1" />Add Task</Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[400px]">
         <DialogHeader>
@@ -338,37 +334,23 @@ function CreateTaskInlineDialog({
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Task Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Research & Discovery" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Description (Optional)</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Brief details..." {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <FormField control={form.control} name="name" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Task Name</FormLabel>
+                <FormControl><Input placeholder="Research & Discovery" {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+            <FormField control={form.control} name="description" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Description (Optional)</FormLabel>
+                <FormControl><Input placeholder="Brief details..." {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
             <div className="pt-2 flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending ? 'Creating...' : 'Create Task'}
-              </Button>
+              <Button type="submit" disabled={createMutation.isPending}>{createMutation.isPending ? 'Creating...' : 'Create Task'}</Button>
             </div>
           </form>
         </Form>

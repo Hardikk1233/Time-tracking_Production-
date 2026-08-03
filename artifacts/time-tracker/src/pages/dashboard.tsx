@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { 
-  useGetDashboardSummary, 
-  useGetClientHours, 
-  useGetTeamUtilization, 
+import {
+  useGetDashboardSummary,
+  useGetClientHours,
+  useGetTeamUtilization,
   useGetRecentActivity,
   useGetPendingApprovals
 } from '@workspace/api-client-react';
@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
-import { Clock, Briefcase, AlertCircle, Activity, User, CheckCircle2, XCircle } from 'lucide-react';
+import { Clock, Briefcase, AlertCircle, Activity, User } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { Link } from 'wouter';
@@ -23,15 +23,15 @@ export default function Dashboard() {
   const { user } = useAuth();
   const [range, setRange] = useState<DateRange>('this_month');
 
-  // Compute dates based on range
   const getDates = () => {
     const today = new Date();
     switch (range) {
       case 'this_month':
         return { startDate: format(startOfMonth(today), 'yyyy-MM-dd'), endDate: format(endOfMonth(today), 'yyyy-MM-dd') };
-      case 'last_month':
+      case 'last_month': {
         const lastMonth = subMonths(today, 1);
         return { startDate: format(startOfMonth(lastMonth), 'yyyy-MM-dd'), endDate: format(endOfMonth(lastMonth), 'yyyy-MM-dd') };
+      }
       case 'this_year':
         return { startDate: format(new Date(today.getFullYear(), 0, 1), 'yyyy-MM-dd'), endDate: format(new Date(today.getFullYear(), 11, 31), 'yyyy-MM-dd') };
       case 'all_time':
@@ -41,11 +41,9 @@ export default function Dashboard() {
   };
 
   const { startDate, endDate } = getDates();
-  const queryParams = { query: { queryKey: [startDate, endDate] } };
-
-  const { data: summary, isLoading: isLoadingSummary } = useGetDashboardSummary({ startDate, endDate }, queryParams);
-  const { data: clientHours, isLoading: isLoadingClients } = useGetClientHours({ startDate, endDate }, queryParams);
-  const { data: teamUtil, isLoading: isLoadingTeam } = useGetTeamUtilization({ startDate, endDate }, queryParams);
+  const { data: summary, isLoading: isLoadingSummary } = useGetDashboardSummary({ startDate, endDate });
+  const { data: clientHours, isLoading: isLoadingClients } = useGetClientHours({ startDate, endDate });
+  const { data: teamUtil, isLoading: isLoadingTeam } = useGetTeamUtilization({ startDate, endDate });
   const { data: activity, isLoading: isLoadingActivity } = useGetRecentActivity({ limit: 5 });
   const { data: pendingApprovals, isLoading: isLoadingPending } = useGetPendingApprovals();
 
@@ -61,17 +59,17 @@ export default function Dashboard() {
             {format(new Date(), 'EEEE, MMMM do, yyyy')} // SYSTEM STATUS: ACTIVE
           </p>
         </div>
-        
+
         <div className="flex items-center gap-3">
           {canApprove && !isLoadingPending && pendingApprovals && pendingApprovals.length > 0 && (
             <Link href="/approvals">
-              <Button variant="outline" className="border-amber-500/50 bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 shadow-sm" data-testid="link-pending-approvals">
+              <Button variant="outline" className="border-amber-500/50 bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 shadow-sm">
                 <AlertCircle className="w-4 h-4 mr-2" />
                 {pendingApprovals.length} Pending Approvals
               </Button>
             </Link>
           )}
-          
+
           <Select value={range} onValueChange={(val: DateRange) => setRange(val)}>
             <SelectTrigger className="w-[180px] bg-card border-border shadow-sm font-mono text-xs">
               <SelectValue placeholder="Select range" />
@@ -83,7 +81,7 @@ export default function Dashboard() {
               <SelectItem value="all_time">All Time</SelectItem>
             </SelectContent>
           </Select>
-          
+
           <Link href="/time-entries">
             <Button className="shadow-md font-semibold tracking-tight" data-testid="button-log-time">
               Log Time
@@ -94,41 +92,29 @@ export default function Dashboard() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <SummaryCard 
-          title="Total Hours" 
-          value={summary?.totalHours} 
-          icon={Clock} 
-          loading={isLoadingSummary} 
-          subtext="Logged in period"
-        />
-        <SummaryCard 
-          title="Billable Hours" 
-          value={summary?.billableHours} 
-          icon={Briefcase} 
-          loading={isLoadingSummary} 
-          subtext={`${summary?.totalHours ? Math.round((summary.billableHours / summary.totalHours) * 100) : 0}% utilization`}
+        <SummaryCard title="Total Hours" value={summary?.totalHours} icon={Clock} loading={isLoadingSummary} subtext="Logged in period" />
+        <SummaryCard
+          title="Billable Hours"
+          value={summary?.billableHours}
+          icon={Briefcase}
+          loading={isLoadingSummary}
+          subtext={`${summary?.totalHours ? Math.round((summary.billableHours / summary.totalHours) * 100) : 0}% efficiency`}
           highlight
         />
-        <SummaryCard 
-          title="Non-Billable" 
-          value={summary?.nonBillableHours} 
-          icon={Activity} 
-          loading={isLoadingSummary} 
-          subtext="Internal / Admin"
-        />
-        <SummaryCard 
-          title="Pending Approval" 
-          value={summary?.pendingApprovalCount} 
-          icon={AlertCircle} 
-          loading={isLoadingSummary} 
+        <SummaryCard title="Non-Billable" value={summary?.nonBillableHours} icon={Activity} loading={isLoadingSummary} subtext="Internal / Admin" />
+        <SummaryCard
+          title="Pending Approval"
+          value={summary?.pendingApprovalCount}
+          icon={AlertCircle}
+          loading={isLoadingSummary}
           subtext="Entries waiting"
-          alert={summary && summary.pendingApprovalCount > 0}
+          alert={summary !== undefined && summary.pendingApprovalCount > 0}
           valueType="count"
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Chart - Client Hours */}
+        {/* Client Hours Chart */}
         <Card className="lg:col-span-2 shadow-sm border-border">
           <CardHeader className="border-b border-border/50 bg-muted/20">
             <CardTitle className="text-lg font-bold">Client Hours Distribution</CardTitle>
@@ -142,21 +128,9 @@ export default function Dashboard() {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={clientHours} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                    <XAxis 
-                      dataKey="clientName" 
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12, fontFamily: 'var(--font-mono)' }} 
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis 
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12, fontFamily: 'var(--font-mono)' }} 
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <RechartsTooltip 
-                      cursor={{ fill: 'hsl(var(--muted))' }}
-                      contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '0.5rem', fontFamily: 'var(--font-mono)', fontSize: '12px' }}
-                    />
+                    <XAxis dataKey="clientName" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12, fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12, fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} />
+                    <RechartsTooltip cursor={{ fill: 'hsl(var(--muted))' }} contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '0.5rem', fontFamily: 'var(--font-mono)', fontSize: '12px' }} />
                     <Legend iconType="circle" wrapperStyle={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }} />
                     <Bar dataKey="billableHours" name="Billable" stackId="a" fill="hsl(var(--primary))" radius={[0, 0, 4, 4]} />
                     <Bar dataKey="nonBillableHours" name="Non-Billable" stackId="a" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
@@ -203,9 +177,7 @@ export default function Dashboard() {
                       <p className="text-foreground font-medium truncate">
                         <span className="font-bold">{entry.userName}</span> logged <span className="font-mono bg-muted px-1 rounded">{entry.hours}h</span>
                       </p>
-                      <p className="text-muted-foreground text-xs truncate mt-0.5">
-                        {entry.clientName} / {entry.projectName}
-                      </p>
+                      <p className="text-muted-foreground text-xs truncate mt-0.5">{entry.clientName} / {entry.projectName}</p>
                       <div className="flex items-center gap-2 mt-1.5">
                         <Badge variant={entry.status === 'approved' ? 'default' : entry.status === 'rejected' ? 'destructive' : 'secondary'} className="text-[10px] px-1.5 py-0 rounded-sm">
                           {entry.status}
@@ -219,29 +191,27 @@ export default function Dashboard() {
                 ))}
               </div>
             ) : (
-              <div className="h-full flex items-center justify-center text-muted-foreground font-mono text-sm">
-                NO ACTIVITY
-              </div>
+              <div className="h-full flex items-center justify-center text-muted-foreground font-mono text-sm">NO ACTIVITY</div>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Team Utilization */}
-      {isManager && (
+      {/* Team Utilization — Associate+ can see their team; AVP/MD see all */}
+      {canApprove && (
         <Card className="shadow-sm border-border">
           <CardHeader className="border-b border-border/50 bg-muted/20 flex flex-row items-center justify-between">
             <div>
               <CardTitle className="text-lg font-bold">Team Utilization</CardTitle>
-              <CardDescription className="font-mono text-xs mt-1">Resource allocation overview</CardDescription>
+              <CardDescription className="font-mono text-xs mt-1">
+                Capacity = 8h/day × 5 days/week · Efficiency = Billable ÷ Total
+              </CardDescription>
             </div>
             <User className="w-5 h-5 text-muted-foreground" />
           </CardHeader>
           <CardContent className="p-0">
             {isLoadingTeam ? (
-              <div className="p-6">
-                <Skeleton className="h-48 w-full" />
-              </div>
+              <div className="p-6"><Skeleton className="h-48 w-full" /></div>
             ) : teamUtil && teamUtil.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -249,46 +219,38 @@ export default function Dashboard() {
                     <tr className="border-b border-border text-left text-xs uppercase tracking-wider font-mono text-muted-foreground bg-muted/30">
                       <th className="px-6 py-4 font-medium">Team Member</th>
                       <th className="px-6 py-4 font-medium">Role</th>
-                      <th className="px-6 py-4 font-medium text-right">Total Hours</th>
+                      <th className="px-6 py-4 font-medium text-right">Total</th>
                       <th className="px-6 py-4 font-medium text-right">Billable</th>
+                      <th className="px-6 py-4 font-medium text-right">Non-Billable</th>
                       <th className="px-6 py-4 font-medium text-right">Utilization</th>
+                      <th className="px-6 py-4 font-medium text-right">Efficiency</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {teamUtil.map((member) => {
-                      const utilPercent = member.totalHours > 0 
-                        ? Math.round((member.billableHours / member.totalHours) * 100) 
-                        : 0;
-                      
-                      return (
-                        <tr key={member.userId} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors">
-                          <td className="px-6 py-3 font-medium text-foreground">{member.userName}</td>
-                          <td className="px-6 py-3 text-muted-foreground capitalize text-xs">
-                            <Badge variant="outline" className="font-mono font-normal">{member.role}</Badge>
-                          </td>
-                          <td className="px-6 py-3 text-right font-mono">{member.totalHours.toFixed(1)}h</td>
-                          <td className="px-6 py-3 text-right font-mono text-primary">{member.billableHours.toFixed(1)}h</td>
-                          <td className="px-6 py-3">
-                            <div className="flex items-center justify-end gap-2">
-                              <span className="font-mono text-xs w-10 text-right">{utilPercent}%</span>
-                              <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
-                                <div 
-                                  className="h-full bg-primary rounded-full" 
-                                  style={{ width: `${Math.min(100, utilPercent)}%` }}
-                                />
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {teamUtil
+                      .filter(m => m.totalHours > 0)
+                      .map((member) => (
+                      <tr key={member.userId} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors">
+                        <td className="px-6 py-3 font-medium text-foreground">{member.userName}</td>
+                        <td className="px-6 py-3">
+                          <Badge variant="outline" className="font-mono font-normal text-[10px] capitalize">{member.role}</Badge>
+                        </td>
+                        <td className="px-6 py-3 text-right font-mono text-sm">{member.totalHours.toFixed(1)}h</td>
+                        <td className="px-6 py-3 text-right font-mono text-sm text-primary">{member.billableHours.toFixed(1)}h</td>
+                        <td className="px-6 py-3 text-right font-mono text-sm text-muted-foreground">{member.nonBillableHours.toFixed(1)}h</td>
+                        <td className="px-6 py-3 text-right">
+                          <PercentBar value={member.utilization} color="primary" />
+                        </td>
+                        <td className="px-6 py-3 text-right">
+                          <PercentBar value={member.efficiency} color={member.efficiency >= 70 ? 'emerald' : member.efficiency >= 40 ? 'amber' : 'red'} />
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
             ) : (
-              <div className="p-8 text-center text-muted-foreground font-mono text-sm">
-                NO TEAM DATA AVAILABLE
-              </div>
+              <div className="p-8 text-center text-muted-foreground font-mono text-sm">NO TEAM DATA AVAILABLE</div>
             )}
           </CardContent>
         </Card>
@@ -297,54 +259,54 @@ export default function Dashboard() {
   );
 }
 
-function SummaryCard({ 
-  title, 
-  value, 
-  icon: Icon, 
-  loading, 
-  subtext,
-  highlight = false,
-  alert = false,
-  valueType = 'hours'
-}: { 
-  title: string; 
-  value?: number; 
-  icon: any; 
-  loading: boolean;
-  subtext?: string;
-  highlight?: boolean;
-  alert?: boolean;
-  valueType?: 'hours' | 'count';
+function PercentBar({ value, color }: { value: number; color: string }) {
+  const colorMap: Record<string, string> = {
+    primary: 'bg-primary',
+    emerald: 'bg-emerald-500',
+    amber: 'bg-amber-500',
+    red: 'bg-red-500',
+  };
+  const textMap: Record<string, string> = {
+    primary: 'text-primary',
+    emerald: 'text-emerald-600',
+    amber: 'text-amber-600',
+    red: 'text-red-600',
+  };
+  return (
+    <div className="flex items-center justify-end gap-2">
+      <span className={`font-mono text-xs w-10 text-right font-bold ${textMap[color] ?? 'text-foreground'}`}>{value}%</span>
+      <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${colorMap[color] ?? 'bg-primary'}`} style={{ width: `${Math.min(100, Math.max(0, value))}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function SummaryCard({
+  title, value, icon: Icon, loading, subtext, highlight = false, alert = false, valueType = 'hours'
+}: {
+  title: string; value?: number; icon: any; loading: boolean; subtext?: string;
+  highlight?: boolean; alert?: boolean; valueType?: 'hours' | 'count';
 }) {
   return (
     <Card className={`shadow-sm border-border ${highlight ? 'bg-primary text-primary-foreground border-primary' : ''} ${alert ? 'border-amber-500/50 bg-amber-500/5' : ''}`}>
       <CardContent className="p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className={`text-sm font-bold tracking-tight ${highlight ? 'text-primary-foreground/90' : 'text-muted-foreground'} ${alert ? 'text-amber-600' : ''}`}>
-            {title}
-          </h3>
+          <h3 className={`text-sm font-bold tracking-tight ${highlight ? 'text-primary-foreground/90' : 'text-muted-foreground'} ${alert ? 'text-amber-600' : ''}`}>{title}</h3>
           <div className={`p-2 rounded-md ${highlight ? 'bg-primary-foreground/20' : 'bg-muted'} ${alert ? 'bg-amber-500/20 text-amber-600' : ''}`}>
             <Icon className="w-4 h-4" />
           </div>
         </div>
-        
         {loading ? (
           <Skeleton className={`h-8 w-24 mb-2 ${highlight ? 'bg-primary-foreground/20' : ''}`} />
         ) : (
           <div className="flex items-baseline gap-1">
-            <span className={`text-3xl font-bold font-mono tracking-tighter ${alert ? 'text-amber-600' : ''}`}>
-              {value || 0}
-            </span>
-            <span className={`text-sm font-medium ${highlight ? 'text-primary-foreground/70' : 'text-muted-foreground'} ${alert ? 'text-amber-600/70' : ''}`}>
-              {valueType === 'hours' ? 'h' : ''}
-            </span>
+            <span className={`text-3xl font-bold font-mono tracking-tighter ${alert ? 'text-amber-600' : ''}`}>{value ?? 0}</span>
+            <span className={`text-sm font-medium ${highlight ? 'text-primary-foreground/70' : 'text-muted-foreground'} ${alert ? 'text-amber-600/70' : ''}`}>{valueType === 'hours' ? 'h' : ''}</span>
           </div>
         )}
-        
         {subtext && (
-          <p className={`text-xs mt-2 font-mono ${highlight ? 'text-primary-foreground/70' : 'text-muted-foreground'} ${alert ? 'text-amber-600/70' : ''}`}>
-            {subtext}
-          </p>
+          <p className={`text-xs mt-2 font-mono ${highlight ? 'text-primary-foreground/70' : 'text-muted-foreground'} ${alert ? 'text-amber-600/70' : ''}`}>{subtext}</p>
         )}
       </CardContent>
     </Card>

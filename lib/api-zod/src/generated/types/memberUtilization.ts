@@ -15,4 +15,8 @@ export interface MemberUtilization {
   billableHours: number;
   nonBillableHours: number;
   pendingHours: number;
+  /** totalHours / (workingDays × 8) × 100 */
+  utilization: number;
+  /** billableHours / totalHours × 100 */
+  efficiency: number;
 }

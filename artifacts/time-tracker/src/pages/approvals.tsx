@@ -25,7 +25,7 @@ export default function Approvals() {
   const rejectMutation = useRejectTimeEntry();
 
   const handleApprove = (id: number) => {
-    approveMutation.mutate({ timeEntryId: id }, {
+    approveMutation.mutate({ entryId: id }, {
       onSuccess: () => {
         toast({ title: 'Entry approved' });
         queryClient.invalidateQueries({ queryKey: getGetPendingApprovalsQueryKey() });
@@ -34,7 +34,7 @@ export default function Approvals() {
   };
 
   const handleReject = (id: number) => {
-    rejectMutation.mutate({ timeEntryId: id }, {
+    rejectMutation.mutate({ entryId: id }, {
       onSuccess: () => {
         toast({ title: 'Entry rejected' });
         queryClient.invalidateQueries({ queryKey: getGetPendingApprovalsQueryKey() });
@@ -123,10 +123,10 @@ export default function Approvals() {
                     <td className="px-6 py-4 text-right">
                       <div className="flex flex-col items-end gap-1">
                         <span className="font-mono font-bold text-base">{entry.hours.toFixed(2)}h</span>
-                        {entry.billable ? (
-                          <Badge variant="outline" className="text-[9px] px-1 border-primary/30 text-primary uppercase font-mono shadow-none">Billable</Badge>
+                        {entry.billableHours !== null && entry.billableHours !== undefined ? (
+                          <span className="text-[9px] font-mono text-primary">{entry.billableHours.toFixed(1)}h bill</span>
                         ) : (
-                          <Badge variant="outline" className="text-[9px] px-1 border-muted text-muted-foreground uppercase font-mono shadow-none">Non-Bill</Badge>
+                          <span className="text-[9px] font-mono text-muted-foreground/60 italic">not split</span>
                         )}
                       </div>
                     </td>

@@ -566,7 +566,8 @@ export const ListTimeEntriesResponseItem = zod.object({
   "hours": zod.number(),
   "date": zod.coerce.date(),
   "description": zod.string().nullish(),
-  "billable": zod.boolean(),
+  "billableHours": zod.number().nullish().describe('null = not yet split; 0..hours = explicitly split by Associate+'),
+  "nonBillableHours": zod.number().nullish().describe('computed: hours - billableHours; null if not yet split'),
   "status": zod.enum(['pending', 'approved', 'rejected']),
   "approvedById": zod.int().nullish(),
   "approvedByName": zod.string().nullish(),
@@ -581,14 +582,13 @@ export const ListTimeEntriesResponse = zod.array(ListTimeEntriesResponseItem)
 export const createTimeEntryBodyHoursMin = 0.25;
 export const createTimeEntryBodyHoursMax = 24;
 
-export const createTimeEntryBodyBillableDefault = false;
+
 
 export const CreateTimeEntryBody = zod.object({
   "taskId": zod.int(),
   "hours": zod.number().min(createTimeEntryBodyHoursMin).max(createTimeEntryBodyHoursMax),
   "date": zod.coerce.date(),
-  "description": zod.string().optional(),
-  "billable": zod.boolean().default(createTimeEntryBodyBillableDefault)
+  "description": zod.string().optional()
 })
 
 export const CreateTimeEntryResponse = zod.object({
@@ -605,7 +605,8 @@ export const CreateTimeEntryResponse = zod.object({
   "hours": zod.number(),
   "date": zod.coerce.date(),
   "description": zod.string().nullish(),
-  "billable": zod.boolean(),
+  "billableHours": zod.number().nullish().describe('null = not yet split; 0..hours = explicitly split by Associate+'),
+  "nonBillableHours": zod.number().nullish().describe('computed: hours - billableHours; null if not yet split'),
   "status": zod.enum(['pending', 'approved', 'rejected']),
   "approvedById": zod.int().nullish(),
   "approvedByName": zod.string().nullish(),
@@ -634,7 +635,8 @@ export const GetTimeEntryResponse = zod.object({
   "hours": zod.number(),
   "date": zod.coerce.date(),
   "description": zod.string().nullish(),
-  "billable": zod.boolean(),
+  "billableHours": zod.number().nullish().describe('null = not yet split; 0..hours = explicitly split by Associate+'),
+  "nonBillableHours": zod.number().nullish().describe('computed: hours - billableHours; null if not yet split'),
   "status": zod.enum(['pending', 'approved', 'rejected']),
   "approvedById": zod.int().nullish(),
   "approvedByName": zod.string().nullish(),
@@ -657,8 +659,7 @@ export const updateTimeEntryBodyHoursMax = 24;
 export const UpdateTimeEntryBody = zod.object({
   "hours": zod.number().min(updateTimeEntryBodyHoursMin).max(updateTimeEntryBodyHoursMax).optional(),
   "date": zod.coerce.date().optional(),
-  "description": zod.string().nullish(),
-  "billable": zod.boolean().optional()
+  "description": zod.string().nullish()
 })
 
 export const UpdateTimeEntryResponse = zod.object({
@@ -675,7 +676,8 @@ export const UpdateTimeEntryResponse = zod.object({
   "hours": zod.number(),
   "date": zod.coerce.date(),
   "description": zod.string().nullish(),
-  "billable": zod.boolean(),
+  "billableHours": zod.number().nullish().describe('null = not yet split; 0..hours = explicitly split by Associate+'),
+  "nonBillableHours": zod.number().nullish().describe('computed: hours - billableHours; null if not yet split'),
   "status": zod.enum(['pending', 'approved', 'rejected']),
   "approvedById": zod.int().nullish(),
   "approvedByName": zod.string().nullish(),
@@ -692,6 +694,44 @@ export const DeleteTimeEntryParams = zod.object({
 
 export const DeleteTimeEntryResponse = zod.object({
   "message": zod.string()
+})
+
+
+/**
+ * @summary Split entry hours into billable and non-billable (Associate+)
+ */
+export const SplitTimeEntryParams = zod.object({
+  "entryId": zod.coerce.number().int()
+})
+
+export const splitTimeEntryBodyBillableHoursMin = 0;
+
+
+
+export const SplitTimeEntryBody = zod.object({
+  "billableHours": zod.number().min(splitTimeEntryBodyBillableHoursMin).describe('Hours to mark as billable; remainder becomes non-billable')
+})
+
+export const SplitTimeEntryResponse = zod.object({
+  "id": zod.int(),
+  "userId": zod.int(),
+  "userName": zod.string(),
+  "userRole": zod.string().optional(),
+  "taskId": zod.int(),
+  "taskName": zod.string(),
+  "projectId": zod.int(),
+  "projectName": zod.string(),
+  "clientId": zod.int(),
+  "clientName": zod.string(),
+  "hours": zod.number(),
+  "date": zod.coerce.date(),
+  "description": zod.string().nullish(),
+  "billableHours": zod.number().nullish().describe('null = not yet split; 0..hours = explicitly split by Associate+'),
+  "nonBillableHours": zod.number().nullish().describe('computed: hours - billableHours; null if not yet split'),
+  "status": zod.enum(['pending', 'approved', 'rejected']),
+  "approvedById": zod.int().nullish(),
+  "approvedByName": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
 })
 
 
@@ -716,7 +756,8 @@ export const ApproveTimeEntryResponse = zod.object({
   "hours": zod.number(),
   "date": zod.coerce.date(),
   "description": zod.string().nullish(),
-  "billable": zod.boolean(),
+  "billableHours": zod.number().nullish().describe('null = not yet split; 0..hours = explicitly split by Associate+'),
+  "nonBillableHours": zod.number().nullish().describe('computed: hours - billableHours; null if not yet split'),
   "status": zod.enum(['pending', 'approved', 'rejected']),
   "approvedById": zod.int().nullish(),
   "approvedByName": zod.string().nullish(),
@@ -745,7 +786,8 @@ export const RejectTimeEntryResponse = zod.object({
   "hours": zod.number(),
   "date": zod.coerce.date(),
   "description": zod.string().nullish(),
-  "billable": zod.boolean(),
+  "billableHours": zod.number().nullish().describe('null = not yet split; 0..hours = explicitly split by Associate+'),
+  "nonBillableHours": zod.number().nullish().describe('computed: hours - billableHours; null if not yet split'),
   "status": zod.enum(['pending', 'approved', 'rejected']),
   "approvedById": zod.int().nullish(),
   "approvedByName": zod.string().nullish(),
@@ -803,7 +845,9 @@ export const GetTeamUtilizationResponseItem = zod.object({
   "totalHours": zod.number(),
   "billableHours": zod.number(),
   "nonBillableHours": zod.number(),
-  "pendingHours": zod.number()
+  "pendingHours": zod.number(),
+  "utilization": zod.number().describe('totalHours \/ (workingDays × 8) × 100'),
+  "efficiency": zod.number().describe('billableHours \/ totalHours × 100')
 })
 export const GetTeamUtilizationResponse = zod.array(GetTeamUtilizationResponseItem)
 
@@ -831,7 +875,8 @@ export const GetRecentActivityResponseItem = zod.object({
   "hours": zod.number(),
   "date": zod.coerce.date(),
   "description": zod.string().nullish(),
-  "billable": zod.boolean(),
+  "billableHours": zod.number().nullish().describe('null = not yet split; 0..hours = explicitly split by Associate+'),
+  "nonBillableHours": zod.number().nullish().describe('computed: hours - billableHours; null if not yet split'),
   "status": zod.enum(['pending', 'approved', 'rejected']),
   "approvedById": zod.int().nullish(),
   "approvedByName": zod.string().nullish(),
@@ -857,7 +902,8 @@ export const GetPendingApprovalsResponseItem = zod.object({
   "hours": zod.number(),
   "date": zod.coerce.date(),
   "description": zod.string().nullish(),
-  "billable": zod.boolean(),
+  "billableHours": zod.number().nullish().describe('null = not yet split; 0..hours = explicitly split by Associate+'),
+  "nonBillableHours": zod.number().nullish().describe('computed: hours - billableHours; null if not yet split'),
   "status": zod.enum(['pending', 'approved', 'rejected']),
   "approvedById": zod.int().nullish(),
   "approvedByName": zod.string().nullish(),

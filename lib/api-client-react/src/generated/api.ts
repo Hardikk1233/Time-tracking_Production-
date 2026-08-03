@@ -41,6 +41,7 @@ import type {
   Project,
   ProjectInput,
   ProjectUpdate,
+  SplitHoursInput,
   Task,
   TaskInput,
   TaskUpdate,
@@ -2686,6 +2687,78 @@ export const useDeleteTimeEntry = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDeleteTimeEntryMutationOptions(options));
+    }
+
+export const getSplitTimeEntryUrl = (entryId: number,) => {
+
+
+
+
+  return `/api/time-entries/${entryId}/split`
+}
+
+/**
+ * @summary Split entry hours into billable and non-billable (Associate+)
+ */
+export const splitTimeEntry = async (entryId: number,
+    splitHoursInput: SplitHoursInput, options?: Parameters<typeof customFetch>[1]): Promise<TimeEntry> => {
+
+  return customFetch<TimeEntry>(getSplitTimeEntryUrl(entryId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(splitHoursInput)
+  }
+);}
+
+
+
+
+
+export const getSplitTimeEntryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof splitTimeEntry>>, TError,{entryId: number;data: BodyType<SplitHoursInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof splitTimeEntry>>, TError,{entryId: number;data: BodyType<SplitHoursInput>}, TContext> => {
+
+const mutationKey = ['splitTimeEntry'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof splitTimeEntry>>, {entryId: number;data: BodyType<SplitHoursInput>}> = (props) => {
+          const {entryId,data} = props ?? {};
+
+          return  splitTimeEntry(entryId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SplitTimeEntryMutationResult = NonNullable<Awaited<ReturnType<typeof splitTimeEntry>>>
+    export type SplitTimeEntryMutationBody = BodyType<SplitHoursInput>
+    export type SplitTimeEntryMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Split entry hours into billable and non-billable (Associate+)
+ */
+export const useSplitTimeEntry = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof splitTimeEntry>>, TError,{entryId: number;data: BodyType<SplitHoursInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof splitTimeEntry>>,
+        TError,
+        {entryId: number;data: BodyType<SplitHoursInput>},
+        TContext
+      > => {
+      return useMutation(getSplitTimeEntryMutationOptions(options));
     }
 
 export const getApproveTimeEntryUrl = (entryId: number,) => {

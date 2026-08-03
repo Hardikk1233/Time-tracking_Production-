@@ -15,5 +15,4 @@ export interface TimeEntryUpdate {
   date?: Date;
   /** @nullable */
   description?: string | null;
-  billable?: boolean;
 }

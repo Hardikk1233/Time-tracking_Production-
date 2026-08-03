@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/lib/auth';
-import { 
-  useListTimeEntries, 
-  useCreateTimeEntry, 
-  useApproveTimeEntry, 
+import {
+  useListTimeEntries,
+  useCreateTimeEntry,
+  useApproveTimeEntry,
   useRejectTimeEntry,
+  useSplitTimeEntry,
   useListTasks,
   getListTimeEntriesQueryKey,
-  TimeEntry
+  TimeEntry,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
@@ -22,54 +23,58 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, Check, X, Filter } from 'lucide-react';
+import { Plus, Check, X, Filter, Scissors } from 'lucide-react';
 
 const timeEntrySchema = z.object({
   taskId: z.coerce.number().min(1, 'Task is required'),
   hours: z.coerce.number().min(0.25, 'Min 0.25h').max(24, 'Max 24h'),
   date: z.string().min(1, 'Date is required'),
   description: z.string().optional(),
-  billable: z.boolean().default(true),
+});
+
+const splitSchema = z.object({
+  billableHours: z.coerce.number().min(0, 'Must be ≥ 0'),
 });
 
 export default function TimeEntries() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  
+
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [splitEntry, setSplitEntry] = useState<TimeEntry | null>(null);
 
-  const queryParams = { 
-    ...(statusFilter !== 'all' ? { status: statusFilter as any } : {}) 
+  const queryParams = {
+    ...(statusFilter !== 'all' ? { status: statusFilter as any } : {}),
   };
-  
+
   const { data: entries, isLoading } = useListTimeEntries(queryParams);
   const approveMutation = useApproveTimeEntry();
   const rejectMutation = useRejectTimeEntry();
+  const splitMutation = useSplitTimeEntry();
+
+  const isAssociateOrAbove = ['associate', 'avp', 'md'].includes(user?.role || '');
 
   const handleApprove = (id: number) => {
-    approveMutation.mutate({ timeEntryId: id }, {
+    approveMutation.mutate({ entryId: id }, {
       onSuccess: () => {
         toast({ title: 'Entry approved' });
         queryClient.invalidateQueries({ queryKey: getListTimeEntriesQueryKey() });
-      }
+      },
     });
   };
 
   const handleReject = (id: number) => {
-    rejectMutation.mutate({ timeEntryId: id }, {
+    rejectMutation.mutate({ entryId: id }, {
       onSuccess: () => {
         toast({ title: 'Entry rejected' });
         queryClient.invalidateQueries({ queryKey: getListTimeEntriesQueryKey() });
-      }
+      },
     });
   };
-
-  const isAssociateOrAbove = ['associate', 'avp', 'md'].includes(user?.role || '');
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -78,7 +83,7 @@ export default function TimeEntries() {
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Time Entries</h1>
           <p className="text-muted-foreground font-mono text-sm mt-1">Activity logs and billing records</p>
         </div>
-        
+
         <div className="flex items-center gap-3">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-[140px] bg-card">
@@ -93,7 +98,7 @@ export default function TimeEntries() {
             </SelectContent>
           </Select>
 
-          <LogTimeDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} userRole={user?.role} />
+          <LogTimeDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} />
         </div>
       </div>
 
@@ -106,6 +111,7 @@ export default function TimeEntries() {
                 <th className="px-6 py-4 font-medium">User</th>
                 <th className="px-6 py-4 font-medium">Client / Project / Task</th>
                 <th className="px-6 py-4 font-medium text-right">Hours</th>
+                <th className="px-6 py-4 font-medium text-center">Billable Split</th>
                 <th className="px-6 py-4 font-medium text-center">Status</th>
                 <th className="px-6 py-4 font-medium text-right">Actions</th>
               </tr>
@@ -118,6 +124,7 @@ export default function TimeEntries() {
                     <td className="px-6 py-4"><Skeleton className="h-4 w-32" /></td>
                     <td className="px-6 py-4"><Skeleton className="h-4 w-48" /></td>
                     <td className="px-6 py-4"><Skeleton className="h-4 w-12 ml-auto" /></td>
+                    <td className="px-6 py-4"><Skeleton className="h-4 w-20 mx-auto" /></td>
                     <td className="px-6 py-4"><Skeleton className="h-5 w-20 mx-auto rounded-full" /></td>
                     <td className="px-6 py-4"><Skeleton className="h-8 w-16 ml-auto" /></td>
                   </tr>
@@ -139,52 +146,63 @@ export default function TimeEntries() {
                         <span className="font-medium text-foreground text-sm">{entry.clientName}</span>
                         <span className="text-xs text-muted-foreground">{entry.projectName} — {entry.taskName}</span>
                         {entry.description && (
-                          <span className="text-xs text-muted-foreground italic truncate max-w-[300px] mt-1">"{entry.description}"</span>
+                          <span className="text-xs text-muted-foreground italic truncate max-w-[280px] mt-0.5">"{entry.description}"</span>
                         )}
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="flex flex-col items-end gap-1">
-                        <span className="font-mono font-bold">{entry.hours.toFixed(2)}h</span>
-                        {entry.billable ? (
-                          <Badge variant="outline" className="text-[10px] px-1 border-primary/30 text-primary uppercase font-mono">Billable</Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-[10px] px-1 border-muted text-muted-foreground uppercase font-mono">Non-Bill</Badge>
-                        )}
-                      </div>
+                      <span className="font-mono font-bold">{entry.hours.toFixed(2)}h</span>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <BillableSplitDisplay entry={entry} />
                     </td>
                     <td className="px-6 py-4 text-center">
                       <StatusBadge status={entry.status} />
                     </td>
-                    <td className="px-6 py-4 text-right">
-                      {entry.status === 'pending' && isAssociateOrAbove && entry.userId !== user?.id && (
-                        <div className="flex items-center justify-end gap-2">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-full"
-                            onClick={() => handleApprove(entry.id)}
-                            disabled={approveMutation.isPending || rejectMutation.isPending}
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-end gap-1">
+                        {/* Split button: Associates+ can split any visible entry */}
+                        {isAssociateOrAbove && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50 rounded-full"
+                            title="Split billable/non-billable"
+                            onClick={() => setSplitEntry(entry)}
                           >
-                            <Check className="w-4 h-4" />
+                            <Scissors className="w-4 h-4" />
                           </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10 rounded-full"
-                            onClick={() => handleReject(entry.id)}
-                            disabled={approveMutation.isPending || rejectMutation.isPending}
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      )}
+                        )}
+                        {/* Approve/reject: Associates+ on others' pending entries */}
+                        {entry.status === 'pending' && isAssociateOrAbove && entry.userId !== user?.id && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-full"
+                              onClick={() => handleApprove(entry.id)}
+                              disabled={approveMutation.isPending || rejectMutation.isPending}
+                            >
+                              <Check className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10 rounded-full"
+                              onClick={() => handleReject(entry.id)}
+                              disabled={approveMutation.isPending || rejectMutation.isPending}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground font-mono text-sm">
+                  <td colSpan={7} className="px-6 py-12 text-center text-muted-foreground font-mono text-sm">
                     NO ENTRIES FOUND
                   </td>
                 </tr>
@@ -193,6 +211,36 @@ export default function TimeEntries() {
           </table>
         </div>
       </Card>
+
+      {/* Split Hours Dialog */}
+      {splitEntry && (
+        <SplitHoursDialog
+          entry={splitEntry}
+          open={!!splitEntry}
+          onOpenChange={(open) => { if (!open) setSplitEntry(null); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function BillableSplitDisplay({ entry }: { entry: TimeEntry }) {
+  if (entry.billableHours === null || entry.billableHours === undefined) {
+    return (
+      <span className="text-xs font-mono text-muted-foreground/60 italic">Not split</span>
+    );
+  }
+  const nonBillable = entry.hours - entry.billableHours;
+  return (
+    <div className="flex flex-col items-center gap-0.5">
+      <div className="flex items-center gap-1.5">
+        <span className="text-[10px] font-mono text-primary font-bold uppercase tracking-wider">B</span>
+        <span className="text-xs font-mono font-bold text-primary">{entry.billableHours.toFixed(2)}h</span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <span className="text-[10px] font-mono text-muted-foreground font-bold uppercase tracking-wider">N</span>
+        <span className="text-xs font-mono text-muted-foreground">{nonBillable.toFixed(2)}h</span>
+      </div>
     </div>
   );
 }
@@ -209,13 +257,117 @@ function StatusBadge({ status }: { status: string }) {
   }
 }
 
-function LogTimeDialog({ open, onOpenChange, userRole }: { open: boolean, onOpenChange: (open: boolean) => void, userRole?: string }) {
+function SplitHoursDialog({
+  entry,
+  open,
+  onOpenChange,
+}: {
+  entry: TimeEntry;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const splitMutation = useSplitTimeEntry();
+
+  const form = useForm<z.infer<typeof splitSchema>>({
+    resolver: zodResolver(splitSchema),
+    defaultValues: {
+      billableHours: entry.billableHours ?? entry.hours,
+    },
+  });
+
+  const billableVal = form.watch('billableHours') || 0;
+  const nonBillable = Math.max(0, entry.hours - Number(billableVal));
+
+  const onSubmit = (data: z.infer<typeof splitSchema>) => {
+    if (data.billableHours > entry.hours) {
+      form.setError('billableHours', { message: `Cannot exceed total ${entry.hours}h` });
+      return;
+    }
+    splitMutation.mutate(
+      { entryId: entry.id, data: { billableHours: data.billableHours } },
+      {
+        onSuccess: () => {
+          toast({ title: 'Hours split saved' });
+          queryClient.invalidateQueries({ queryKey: getListTimeEntriesQueryKey() });
+          onOpenChange(false);
+        },
+        onError: (err: any) => {
+          toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to split hours.' });
+        },
+      }
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[420px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Scissors className="w-5 h-5 text-primary" />
+            Split Billable Hours
+          </DialogTitle>
+          <DialogDescription>
+            <span className="font-bold text-foreground">{entry.userName}</span> logged{' '}
+            <span className="font-mono font-bold">{entry.hours}h</span> on{' '}
+            <span className="font-bold text-foreground">{entry.taskName}</span> ({entry.clientName}).
+            Set how many hours are billable.
+          </DialogDescription>
+        </DialogHeader>
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 pt-2">
+            <FormField
+              control={form.control}
+              name="billableHours"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Billable Hours</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      step="0.25"
+                      min="0"
+                      max={entry.hours}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Live preview */}
+            <div className="bg-muted/40 rounded-lg p-4 grid grid-cols-2 gap-4 border border-border/50">
+              <div className="text-center">
+                <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-1">Billable</p>
+                <p className="text-2xl font-bold font-mono text-primary">{Number(billableVal).toFixed(2)}h</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-1">Non-Billable</p>
+                <p className="text-2xl font-bold font-mono text-muted-foreground">{nonBillable.toFixed(2)}h</p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+              <Button type="submit" disabled={splitMutation.isPending}>
+                {splitMutation.isPending ? 'Saving...' : 'Save Split'}
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function LogTimeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const createMutation = useCreateTimeEntry();
   const { data: tasks, isLoading: isLoadingTasks } = useListTasks();
-  
-  const isAnalyst = userRole === 'analyst';
 
   const form = useForm<z.infer<typeof timeEntrySchema>>({
     resolver: zodResolver(timeEntrySchema),
@@ -224,32 +376,20 @@ function LogTimeDialog({ open, onOpenChange, userRole }: { open: boolean, onOpen
       hours: 1,
       date: format(new Date(), 'yyyy-MM-dd'),
       description: '',
-      billable: true,
     },
   });
 
   const onSubmit = (data: z.infer<typeof timeEntrySchema>) => {
-    // Analysts cannot set billable flag, ensure it's removed or kept default (handled by API ideally, but we'll submit what form has)
     createMutation.mutate({ data }, {
       onSuccess: () => {
         toast({ title: 'Time entry logged successfully' });
         queryClient.invalidateQueries({ queryKey: getListTimeEntriesQueryKey() });
-        form.reset({
-          taskId: undefined,
-          hours: 1,
-          date: format(new Date(), 'yyyy-MM-dd'),
-          description: '',
-          billable: true,
-        });
+        form.reset({ taskId: undefined, hours: 1, date: format(new Date(), 'yyyy-MM-dd'), description: '' });
         onOpenChange(false);
       },
       onError: (err: any) => {
-        toast({
-          variant: 'destructive',
-          title: 'Failed to log time',
-          description: err.error || 'An error occurred.',
-        });
-      }
+        toast({ variant: 'destructive', title: 'Failed to log time', description: err.error || 'An error occurred.' });
+      },
     });
   };
 
@@ -264,9 +404,9 @@ function LogTimeDialog({ open, onOpenChange, userRole }: { open: boolean, onOpen
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Log Time Entry</DialogTitle>
-          <DialogDescription>Record your hours for a specific task.</DialogDescription>
+          <DialogDescription>Record your hours for a specific task. Associates will classify billable/non-billable.</DialogDescription>
         </DialogHeader>
-        
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
             <FormField
@@ -310,7 +450,6 @@ function LogTimeDialog({ open, onOpenChange, userRole }: { open: boolean, onOpen
                   </FormItem>
                 )}
               />
-
               <FormField
                 control={form.control}
                 name="hours"
@@ -339,29 +478,6 @@ function LogTimeDialog({ open, onOpenChange, userRole }: { open: boolean, onOpen
                 </FormItem>
               )}
             />
-
-            {!isAnalyst && (
-              <FormField
-                control={form.control}
-                name="billable"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm">
-                    <FormControl>
-                      <Checkbox
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel>Billable Hours</FormLabel>
-                      <p className="text-xs text-muted-foreground">
-                        This time will be billed to the client.
-                      </p>
-                    </div>
-                  </FormItem>
-                )}
-              />
-            )}
 
             <div className="pt-4 flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
