@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, Building2, ChevronRight, Users } from 'lucide-react';
@@ -259,8 +260,8 @@ function CreateClientDialog({ open, onOpenChange }: { open: boolean, onOpenChang
             />
 
             {/* Associates Responsible */}
-            <FormItem>
-              <FormLabel>Associates Responsible <span className="text-muted-foreground font-normal">(Optional)</span></FormLabel>
+            <div className="space-y-2">
+              <Label>Associates Responsible <span className="text-muted-foreground font-normal">(Optional)</span></Label>
               {associates && associates.length > 0 ? (
                 <div className="grid grid-cols-1 gap-1 max-h-36 overflow-y-auto rounded-md border border-input bg-background p-2">
                   {associates.map((a) => {
@@ -298,7 +299,7 @@ function CreateClientDialog({ open, onOpenChange }: { open: boolean, onOpenChang
                   {selectedAssociateIds.length} selected
                 </p>
               )}
-            </FormItem>
+            </div>
 
             <div className="pt-4 flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
