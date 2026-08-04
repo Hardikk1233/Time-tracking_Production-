@@ -9,7 +9,8 @@ import {
   CheckSquare, 
   Settings,
   LogOut,
-  ShieldCheck
+  ShieldCheck,
+  CalendarDays
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { useLogout } from '@workspace/api-client-react';
@@ -47,6 +48,7 @@ export function Sidebar() {
   const role = user.role;
   const isAssociateOrAbove = ['associate', 'avp', 'md'].includes(role);
   const isAvpOrAbove = ['avp', 'md'].includes(role);
+  const isMd = role === 'md';
 
   const navItems = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
@@ -57,7 +59,8 @@ export function Sidebar() {
       { name: 'Projects', path: '/projects', icon: FolderKanban },
       { name: 'Tasks', path: '/tasks', icon: CheckSquare },
       { name: 'Team', path: '/team', icon: Users }
-    ] : [])
+    ] : []),
+    ...(isMd ? [{ name: 'Holidays', path: '/holidays', icon: CalendarDays }] : [])
   ];
 
   return (
