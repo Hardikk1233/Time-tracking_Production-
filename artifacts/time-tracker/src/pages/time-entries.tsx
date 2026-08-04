@@ -12,6 +12,7 @@ import {
   useLogLeavesBulk,
   useListLeaves,
   useDeleteLeave,
+  useListPublicHolidays,
   getListTimeEntriesQueryKey,
   getListLeavesQueryKey,
 } from '@workspace/api-client-react';
@@ -269,7 +270,7 @@ function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
   const [selectedDates, setSelectedDates] = useState<Date[]>([]);
   const [note, setNote] = useState('');
 
-  // Fetch this month's already-logged leaves so we can show them on the calendar
+  // Fetch this month's already-logged leaves and public holidays for the calendar
   const now = new Date();
   const monthStart = format(new Date(now.getFullYear(), now.getMonth(), 1), 'yyyy-MM-dd');
   const monthEnd = format(new Date(now.getFullYear(), now.getMonth() + 1, 0), 'yyyy-MM-dd');
@@ -279,7 +280,12 @@ function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
     { query: { enabled: open && !!user?.id } as any }
   );
 
-  // Dates already logged — shown as disabled on the calendar
+  // Fetch public holidays so we can disable them on the calendar
+  const { data: publicHolidays } = useListPublicHolidays(
+    { query: { enabled: open } as any }
+  );
+
+  // Dates already logged — disabled + struck-through amber on calendar
   const alreadyLoggedDates: Date[] = React.useMemo(() => {
     if (!myLeaves) return [];
     return myLeaves.map((l: any) => {
@@ -287,6 +293,21 @@ function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
       return new Date(y, m - 1, d);
     });
   }, [myLeaves]);
+
+  // Public holiday dates — disabled + distinct style on calendar
+  const holidayDates: Date[] = React.useMemo(() => {
+    if (!publicHolidays) return [];
+    return publicHolidays.map((h: any) => {
+      const [y, m, d] = h.date.split('-').map(Number);
+      return new Date(y, m - 1, d);
+    });
+  }, [publicHolidays]);
+
+  // Map holiday date string → name for tooltip-style display
+  const holidayNameByDate = React.useMemo(() => {
+    if (!publicHolidays) return {} as Record<string, string>;
+    return Object.fromEntries(publicHolidays.map((h: any) => [h.date, h.name]));
+  }, [publicHolidays]);
 
   const handleSubmit = () => {
     if (selectedDates.length === 0) return;
@@ -344,7 +365,7 @@ function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
             Log Leave
           </DialogTitle>
           <DialogDescription>
-            Click dates to select them. Already-logged dates are shown in amber and can't be re-selected.
+            Click dates to select them. Public holidays are shown in red and can't be selected. Already-logged leave dates are shown in amber.
           </DialogDescription>
         </DialogHeader>
 
@@ -356,12 +377,17 @@ function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
               selected={selectedDates}
               onSelect={(dates) => setSelectedDates(dates ?? [])}
               disabled={[
-                { dayOfWeek: [0, 6] },          // weekends always disabled
-                ...alreadyLoggedDates,            // already-logged days disabled
+                { dayOfWeek: [0, 6] },   // weekends
+                ...holidayDates,          // public holidays
+                ...alreadyLoggedDates,    // already-logged leave
               ]}
-              modifiers={{ alreadyLogged: alreadyLoggedDates }}
+              modifiers={{
+                holiday: holidayDates,
+                alreadyLogged: alreadyLoggedDates,
+              }}
               modifiersClassNames={{
-                alreadyLogged: 'opacity-40 line-through text-amber-600',
+                holiday: '!text-red-500 opacity-60 line-through',
+                alreadyLogged: '!text-amber-500 opacity-60 line-through',
               }}
               className="mx-auto"
             />
