@@ -14,7 +14,11 @@ export interface ClientHoursTrendPoint {
   billableHours: number;
   nonBillableHours: number;
   totalHours: number;
+  /** Working days minus public holidays */
   workingDays: number;
-  /** billableHours / (workingDays × 8) × 100 */
+  fteCount: number;
+  /** workingDays × 8 × fteCount */
+  capacity: number;
+  /** billableHours / capacity × 100 */
   utilization: number;
 }

@@ -11,5 +11,11 @@ export interface Client {
   name: string;
   /** @nullable */
   description?: string | null;
+  /**
+     * Number of full-time equivalents; 1 FTE = 8h/day, 40h/week, 160h/month
+     * @minimum 0.1
+     * @maximum 100
+     */
+  fteCount: number;
   createdAt: Date;
 }

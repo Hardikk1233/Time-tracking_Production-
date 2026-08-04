@@ -11,4 +11,9 @@ export interface ClientUpdate {
   name?: string;
   /** @nullable */
   description?: string | null;
+  /**
+     * @minimum 0.1
+     * @maximum 100
+     */
+  fteCount?: number;
 }

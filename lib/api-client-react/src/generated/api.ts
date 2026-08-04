@@ -33,6 +33,9 @@ import type {
   GetRecentActivityParams,
   GetTeamUtilizationParams,
   HealthStatus,
+  Leave,
+  LeaveInput,
+  ListLeavesParams,
   ListProjectsParams,
   ListTasksParams,
   ListTimeEntriesParams,
@@ -43,6 +46,8 @@ import type {
   Project,
   ProjectInput,
   ProjectUpdate,
+  PublicHoliday,
+  PublicHolidayInput,
   SplitHoursInput,
   Task,
   TaskInput,
@@ -3401,4 +3406,449 @@ export function useGetPendingApprovals<TData = Awaited<ReturnType<typeof getPend
 
 
 
+
+export const getListPublicHolidaysUrl = () => {
+
+
+
+
+  return `/api/public-holidays`
+}
+
+/**
+ * @summary List all public holidays
+ */
+export const listPublicHolidays = async ( options?: Parameters<typeof customFetch>[1]): Promise<PublicHoliday[]> => {
+
+  return customFetch<PublicHoliday[]>(getListPublicHolidaysUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPublicHolidaysQueryKey = () => {
+    return [
+    `/api/public-holidays`
+    ] as const;
+    }
+
+
+export const getListPublicHolidaysQueryOptions = <TData = Awaited<ReturnType<typeof listPublicHolidays>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPublicHolidays>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPublicHolidaysQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPublicHolidays>>> = ({ signal }) => listPublicHolidays({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPublicHolidays>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPublicHolidaysQueryResult = NonNullable<Awaited<ReturnType<typeof listPublicHolidays>>>
+export type ListPublicHolidaysQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all public holidays
+ */
+
+export function useListPublicHolidays<TData = Awaited<ReturnType<typeof listPublicHolidays>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPublicHolidays>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPublicHolidaysQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreatePublicHolidayUrl = () => {
+
+
+
+
+  return `/api/public-holidays`
+}
+
+/**
+ * @summary Create a public holiday (MD only)
+ */
+export const createPublicHoliday = async (publicHolidayInput: PublicHolidayInput, options?: Parameters<typeof customFetch>[1]): Promise<PublicHoliday> => {
+
+  return customFetch<PublicHoliday>(getCreatePublicHolidayUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(publicHolidayInput)
+  }
+);}
+
+
+
+
+
+export const getCreatePublicHolidayMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPublicHoliday>>, TError,{data: BodyType<PublicHolidayInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPublicHoliday>>, TError,{data: BodyType<PublicHolidayInput>}, TContext> => {
+
+const mutationKey = ['createPublicHoliday'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPublicHoliday>>, {data: BodyType<PublicHolidayInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createPublicHoliday(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePublicHolidayMutationResult = NonNullable<Awaited<ReturnType<typeof createPublicHoliday>>>
+    export type CreatePublicHolidayMutationBody = BodyType<PublicHolidayInput>
+    export type CreatePublicHolidayMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a public holiday (MD only)
+ */
+export const useCreatePublicHoliday = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPublicHoliday>>, TError,{data: BodyType<PublicHolidayInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPublicHoliday>>,
+        TError,
+        {data: BodyType<PublicHolidayInput>},
+        TContext
+      > => {
+      return useMutation(getCreatePublicHolidayMutationOptions(options));
+    }
+
+export const getDeletePublicHolidayUrl = (id: number,) => {
+
+
+
+
+  return `/api/public-holidays/${id}`
+}
+
+/**
+ * @summary Delete a public holiday (MD only)
+ */
+export const deletePublicHoliday = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<MessageResponse> => {
+
+  return customFetch<MessageResponse>(getDeletePublicHolidayUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeletePublicHolidayMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePublicHoliday>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deletePublicHoliday>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deletePublicHoliday'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deletePublicHoliday>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deletePublicHoliday(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeletePublicHolidayMutationResult = NonNullable<Awaited<ReturnType<typeof deletePublicHoliday>>>
+
+    export type DeletePublicHolidayMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a public holiday (MD only)
+ */
+export const useDeletePublicHoliday = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePublicHoliday>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deletePublicHoliday>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeletePublicHolidayMutationOptions(options));
+    }
+
+export const getListLeavesUrl = (params?: ListLeavesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/leaves?${stringifiedParams}` : `/api/leaves`
+}
+
+/**
+ * @summary List leave entries
+ */
+export const listLeaves = async (params?: ListLeavesParams, options?: Parameters<typeof customFetch>[1]): Promise<Leave[]> => {
+
+  return customFetch<Leave[]>(getListLeavesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListLeavesQueryKey = (params?: ListLeavesParams,) => {
+    return [
+    `/api/leaves`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListLeavesQueryOptions = <TData = Awaited<ReturnType<typeof listLeaves>>, TError = ErrorType<unknown>>(params?: ListLeavesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLeaves>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListLeavesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listLeaves>>> = ({ signal }) => listLeaves(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listLeaves>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListLeavesQueryResult = NonNullable<Awaited<ReturnType<typeof listLeaves>>>
+export type ListLeavesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List leave entries
+ */
+
+export function useListLeaves<TData = Awaited<ReturnType<typeof listLeaves>>, TError = ErrorType<unknown>>(
+ params?: ListLeavesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLeaves>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListLeavesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getLogLeaveUrl = () => {
+
+
+
+
+  return `/api/leaves`
+}
+
+/**
+ * @summary Log a leave day
+ */
+export const logLeave = async (leaveInput: LeaveInput, options?: Parameters<typeof customFetch>[1]): Promise<Leave> => {
+
+  return customFetch<Leave>(getLogLeaveUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(leaveInput)
+  }
+);}
+
+
+
+
+
+export const getLogLeaveMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logLeave>>, TError,{data: BodyType<LeaveInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof logLeave>>, TError,{data: BodyType<LeaveInput>}, TContext> => {
+
+const mutationKey = ['logLeave'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof logLeave>>, {data: BodyType<LeaveInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  logLeave(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LogLeaveMutationResult = NonNullable<Awaited<ReturnType<typeof logLeave>>>
+    export type LogLeaveMutationBody = BodyType<LeaveInput>
+    export type LogLeaveMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Log a leave day
+ */
+export const useLogLeave = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logLeave>>, TError,{data: BodyType<LeaveInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof logLeave>>,
+        TError,
+        {data: BodyType<LeaveInput>},
+        TContext
+      > => {
+      return useMutation(getLogLeaveMutationOptions(options));
+    }
+
+export const getDeleteLeaveUrl = (id: number,) => {
+
+
+
+
+  return `/api/leaves/${id}`
+}
+
+/**
+ * @summary Delete a leave entry
+ */
+export const deleteLeave = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<MessageResponse> => {
+
+  return customFetch<MessageResponse>(getDeleteLeaveUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteLeaveMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteLeave>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteLeave>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteLeave'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteLeave>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteLeave(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteLeaveMutationResult = NonNullable<Awaited<ReturnType<typeof deleteLeave>>>
+
+    export type DeleteLeaveMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a leave entry
+ */
+export const useDeleteLeave = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteLeave>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteLeave>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteLeaveMutationOptions(options));
+    }
 

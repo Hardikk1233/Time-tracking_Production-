@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, gte, lte, sql, and } from "drizzle-orm";
+import { eq, gte, lte, sql, and, inArray } from "drizzle-orm";
 import { format, getISOWeek } from "date-fns";
 import {
   db,
@@ -8,12 +8,34 @@ import {
   tasksTable,
   projectsTable,
   clientsTable,
+  publicHolidaysTable,
+  leavesTable,
 } from "@workspace/db";
 
 const router: IRouter = Router();
 
 // ─── Working days calculation ─────────────────────────────────────────────────
 
+/** Returns working days (Mon–Fri) minus any public holidays in that range. */
+function countWorkingDaysEffective(
+  startDate: string,
+  endDate: string,
+  holidaySet: Set<string>,
+): number {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  let count = 0;
+  const cur = new Date(start);
+  while (cur <= end) {
+    const d = cur.getDay();
+    const dateStr = format(cur, "yyyy-MM-dd");
+    if (d > 0 && d < 6 && !holidaySet.has(dateStr)) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return Math.max(count, 1); // avoid divide-by-zero
+}
+
+/** Legacy sync version (no holiday awareness) — kept for callers that haven't migrated. */
 function countWorkingDays(startDate?: string, endDate?: string): number {
   const now = new Date();
   const start = startDate
@@ -22,7 +44,6 @@ function countWorkingDays(startDate?: string, endDate?: string): number {
   const end = endDate
     ? new Date(endDate)
     : new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
   let count = 0;
   const cur = new Date(start);
   while (cur <= end) {
@@ -30,7 +51,19 @@ function countWorkingDays(startDate?: string, endDate?: string): number {
     if (d > 0 && d < 6) count++;
     cur.setDate(cur.getDate() + 1);
   }
-  return Math.max(count, 1); // avoid divide-by-zero
+  return Math.max(count, 1);
+}
+
+/** Fetch all holidays in a date range and return as a Set<string> of YYYY-MM-DD. */
+async function fetchHolidaySet(startDate?: string, endDate?: string): Promise<Set<string>> {
+  const conditions = [];
+  if (startDate) conditions.push(gte(publicHolidaysTable.date, startDate));
+  if (endDate) conditions.push(lte(publicHolidaysTable.date, endDate));
+  const rows = await db
+    .select({ date: publicHolidaysTable.date })
+    .from(publicHolidaysTable)
+    .where(conditions.length > 0 ? and(...conditions) : undefined);
+  return new Set(rows.map((r) => r.date));
 }
 
 // ─── Summary (always scoped to the current user) ─────────────────────────────
@@ -41,6 +74,37 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
     startDate?: string;
     endDate?: string;
   };
+
+  const [holidaySet, leaveRows] = await Promise.all([
+    fetchHolidaySet(startDate, endDate),
+    db
+      .select({ date: leavesTable.date })
+      .from(leavesTable)
+      .where(
+        and(
+          eq(leavesTable.userId, currentUserId),
+          startDate ? gte(leavesTable.date, startDate) : undefined,
+          endDate ? lte(leavesTable.date, endDate) : undefined,
+        ),
+      ),
+  ]);
+
+  // Count leave days that fall on effective working days (non-holiday weekdays)
+  const leaveDays = leaveRows.filter((l) => {
+    const d = new Date(l.date).getDay();
+    return d > 0 && d < 6 && !holidaySet.has(l.date);
+  }).length;
+
+  const now = new Date();
+  const resolvedStart =
+    startDate ??
+    format(new Date(now.getFullYear(), now.getMonth(), 1), "yyyy-MM-dd");
+  const resolvedEnd =
+    endDate ??
+    format(new Date(now.getFullYear(), now.getMonth() + 1, 0), "yyyy-MM-dd");
+
+  const baseWorkingDays = countWorkingDaysEffective(resolvedStart, resolvedEnd, holidaySet);
+  const effectiveWorkingDays = Math.max(baseWorkingDays - leaveDays, 0);
 
   const conditions = [eq(timeEntriesTable.userId, currentUserId)];
   if (startDate) conditions.push(gte(timeEntriesTable.date, startDate));
@@ -57,12 +121,20 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
     .from(timeEntriesTable)
     .where(and(...conditions));
 
+  const billable = Number(result?.billableHours ?? 0);
+  const capacityHours = effectiveWorkingDays * 8;
+
   res.json({
     totalHours: Number(result?.totalHours ?? 0),
-    billableHours: Number(result?.billableHours ?? 0),
+    billableHours: billable,
     nonBillableHours: Number(result?.nonBillableHours ?? 0),
     pendingApprovalCount: Number(result?.pendingApprovalCount ?? 0),
     approvedHours: Number(result?.approvedHours ?? 0),
+    workingDays: baseWorkingDays,
+    effectiveWorkingDays,
+    leaveDays,
+    capacityHours,
+    utilization: capacityHours > 0 ? Math.round((billable / capacityHours) * 100) : 0,
   });
 });
 
@@ -130,6 +202,20 @@ router.get("/dashboard/client-hours-trend", async (req, res): Promise<void> => {
     return;
   }
 
+  // Fetch client FTE count and all holidays in range in parallel
+  const [[clientRow], allHolidays] = await Promise.all([
+    db
+      .select({ fteCount: clientsTable.fteCount })
+      .from(clientsTable)
+      .where(eq(clientsTable.id, clientIdNum)),
+    db
+      .select({ date: publicHolidaysTable.date })
+      .from(publicHolidaysTable),
+  ]);
+
+  const fteCount = clientRow?.fteCount ?? 1;
+  const allHolidaySet = new Set(allHolidays.map((h) => h.date));
+
   // date_trunc unit must be a SQL literal, not a parameter — build the expression directly
   const periodExpr =
     granularity === "week"
@@ -162,7 +248,6 @@ router.get("/dashboard/client-hours-trend", async (req, res): Promise<void> => {
     let periodEnd: Date;
 
     if (granularity === "week") {
-      // date_trunc('week') returns the Monday of the week
       periodEnd = new Date(periodDate);
       periodEnd.setDate(periodEnd.getDate() + 6);
     } else {
@@ -181,13 +266,15 @@ router.get("/dashboard/client-hours-trend", async (req, res): Promise<void> => {
       periodEnd = new Date(endDate);
     }
 
-    const workingDays = countWorkingDays(
+    const effectiveWorkingDays = countWorkingDaysEffective(
       format(periodStart, "yyyy-MM-dd"),
       format(periodEnd, "yyyy-MM-dd"),
+      allHolidaySet,
     );
 
     const billable = Number(r.billableHours);
-    const capacity = workingDays * 8;
+    // Client capacity accounts for FTE count
+    const capacity = effectiveWorkingDays * 8 * fteCount;
 
     let period: string;
     let label: string;
@@ -207,7 +294,9 @@ router.get("/dashboard/client-hours-trend", async (req, res): Promise<void> => {
       billableHours: billable,
       nonBillableHours: Number(r.nonBillableHours),
       totalHours: Number(r.totalHours),
-      workingDays,
+      workingDays: effectiveWorkingDays,
+      fteCount,
+      capacity,
       utilization: capacity > 0 ? Math.round((billable / capacity) * 100) : 0,
     };
   });
@@ -230,7 +319,7 @@ router.get("/dashboard/utilization", async (req, res): Promise<void> => {
   const entryWhere =
     entryConditions.length > 0 ? and(...entryConditions) : undefined;
 
-  // Role-based visibility: MD/AVP see full team; Associate sees self + direct Analysts; Analyst sees only self
+  // Role-based visibility
   const [currentUser] = await db
     .select({ role: usersTable.role })
     .from(usersTable)
@@ -242,37 +331,73 @@ router.get("/dashboard/utilization", async (req, res): Promise<void> => {
   if (currentRole === "analyst") {
     userWhereClause = eq(usersTable.id, currentUserId);
   } else if (currentRole === "associate") {
-    // Self + Analysts who report to this associate
     userWhereClause = sql`(${usersTable.id} = ${currentUserId} OR (${usersTable.role} = 'analyst' AND ${usersTable.reportingToId} = ${currentUserId}))`;
   }
-  // avp and md see everyone (no filter)
 
-  const rows = await db
-    .select({
-      userId: usersTable.id,
-      userName: usersTable.name,
-      role: usersTable.role,
-      totalHours: sql<number>`COALESCE(SUM(${timeEntriesTable.hours}), 0)`,
-      billableHours: sql<number>`COALESCE(SUM(COALESCE(${timeEntriesTable.billableHours}, 0)), 0)`,
-      nonBillableHours: sql<number>`COALESCE(SUM(${timeEntriesTable.hours} - COALESCE(${timeEntriesTable.billableHours}, 0)), 0)`,
-      pendingHours: sql<number>`COALESCE(SUM(CASE WHEN ${timeEntriesTable.status} = 'pending' THEN ${timeEntriesTable.hours} ELSE 0 END), 0)`,
-    })
-    .from(usersTable)
-    .leftJoin(
-      timeEntriesTable,
-      and(eq(timeEntriesTable.userId, usersTable.id), entryWhere),
-    )
-    .where(userWhereClause)
-    .groupBy(usersTable.id, usersTable.name, usersTable.role)
-    .orderBy(sql`COALESCE(SUM(${timeEntriesTable.hours}), 0) DESC`);
+  // Fetch time entry aggregates and holidays in parallel
+  const now = new Date();
+  const resolvedStart =
+    startDate ??
+    format(new Date(now.getFullYear(), now.getMonth(), 1), "yyyy-MM-dd");
+  const resolvedEnd =
+    endDate ??
+    format(new Date(now.getFullYear(), now.getMonth() + 1, 0), "yyyy-MM-dd");
 
-  const workingDays = countWorkingDays(startDate, endDate);
-  const capacityHours = workingDays * 8;
+  const [rows, holidaySet] = await Promise.all([
+    db
+      .select({
+        userId: usersTable.id,
+        userName: usersTable.name,
+        role: usersTable.role,
+        totalHours: sql<number>`COALESCE(SUM(${timeEntriesTable.hours}), 0)`,
+        billableHours: sql<number>`COALESCE(SUM(COALESCE(${timeEntriesTable.billableHours}, 0)), 0)`,
+        nonBillableHours: sql<number>`COALESCE(SUM(${timeEntriesTable.hours} - COALESCE(${timeEntriesTable.billableHours}, 0)), 0)`,
+        pendingHours: sql<number>`COALESCE(SUM(CASE WHEN ${timeEntriesTable.status} = 'pending' THEN ${timeEntriesTable.hours} ELSE 0 END), 0)`,
+      })
+      .from(usersTable)
+      .leftJoin(
+        timeEntriesTable,
+        and(eq(timeEntriesTable.userId, usersTable.id), entryWhere),
+      )
+      .where(userWhereClause)
+      .groupBy(usersTable.id, usersTable.name, usersTable.role)
+      .orderBy(sql`COALESCE(SUM(${timeEntriesTable.hours}), 0) DESC`),
+    fetchHolidaySet(startDate, endDate),
+  ]);
+
+  const baseWorkingDays = countWorkingDaysEffective(resolvedStart, resolvedEnd, holidaySet);
+
+  // Fetch leaves for all visible users in the date range
+  const visibleUserIds = rows.map((r) => r.userId);
+  let leavesByUser: Record<number, number> = {};
+
+  if (visibleUserIds.length > 0) {
+    const leaveConditions = [inArray(leavesTable.userId, visibleUserIds)];
+    if (startDate) leaveConditions.push(gte(leavesTable.date, startDate));
+    if (endDate) leaveConditions.push(lte(leavesTable.date, endDate));
+
+    const leaveRows = await db
+      .select({ userId: leavesTable.userId, date: leavesTable.date })
+      .from(leavesTable)
+      .where(and(...leaveConditions));
+
+    // Count leave days that are effective working days (non-holiday weekdays)
+    leavesByUser = leaveRows.reduce<Record<number, number>>((acc, l) => {
+      const d = new Date(l.date).getDay();
+      if (d > 0 && d < 6 && !holidaySet.has(l.date)) {
+        acc[l.userId] = (acc[l.userId] ?? 0) + 1;
+      }
+      return acc;
+    }, {});
+  }
 
   res.json(
     rows.map((r) => {
       const total = Number(r.totalHours);
       const billable = Number(r.billableHours);
+      const leaveDays = leavesByUser[r.userId] ?? 0;
+      const effectiveWorkingDays = Math.max(baseWorkingDays - leaveDays, 0);
+      const capacityHours = effectiveWorkingDays * 8;
       return {
         userId: r.userId,
         userName: r.userName,
@@ -281,7 +406,9 @@ router.get("/dashboard/utilization", async (req, res): Promise<void> => {
         billableHours: billable,
         nonBillableHours: Number(r.nonBillableHours),
         pendingHours: Number(r.pendingHours),
-        utilization: Math.round((billable / capacityHours) * 100),
+        leaveDays,
+        effectiveWorkingDays,
+        utilization: capacityHours > 0 ? Math.round((billable / capacityHours) * 100) : 0,
         efficiency: total > 0 ? Math.round((billable / total) * 100) : 0,
       };
     }),

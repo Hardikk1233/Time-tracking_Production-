@@ -9,12 +9,16 @@ import {
   useListClients,
   useListProjects,
   useListTasks,
+  useLogLeave,
+  useListLeaves,
+  useDeleteLeave,
   getListTimeEntriesQueryKey,
+  getListLeavesQueryKey,
 } from '@workspace/api-client-react';
 import type { TimeEntry } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useToast } from '@/hooks/use-toast';
@@ -28,7 +32,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, Check, X, Filter, Scissors } from 'lucide-react';
+import { Plus, Check, X, Filter, Scissors, CalendarOff, Trash2 } from 'lucide-react';
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -46,6 +50,12 @@ const splitSchema = z.object({
   billableHours: z.coerce.number().min(0, 'Must be ≥ 0'),
 });
 
+const leaveSchema = z.object({
+  date: z.string().min(1, 'Date is required'),
+  note: z.string().optional(),
+});
+type LeaveForm = z.infer<typeof leaveSchema>;
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function TimeEntries() {
@@ -55,6 +65,7 @@ export default function TimeEntries() {
 
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isLeaveDialogOpen, setIsLeaveDialogOpen] = useState(false);
   const [splitEntry, setSplitEntry] = useState<TimeEntry | null>(null);
 
   const queryParams = statusFilter !== 'all' ? { status: statusFilter as 'pending' | 'approved' | 'rejected' } : {};
@@ -105,6 +116,7 @@ export default function TimeEntries() {
             </SelectContent>
           </Select>
 
+          <LogLeaveDialog open={isLeaveDialogOpen} onOpenChange={setIsLeaveDialogOpen} />
           <LogTimeDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} />
         </div>
       </div>
@@ -243,6 +255,153 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+// ─── Log Leave Dialog ─────────────────────────────────────────────────────────
+
+function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const logLeaveMutation = useLogLeave();
+  const deleteLeaveMutation = useDeleteLeave();
+
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const monthStart = format(new Date(new Date().getFullYear(), new Date().getMonth(), 1), 'yyyy-MM-dd');
+
+  const { data: myLeaves } = useListLeaves(
+    { userId: user?.id, startDate: monthStart } as any,
+    { query: { enabled: !!user?.id } as any }
+  );
+
+  const form = useForm<LeaveForm>({
+    resolver: zodResolver(leaveSchema),
+    defaultValues: { date: today, note: '' },
+  });
+
+  const onSubmit = (data: LeaveForm) => {
+    logLeaveMutation.mutate(
+      { data: { date: data.date, note: data.note || undefined } as any },
+      {
+        onSuccess: () => {
+          toast({ title: 'Leave logged', description: `${format(new Date(data.date), 'MMM dd, yyyy')} marked as leave.` });
+          queryClient.invalidateQueries({ queryKey: getListLeavesQueryKey() });
+          form.reset({ date: today, note: '' });
+        },
+        onError: (err: any) => {
+          toast({ variant: 'destructive', title: 'Failed to log leave', description: err?.error || 'An error occurred.' });
+        },
+      }
+    );
+  };
+
+  const handleDeleteLeave = (id: number) => {
+    deleteLeaveMutation.mutate({ id } as any, {
+      onSuccess: () => {
+        toast({ title: 'Leave removed' });
+        queryClient.invalidateQueries({ queryKey: getListLeavesQueryKey() });
+      },
+    });
+  };
+
+  const handleClose = (v: boolean) => {
+    if (!v) form.reset({ date: today, note: '' });
+    onOpenChange(v);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogTrigger asChild>
+        <Button variant="outline" className="shadow-sm font-semibold tracking-tight border-amber-500/40 text-amber-600 hover:bg-amber-50 hover:border-amber-500">
+          <CalendarOff className="w-4 h-4 mr-2" />
+          Log Leave
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[440px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <CalendarOff className="w-5 h-5 text-amber-500" />
+            Log Leave
+          </DialogTitle>
+          <DialogDescription>
+            Mark a day as leave. Your utilization will be adjusted automatically.
+          </DialogDescription>
+        </DialogHeader>
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-2">
+            <FormField
+              control={form.control}
+              name="date"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Date</FormLabel>
+                  <FormControl><Input type="date" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="note"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Note <span className="text-muted-foreground font-normal">(Optional)</span></FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. Sick leave, Personal" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="flex justify-end gap-2 pt-1">
+              <Button type="button" variant="outline" onClick={() => handleClose(false)}>Cancel</Button>
+              <Button
+                type="submit"
+                className="bg-amber-500 hover:bg-amber-600 text-white"
+                disabled={logLeaveMutation.isPending}
+              >
+                {logLeaveMutation.isPending ? 'Logging...' : 'Log Leave'}
+              </Button>
+            </div>
+          </form>
+        </Form>
+
+        {/* This month's leaves */}
+        {myLeaves && myLeaves.length > 0 && (
+          <div className="border-t border-border pt-4 mt-2">
+            <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-2">This Month's Leaves</p>
+            <div className="space-y-1 max-h-36 overflow-y-auto">
+              {myLeaves.map((leave: any) => (
+                <div key={leave.id} className="flex items-center justify-between gap-2 rounded px-2 py-1.5 bg-muted/40 hover:bg-muted/60">
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium font-mono">
+                      {format(new Date(leave.date), 'EEE, MMM dd')}
+                    </span>
+                    {leave.note && (
+                      <span className="text-xs text-muted-foreground italic">{leave.note}</span>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
+                    onClick={() => handleDeleteLeave(leave.id)}
+                    disabled={deleteLeaveMutation.isPending}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Log Time Dialog (cascading Client → Project → Task) ─────────────────────
 
 function LogTimeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
@@ -265,22 +424,16 @@ function LogTimeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
   const selectedClientId = form.watch('clientId');
   const selectedProjectId = form.watch('projectId');
 
-  // Fetch clients (already filtered by backend to user's assigned clients)
   const { data: clients, isLoading: isLoadingClients } = useListClients();
-
-  // Fetch projects for selected client (enabled once client chosen)
   const { data: projects, isLoading: isLoadingProjects } = useListProjects(
     selectedClientId > 0 ? { clientId: selectedClientId } : undefined,
     { query: { enabled: selectedClientId > 0 } as any }
   );
-
-  // Fetch tasks for selected project (enabled once project chosen)
   const { data: tasks, isLoading: isLoadingTasks } = useListTasks(
     selectedProjectId > 0 ? { projectId: selectedProjectId } : undefined,
     { query: { enabled: selectedProjectId > 0 } as any }
   );
 
-  // Reset downstream selections when upstream changes
   const handleClientChange = (val: string) => {
     form.setValue('clientId', Number(val));
     form.setValue('projectId', 0);
@@ -334,14 +487,10 @@ function LogTimeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-2">
-            {/* Client */}
             <FormField control={form.control} name="clientId" render={({ field }) => (
               <FormItem>
                 <FormLabel>Client</FormLabel>
-                <Select
-                  onValueChange={handleClientChange}
-                  value={field.value > 0 ? String(field.value) : ''}
-                >
+                <Select onValueChange={handleClientChange} value={field.value > 0 ? String(field.value) : ''}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder={isLoadingClients ? 'Loading...' : 'Select a client'} />
@@ -357,7 +506,6 @@ function LogTimeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
               </FormItem>
             )} />
 
-            {/* Project */}
             <FormField control={form.control} name="projectId" render={({ field }) => (
               <FormItem>
                 <FormLabel>Project</FormLabel>
@@ -384,7 +532,6 @@ function LogTimeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
               </FormItem>
             )} />
 
-            {/* Task */}
             <FormField control={form.control} name="taskId" render={({ field }) => (
               <FormItem>
                 <FormLabel>Task</FormLabel>
@@ -411,7 +558,6 @@ function LogTimeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
               </FormItem>
             )} />
 
-            {/* Date + Hours */}
             <div className="grid grid-cols-2 gap-4">
               <FormField control={form.control} name="date" render={({ field }) => (
                 <FormItem>
@@ -429,7 +575,6 @@ function LogTimeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
               )} />
             </div>
 
-            {/* Description */}
             <FormField control={form.control} name="description" render={({ field }) => (
               <FormItem>
                 <FormLabel>Description <span className="text-muted-foreground font-normal">(Optional)</span></FormLabel>
@@ -520,7 +665,6 @@ function SplitHoursDialog({
               </FormItem>
             )} />
 
-            {/* Live preview */}
             <div className="bg-muted/40 rounded-lg p-4 grid grid-cols-2 gap-4 border border-border/50">
               <div className="text-center">
                 <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-1">Billable</p>

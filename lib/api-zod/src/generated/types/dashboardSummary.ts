@@ -12,4 +12,12 @@ export interface DashboardSummary {
   nonBillableHours: number;
   pendingApprovalCount: number;
   approvedHours: number;
+  workingDays?: number;
+  /** workingDays minus public holidays minus user leave days */
+  effectiveWorkingDays?: number;
+  leaveDays?: number;
+  /** effectiveWorkingDays × 8 */
+  capacityHours?: number;
+  /** billableHours / capacityHours × 100 */
+  utilization?: number;
 }

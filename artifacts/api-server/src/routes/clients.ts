@@ -61,24 +61,35 @@ router.post("/clients", async (req, res): Promise<void> => {
     return;
   }
 
-  const { name, description } = req.body as {
+  const { name, description, fteCount, associateIds } = req.body as {
     name?: string;
     description?: string;
+    fteCount?: number;
+    associateIds?: number[];
   };
   if (!name) {
     res.status(400).json({ error: "name is required" });
     return;
   }
 
+  const fte = typeof fteCount === "number" && fteCount >= 0.1 && fteCount <= 100
+    ? fteCount
+    : 1;
+
   const [client] = await db
     .insert(clientsTable)
-    .values({ name, description: description ?? null })
+    .values({ name, description: description ?? null, fteCount: fte })
     .returning();
 
-  // Auto-assign the creating AVP/MD so they can see the client they created
+  // Auto-assign the creating user so they can see the client
+  const assignees = new Set<number>([req.session.userId!]);
+  if (Array.isArray(associateIds)) {
+    associateIds.forEach((id) => typeof id === "number" && assignees.add(id));
+  }
+
   await db
     .insert(clientUsersTable)
-    .values({ clientId: client.id, userId: req.session.userId! })
+    .values([...assignees].map((userId) => ({ clientId: client.id, userId })))
     .onConflictDoNothing();
 
   res.status(201).json(client);
@@ -135,14 +146,18 @@ router.patch("/clients/:clientId", async (req, res): Promise<void> => {
     return;
   }
 
-  const { name, description } = req.body as {
+  const { name, description, fteCount } = req.body as {
     name?: string;
     description?: string | null;
+    fteCount?: number;
   };
 
   const updates: Partial<typeof clientsTable.$inferInsert> = {};
   if (name) updates.name = name;
   if (description !== undefined) updates.description = description;
+  if (typeof fteCount === "number" && fteCount >= 0.1 && fteCount <= 100) {
+    updates.fteCount = fteCount;
+  }
 
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No fields to update" });

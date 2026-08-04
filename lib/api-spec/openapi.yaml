@@ -24,6 +24,10 @@ tags:
     description: Time entry logging and approval
   - name: dashboard
     description: Dashboard and analytics
+  - name: holidays
+    description: Public holiday management
+  - name: leaves
+    description: Employee leave management
 
 paths:
   /healthz:
@@ -888,6 +892,125 @@ paths:
                 items:
                   $ref: "#/components/schemas/TimeEntry"
 
+  # ─── Public Holidays ─────────────────────────────────────────────────────
+  /public-holidays:
+    get:
+      operationId: listPublicHolidays
+      tags: [holidays]
+      summary: List all public holidays
+      responses:
+        "200":
+          description: List of public holidays
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PublicHoliday"
+    post:
+      operationId: createPublicHoliday
+      tags: [holidays]
+      summary: Create a public holiday (MD only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublicHolidayInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicHoliday"
+
+  /public-holidays/{id}:
+    delete:
+      operationId: deletePublicHoliday
+      tags: [holidays]
+      summary: Delete a public holiday (MD only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  # ─── Leaves ──────────────────────────────────────────────────────────────
+  /leaves:
+    get:
+      operationId: listLeaves
+      tags: [leaves]
+      summary: List leave entries
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: userId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of leaves
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Leave"
+    post:
+      operationId: logLeave
+      tags: [leaves]
+      summary: Log a leave day
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeaveInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Leave"
+
+  /leaves/{id}:
+    delete:
+      operationId: deleteLeave
+      tags: [leaves]
+      summary: Delete a leave entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
 components:
   parameters:
     UserId:
@@ -1016,7 +1139,7 @@ components:
     # ─── Clients ─────────────────────────────────────────────────────────
     Client:
       type: object
-      required: [id, name, createdAt]
+      required: [id, name, fteCount, createdAt]
       properties:
         id:
           type: integer
@@ -1024,6 +1147,11 @@ components:
           type: string
         description:
           type: ["string", "null"]
+        fteCount:
+          type: number
+          minimum: 0.1
+          maximum: 100
+          description: "Number of full-time equivalents; 1 FTE = 8h/day, 40h/week, 160h/month"
         createdAt:
           type: string
           format: date-time
@@ -1037,6 +1165,16 @@ components:
           minLength: 1
         description:
           type: string
+        fteCount:
+          type: number
+          minimum: 0.1
+          maximum: 100
+          default: 1
+        associateIds:
+          type: array
+          items:
+            type: integer
+          description: "IDs of Associates to assign as responsible"
 
     ClientUpdate:
       type: object
@@ -1046,6 +1184,10 @@ components:
           minLength: 1
         description:
           type: ["string", "null"]
+        fteCount:
+          type: number
+          minimum: 0.1
+          maximum: 100
 
     # ─── Projects ─────────────────────────────────────────────────────────
     Project:
@@ -1241,6 +1383,19 @@ components:
           type: integer
         approvedHours:
           type: number
+        workingDays:
+          type: integer
+        effectiveWorkingDays:
+          type: integer
+          description: "workingDays minus public holidays minus user leave days"
+        leaveDays:
+          type: integer
+        capacityHours:
+          type: number
+          description: "effectiveWorkingDays × 8"
+        utilization:
+          type: number
+          description: "billableHours / capacityHours × 100"
 
     ClientHours:
       type: object
@@ -1259,7 +1414,7 @@ components:
 
     ClientHoursTrendPoint:
       type: object
-      required: [period, label, billableHours, nonBillableHours, totalHours, workingDays, utilization]
+      required: [period, label, billableHours, nonBillableHours, totalHours, workingDays, fteCount, capacity, utilization]
       properties:
         period:
           type: string
@@ -1275,9 +1430,15 @@ components:
           type: number
         workingDays:
           type: integer
+          description: "Working days minus public holidays"
+        fteCount:
+          type: number
+        capacity:
+          type: number
+          description: "workingDays × 8 × fteCount"
         utilization:
           type: number
-          description: "billableHours / (workingDays × 8) × 100"
+          description: "billableHours / capacity × 100"
 
     MemberUtilization:
       type: object
@@ -1298,9 +1459,71 @@ components:
           type: number
         pendingHours:
           type: number
+        leaveDays:
+          type: integer
+        effectiveWorkingDays:
+          type: integer
         utilization:
           type: number
-          description: "totalHours / (workingDays × 8) × 100"
+          description: "billableHours / (effectiveWorkingDays × 8) × 100"
         efficiency:
           type: number
           description: "billableHours / totalHours × 100"
+
+    # ─── Public Holidays ──────────────────────────────────────────────────
+    PublicHoliday:
+      type: object
+      required: [id, date, name, createdAt]
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+          format: date
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    PublicHolidayInput:
+      type: object
+      required: [date, name]
+      properties:
+        date:
+          type: string
+          format: date
+        name:
+          type: string
+
+    # ─── Leaves ───────────────────────────────────────────────────────────
+    Leave:
+      type: object
+      required: [id, userId, userName, userRole, date, createdAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        userName:
+          type: string
+        userRole:
+          type: string
+        date:
+          type: string
+          format: date
+        note:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    LeaveInput:
+      type: object
+      required: [date]
+      properties:
+        date:
+          type: string
+          format: date
+        note:
+          type: string

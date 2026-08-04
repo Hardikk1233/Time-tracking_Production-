@@ -10,4 +10,11 @@ export interface ClientInput {
   /** @minLength 1 */
   name: string;
   description?: string;
+  /**
+     * @minimum 0.1
+     * @maximum 100
+     */
+  fteCount?: number;
+  /** IDs of Associates to assign as responsible */
+  associateIds?: number[];
 }

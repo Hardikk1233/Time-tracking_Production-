@@ -168,10 +168,16 @@ export const DeleteUserResponse = zod.object({
 /**
  * @summary List all clients
  */
+export const listClientsResponseFteCountMin = 0.1;
+export const listClientsResponseFteCountMax = 100;
+
+
+
 export const ListClientsResponseItem = zod.object({
   "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish(),
+  "fteCount": zod.number().min(listClientsResponseFteCountMin).max(listClientsResponseFteCountMax).describe('Number of full-time equivalents; 1 FTE = 8h\/day, 40h\/week, 160h\/month'),
   "createdAt": zod.coerce.date()
 })
 export const ListClientsResponse = zod.array(ListClientsResponseItem)
@@ -181,17 +187,29 @@ export const ListClientsResponse = zod.array(ListClientsResponseItem)
  * @summary Create a client
  */
 
+export const createClientBodyFteCountDefault = 1;
+export const createClientBodyFteCountMin = 0.1;
+export const createClientBodyFteCountMax = 100;
+
 
 
 export const CreateClientBody = zod.object({
   "name": zod.string().min(1),
-  "description": zod.string().optional()
+  "description": zod.string().optional(),
+  "fteCount": zod.number().min(createClientBodyFteCountMin).max(createClientBodyFteCountMax).default(createClientBodyFteCountDefault),
+  "associateIds": zod.array(zod.int()).optional().describe('IDs of Associates to assign as responsible')
 })
+
+export const createClientResponseFteCountMin = 0.1;
+export const createClientResponseFteCountMax = 100;
+
+
 
 export const CreateClientResponse = zod.object({
   "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish(),
+  "fteCount": zod.number().min(createClientResponseFteCountMin).max(createClientResponseFteCountMax).describe('Number of full-time equivalents; 1 FTE = 8h\/day, 40h\/week, 160h\/month'),
   "createdAt": zod.coerce.date()
 })
 
@@ -203,10 +221,16 @@ export const GetClientParams = zod.object({
   "clientId": zod.coerce.number().int()
 })
 
+export const getClientResponseFteCountMin = 0.1;
+export const getClientResponseFteCountMax = 100;
+
+
+
 export const GetClientResponse = zod.object({
   "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish(),
+  "fteCount": zod.number().min(getClientResponseFteCountMin).max(getClientResponseFteCountMax).describe('Number of full-time equivalents; 1 FTE = 8h\/day, 40h\/week, 160h\/month'),
   "createdAt": zod.coerce.date()
 })
 
@@ -219,17 +243,27 @@ export const UpdateClientParams = zod.object({
 })
 
 
+export const updateClientBodyFteCountMin = 0.1;
+export const updateClientBodyFteCountMax = 100;
+
 
 
 export const UpdateClientBody = zod.object({
   "name": zod.string().min(1).optional(),
-  "description": zod.string().nullish()
+  "description": zod.string().nullish(),
+  "fteCount": zod.number().min(updateClientBodyFteCountMin).max(updateClientBodyFteCountMax).optional()
 })
+
+export const updateClientResponseFteCountMin = 0.1;
+export const updateClientResponseFteCountMax = 100;
+
+
 
 export const UpdateClientResponse = zod.object({
   "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish(),
+  "fteCount": zod.number().min(updateClientResponseFteCountMin).max(updateClientResponseFteCountMax).describe('Number of full-time equivalents; 1 FTE = 8h\/day, 40h\/week, 160h\/month'),
   "createdAt": zod.coerce.date()
 })
 
@@ -808,7 +842,12 @@ export const GetDashboardSummaryResponse = zod.object({
   "billableHours": zod.number(),
   "nonBillableHours": zod.number(),
   "pendingApprovalCount": zod.int(),
-  "approvedHours": zod.number()
+  "approvedHours": zod.number(),
+  "workingDays": zod.int().optional(),
+  "effectiveWorkingDays": zod.int().optional().describe('workingDays minus public holidays minus user leave days'),
+  "leaveDays": zod.int().optional(),
+  "capacityHours": zod.number().optional().describe('effectiveWorkingDays × 8'),
+  "utilization": zod.number().optional().describe('billableHours \/ capacityHours × 100')
 })
 
 
@@ -846,7 +885,9 @@ export const GetTeamUtilizationResponseItem = zod.object({
   "billableHours": zod.number(),
   "nonBillableHours": zod.number(),
   "pendingHours": zod.number(),
-  "utilization": zod.number().describe('totalHours \/ (workingDays × 8) × 100'),
+  "leaveDays": zod.int().optional(),
+  "effectiveWorkingDays": zod.int().optional(),
+  "utilization": zod.number().describe('billableHours \/ (effectiveWorkingDays × 8) × 100'),
   "efficiency": zod.number().describe('billableHours \/ totalHours × 100')
 })
 export const GetTeamUtilizationResponse = zod.array(GetTeamUtilizationResponseItem)
@@ -903,8 +944,10 @@ export const GetClientHoursTrendResponseItem = zod.object({
   "billableHours": zod.number(),
   "nonBillableHours": zod.number(),
   "totalHours": zod.number(),
-  "workingDays": zod.int(),
-  "utilization": zod.number().describe('billableHours \/ (workingDays × 8) × 100')
+  "workingDays": zod.int().describe('Working days minus public holidays'),
+  "fteCount": zod.number(),
+  "capacity": zod.number().describe('workingDays × 8 × fteCount'),
+  "utilization": zod.number().describe('billableHours \/ capacity × 100')
 })
 export const GetClientHoursTrendResponse = zod.array(GetClientHoursTrendResponseItem)
 
@@ -934,5 +977,97 @@ export const GetPendingApprovalsResponseItem = zod.object({
   "createdAt": zod.coerce.date()
 })
 export const GetPendingApprovalsResponse = zod.array(GetPendingApprovalsResponseItem)
+
+
+/**
+ * @summary List all public holidays
+ */
+export const ListPublicHolidaysResponseItem = zod.object({
+  "id": zod.int(),
+  "date": zod.coerce.date(),
+  "name": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+export const ListPublicHolidaysResponse = zod.array(ListPublicHolidaysResponseItem)
+
+
+/**
+ * @summary Create a public holiday (MD only)
+ */
+export const CreatePublicHolidayBody = zod.object({
+  "date": zod.coerce.date(),
+  "name": zod.string()
+})
+
+export const CreatePublicHolidayResponse = zod.object({
+  "id": zod.int(),
+  "date": zod.coerce.date(),
+  "name": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a public holiday (MD only)
+ */
+export const DeletePublicHolidayParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const DeletePublicHolidayResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
+ * @summary List leave entries
+ */
+export const ListLeavesQueryParams = zod.object({
+  "startDate": zod.date().optional(),
+  "endDate": zod.date().optional(),
+  "userId": zod.coerce.number().int().optional()
+})
+
+export const ListLeavesResponseItem = zod.object({
+  "id": zod.int(),
+  "userId": zod.int(),
+  "userName": zod.string(),
+  "userRole": zod.string(),
+  "date": zod.coerce.date(),
+  "note": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListLeavesResponse = zod.array(ListLeavesResponseItem)
+
+
+/**
+ * @summary Log a leave day
+ */
+export const LogLeaveBody = zod.object({
+  "date": zod.coerce.date(),
+  "note": zod.string().optional()
+})
+
+export const LogLeaveResponse = zod.object({
+  "id": zod.int(),
+  "userId": zod.int(),
+  "userName": zod.string(),
+  "userRole": zod.string(),
+  "date": zod.coerce.date(),
+  "note": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a leave entry
+ */
+export const DeleteLeaveParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const DeleteLeaveResponse = zod.object({
+  "message": zod.string()
+})
 
 

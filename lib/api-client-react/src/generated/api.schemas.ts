@@ -91,6 +91,12 @@ export interface Client {
   name: string;
   /** @nullable */
   description?: string | null;
+  /**
+     * Number of full-time equivalents; 1 FTE = 8h/day, 40h/week, 160h/month
+     * @minimum 0.1
+     * @maximum 100
+     */
+  fteCount: number;
   createdAt: string;
 }
 
@@ -98,6 +104,13 @@ export interface ClientInput {
   /** @minLength 1 */
   name: string;
   description?: string;
+  /**
+     * @minimum 0.1
+     * @maximum 100
+     */
+  fteCount?: number;
+  /** IDs of Associates to assign as responsible */
+  associateIds?: number[];
 }
 
 export interface ClientUpdate {
@@ -105,6 +118,11 @@ export interface ClientUpdate {
   name?: string;
   /** @nullable */
   description?: string | null;
+  /**
+     * @minimum 0.1
+     * @maximum 100
+     */
+  fteCount?: number;
 }
 
 export interface Project {
@@ -239,6 +257,14 @@ export interface DashboardSummary {
   nonBillableHours: number;
   pendingApprovalCount: number;
   approvedHours: number;
+  workingDays?: number;
+  /** workingDays minus public holidays minus user leave days */
+  effectiveWorkingDays?: number;
+  leaveDays?: number;
+  /** effectiveWorkingDays × 8 */
+  capacityHours?: number;
+  /** billableHours / capacityHours × 100 */
+  utilization?: number;
 }
 
 export interface ClientHours {
@@ -257,8 +283,12 @@ export interface ClientHoursTrendPoint {
   billableHours: number;
   nonBillableHours: number;
   totalHours: number;
+  /** Working days minus public holidays */
   workingDays: number;
-  /** billableHours / (workingDays × 8) × 100 */
+  fteCount: number;
+  /** workingDays × 8 × fteCount */
+  capacity: number;
+  /** billableHours / capacity × 100 */
   utilization: number;
 }
 
@@ -280,10 +310,40 @@ export interface MemberUtilization {
   billableHours: number;
   nonBillableHours: number;
   pendingHours: number;
-  /** totalHours / (workingDays × 8) × 100 */
+  leaveDays?: number;
+  effectiveWorkingDays?: number;
+  /** billableHours / (effectiveWorkingDays × 8) × 100 */
   utilization: number;
   /** billableHours / totalHours × 100 */
   efficiency: number;
+}
+
+export interface PublicHoliday {
+  id: number;
+  date: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface PublicHolidayInput {
+  date: string;
+  name: string;
+}
+
+export interface Leave {
+  id: number;
+  userId: number;
+  userName: string;
+  userRole: string;
+  date: string;
+  /** @nullable */
+  note?: string | null;
+  createdAt: string;
+}
+
+export interface LeaveInput {
+  date: string;
+  note?: string;
 }
 
 export type ListUsersParams = {
@@ -362,4 +422,10 @@ export const GetClientHoursTrendGranularity = {
   week: 'week',
   month: 'month',
 } as const;
+
+export type ListLeavesParams = {
+startDate?: string;
+endDate?: string;
+userId?: number;
+};
 

@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { Link } from 'wouter';
 import { useAuth } from '@/lib/auth';
-import { 
-  useListClients, 
-  useCreateClient, 
+import {
+  useListClients,
+  useCreateClient,
   useDeleteClient,
-  getListClientsQueryKey
+  useListUsers,
+  getListClientsQueryKey,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -20,20 +21,28 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, Trash2, Building2, ChevronRight } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Plus, Trash2, Building2, ChevronRight, Users } from 'lucide-react';
 
 const clientSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   description: z.string().optional(),
+  fteCount: z.coerce
+    .number()
+    .min(0.1, 'Min 0.1 FTE')
+    .max(100, 'Max 100 FTEs')
+    .default(1),
+  associateIds: z.array(z.number()).optional(),
 });
+type ClientForm = z.infer<typeof clientSchema>;
 
 export default function Clients() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  
+
   const { data: clients, isLoading } = useListClients();
   const deleteMutation = useDeleteClient();
 
@@ -60,7 +69,7 @@ export default function Clients() {
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Clients</h1>
           <p className="text-muted-foreground font-mono text-sm mt-1">Manage client portfolios</p>
         </div>
-        
+
         {isManager && (
           <CreateClientDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} />
         )}
@@ -86,9 +95,9 @@ export default function Clients() {
                     <Building2 className="w-5 h-5" />
                   </div>
                   {isManager && (
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 -mr-2 -mt-2 opacity-0 group-hover:opacity-100 transition-opacity"
                       onClick={(e) => { e.preventDefault(); handleDelete(client.id); }}
                     >
@@ -97,9 +106,21 @@ export default function Clients() {
                   )}
                 </div>
                 <h3 className="font-bold text-lg leading-tight text-foreground mb-2 line-clamp-1">{client.name}</h3>
-                <p className="text-sm text-muted-foreground line-clamp-2 mb-4 flex-1">
+                <p className="text-sm text-muted-foreground line-clamp-2 mb-3 flex-1">
                   {client.description || 'No description provided.'}
                 </p>
+
+                {/* FTE badge */}
+                <div className="flex items-center gap-2 mb-4">
+                  <Badge variant="outline" className="text-xs font-mono text-primary border-primary/30 bg-primary/5">
+                    <Users className="w-3 h-3 mr-1" />
+                    {(client as any).fteCount ?? 1} FTE
+                  </Badge>
+                  <span className="text-xs text-muted-foreground font-mono">
+                    {(((client as any).fteCount ?? 1) * 160).toFixed(0)}h/mo capacity
+                  </span>
+                </div>
+
                 <div className="flex items-center justify-between mt-auto pt-4 border-t border-border/50">
                   <span className="text-xs font-mono text-muted-foreground">
                     Added {format(new Date(client.createdAt), 'MMM yyyy')}
@@ -128,20 +149,39 @@ function CreateClientDialog({ open, onOpenChange }: { open: boolean, onOpenChang
   const { toast } = useToast();
   const createMutation = useCreateClient();
 
-  const form = useForm<z.infer<typeof clientSchema>>({
+  // Fetch associates for the responsible-associates multi-select
+  const { data: associates } = useListUsers({ role: 'associate' } as any);
+
+  const form = useForm<ClientForm>({
     resolver: zodResolver(clientSchema),
-    defaultValues: { name: '', description: '' },
+    defaultValues: { name: '', description: '', fteCount: 1, associateIds: [] },
   });
 
-  const onSubmit = (data: z.infer<typeof clientSchema>) => {
-    createMutation.mutate({ data }, {
-      onSuccess: () => {
-        toast({ title: 'Client created' });
-        queryClient.invalidateQueries({ queryKey: getListClientsQueryKey() });
-        form.reset();
-        onOpenChange(false);
+  const selectedAssociateIds: number[] = form.watch('associateIds') ?? [];
+
+  const toggleAssociate = (id: number) => {
+    const current = form.getValues('associateIds') ?? [];
+    const next = current.includes(id)
+      ? current.filter((x) => x !== id)
+      : [...current, id];
+    form.setValue('associateIds', next);
+  };
+
+  const onSubmit = (data: ClientForm) => {
+    createMutation.mutate(
+      { data: { name: data.name, description: data.description, fteCount: data.fteCount, associateIds: data.associateIds } as any },
+      {
+        onSuccess: () => {
+          toast({ title: 'Client created' });
+          queryClient.invalidateQueries({ queryKey: getListClientsQueryKey() });
+          form.reset({ name: '', description: '', fteCount: 1, associateIds: [] });
+          onOpenChange(false);
+        },
+        onError: (err: any) => {
+          toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to create client.' });
+        }
       }
-    });
+    );
   };
 
   return (
@@ -152,14 +192,15 @@ function CreateClientDialog({ open, onOpenChange }: { open: boolean, onOpenChang
           New Client
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle>Create Client</DialogTitle>
           <DialogDescription>Add a new client to the firm's portfolio.</DialogDescription>
         </DialogHeader>
-        
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
+            {/* Client Name */}
             <FormField
               control={form.control}
               name="name"
@@ -174,12 +215,13 @@ function CreateClientDialog({ open, onOpenChange }: { open: boolean, onOpenChang
               )}
             />
 
+            {/* Description */}
             <FormField
               control={form.control}
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Description</FormLabel>
+                  <FormLabel>Description <span className="text-muted-foreground font-normal">(Optional)</span></FormLabel>
                   <FormControl>
                     <Input placeholder="Brief overview of the client" {...field} />
                   </FormControl>
@@ -187,6 +229,76 @@ function CreateClientDialog({ open, onOpenChange }: { open: boolean, onOpenChang
                 </FormItem>
               )}
             />
+
+            {/* FTE count */}
+            <FormField
+              control={form.control}
+              name="fteCount"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>No. of FTEs</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      min="0.1"
+                      max="100"
+                      placeholder="1"
+                      {...field}
+                    />
+                  </FormControl>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    1 FTE = 8 h/day · 40 h/week · 160 h/month capacity
+                    {field.value > 0 && (
+                      <> — <span className="text-primary font-medium">{(field.value * 160).toFixed(0)} h/mo total</span></>
+                    )}
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Associates Responsible */}
+            <FormItem>
+              <FormLabel>Associates Responsible <span className="text-muted-foreground font-normal">(Optional)</span></FormLabel>
+              {associates && associates.length > 0 ? (
+                <div className="grid grid-cols-1 gap-1 max-h-36 overflow-y-auto rounded-md border border-input bg-background p-2">
+                  {associates.map((a) => {
+                    const selected = selectedAssociateIds.includes(a.id);
+                    return (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onClick={() => toggleAssociate(a.id)}
+                        className={`flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors text-left ${
+                          selected
+                            ? 'bg-primary/10 text-primary font-medium'
+                            : 'hover:bg-muted text-foreground'
+                        }`}
+                      >
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                          selected ? 'bg-primary border-primary' : 'border-input'
+                        }`}>
+                          {selected && (
+                            <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </div>
+                        <span>{a.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">No associates found.</p>
+              )}
+              {selectedAssociateIds.length > 0 && (
+                <p className="text-xs text-primary mt-1 font-mono">
+                  {selectedAssociateIds.length} selected
+                </p>
+              )}
+            </FormItem>
 
             <div className="pt-4 flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

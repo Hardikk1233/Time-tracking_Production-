@@ -7,6 +7,8 @@ import projectsRouter from "./projects";
 import tasksRouter from "./tasks";
 import timeEntriesRouter from "./time-entries";
 import dashboardRouter from "./dashboard";
+import holidaysRouter from "./holidays";
+import leavesRouter from "./leaves";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -23,5 +25,7 @@ router.use(projectsRouter);
 router.use(tasksRouter);
 router.use(timeEntriesRouter);
 router.use(dashboardRouter);
+router.use(holidaysRouter);
+router.use(leavesRouter);
 
 export default router;
