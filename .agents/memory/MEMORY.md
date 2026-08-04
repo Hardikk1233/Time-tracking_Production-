@@ -1,0 +1,1 @@
+- [Dev vs prod DB divergence](dev-prod-db-divergence.md) — dev and published-app databases are separate instances; data inserted only via dev API calls never reaches production.
