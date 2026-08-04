@@ -16,7 +16,7 @@ import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer, Legend,
 } from 'recharts';
-import { Clock, Briefcase, AlertCircle, Activity, User, BarChart2 } from 'lucide-react';
+import { Clock, Briefcase, AlertCircle, Activity, User, BarChart2, CalendarOff } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format, startOfMonth, differenceInCalendarDays } from 'date-fns';
 import { Link } from 'wouter';
@@ -73,25 +73,12 @@ export default function Dashboard() {
 
   const selectedClient = clients?.find(c => String(c.id) === selectedClientId);
 
-  // Stats for the utilization callout in the chart area
-  const workingDaysInRange = useMemo(() => {
-    if (!startDate || !safeEnd) return 0;
-    let count = 0;
-    const cur = new Date(startDate);
-    const end = new Date(safeEnd);
-    while (cur <= end) {
-      const d = cur.getDay();
-      if (d > 0 && d < 6) count++;
-      cur.setDate(cur.getDate() + 1);
-    }
-    return count;
-  }, [startDate, safeEnd]);
-
-  const myUtilization = useMemo(() => {
-    if (!summary || workingDaysInRange === 0) return 0;
-    const capacity = workingDaysInRange * 8;
-    return Math.round((summary.billableHours / capacity) * 100);
-  }, [summary, workingDaysInRange]);
+  // Use server-computed values (holiday + leave aware). Fall back to 0 while loading.
+  const workingDaysInRange = summary?.workingDays ?? 0;
+  const effectiveWorkingDays = summary?.effectiveWorkingDays ?? 0;
+  const leaveDaysInRange = summary?.leaveDays ?? 0;
+  const capacityHours = summary?.capacityHours ?? 0;
+  const myUtilization = summary?.utilization ?? 0;
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -147,7 +134,18 @@ export default function Dashboard() {
       {/* Summary Cards — always your own numbers */}
       <div>
         <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-3">
-          Your stats · {workingDaysInRange} working days in range · Capacity {workingDaysInRange * 8}h
+          Your stats
+          {summary && (
+            <>
+              {' · '}
+              {workingDaysInRange} working days
+              {leaveDaysInRange > 0 && ` · ${leaveDaysInRange} leave`}
+              {' · '}
+              {effectiveWorkingDays} effective days
+              {' · '}
+              Capacity {capacityHours}h
+            </>
+          )}
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <SummaryCard title="Total Hours" value={summary?.totalHours} icon={Clock} loading={isLoadingSummary} subtext="Hours you logged" />

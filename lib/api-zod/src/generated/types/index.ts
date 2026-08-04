@@ -21,6 +21,8 @@ export * from './getRecentActivityParams';
 export * from './getTeamUtilizationParams';
 export * from './healthStatus';
 export * from './leave';
+export * from './leaveBulkInput';
+export * from './leaveBulkResult';
 export * from './leaveInput';
 export * from './listLeavesParams';
 export * from './listProjectsParams';

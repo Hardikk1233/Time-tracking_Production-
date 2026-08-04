@@ -9,7 +9,7 @@ import {
   useListClients,
   useListProjects,
   useListTasks,
-  useLogLeave,
+  useLogLeavesBulk,
   useListLeaves,
   useDeleteLeave,
   getListTimeEntriesQueryKey,
@@ -32,6 +32,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Calendar } from '@/components/ui/calendar';
 import { Plus, Check, X, Filter, Scissors, CalendarOff, Trash2 } from 'lucide-react';
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
@@ -255,37 +256,54 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-// ─── Log Leave Dialog ─────────────────────────────────────────────────────────
+// ─── Log Leave Dialog (multi-date) ───────────────────────────────────────────
 
 function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const logLeaveMutation = useLogLeave();
+  const bulkMutation = useLogLeavesBulk();
   const deleteLeaveMutation = useDeleteLeave();
 
-  const today = format(new Date(), 'yyyy-MM-dd');
-  const monthStart = format(new Date(new Date().getFullYear(), new Date().getMonth(), 1), 'yyyy-MM-dd');
+  const [selectedDates, setSelectedDates] = useState<Date[]>([]);
+  const [note, setNote] = useState('');
+
+  // Fetch this month's already-logged leaves so we can show them on the calendar
+  const now = new Date();
+  const monthStart = format(new Date(now.getFullYear(), now.getMonth(), 1), 'yyyy-MM-dd');
+  const monthEnd = format(new Date(now.getFullYear(), now.getMonth() + 1, 0), 'yyyy-MM-dd');
 
   const { data: myLeaves } = useListLeaves(
-    { userId: user?.id, startDate: monthStart } as any,
-    { query: { enabled: !!user?.id } as any }
+    { startDate: monthStart, endDate: monthEnd } as any,
+    { query: { enabled: open && !!user?.id } as any }
   );
 
-  const form = useForm<LeaveForm>({
-    resolver: zodResolver(leaveSchema),
-    defaultValues: { date: today, note: '' },
-  });
+  // Dates already logged — shown as disabled on the calendar
+  const alreadyLoggedDates: Date[] = React.useMemo(() => {
+    if (!myLeaves) return [];
+    return myLeaves.map((l: any) => {
+      const [y, m, d] = l.date.split('-').map(Number);
+      return new Date(y, m - 1, d);
+    });
+  }, [myLeaves]);
 
-  const onSubmit = (data: LeaveForm) => {
-    logLeaveMutation.mutate(
-      { data: { date: data.date, note: data.note || undefined } as any },
+  const handleSubmit = () => {
+    if (selectedDates.length === 0) return;
+    const dates = selectedDates.map(d => format(d, 'yyyy-MM-dd'));
+    bulkMutation.mutate(
+      { data: { dates, note: note.trim() || undefined } as any },
       {
-        onSuccess: () => {
-          toast({ title: 'Leave logged', description: `${format(new Date(data.date), 'MMM dd, yyyy')} marked as leave.` });
+        onSuccess: (result: any) => {
+          const created = result?.created?.length ?? 0;
+          const skipped = result?.skipped?.length ?? 0;
+          toast({
+            title: `${created} day${created !== 1 ? 's' : ''} logged`,
+            description: skipped > 0 ? `${skipped} date${skipped !== 1 ? 's' : ''} already had leave and were skipped.` : undefined,
+          });
           queryClient.invalidateQueries({ queryKey: getListLeavesQueryKey() });
-          form.reset({ date: today, note: '' });
+          setSelectedDates([]);
+          setNote('');
         },
         onError: (err: any) => {
           toast({ variant: 'destructive', title: 'Failed to log leave', description: err?.error || 'An error occurred.' });
@@ -304,7 +322,10 @@ function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
   };
 
   const handleClose = (v: boolean) => {
-    if (!v) form.reset({ date: today, note: '' });
+    if (!v) {
+      setSelectedDates([]);
+      setNote('');
+    }
     onOpenChange(v);
   };
 
@@ -316,71 +337,103 @@ function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
           Log Leave
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[440px]">
+      <DialogContent className="sm:max-w-[480px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CalendarOff className="w-5 h-5 text-amber-500" />
             Log Leave
           </DialogTitle>
           <DialogDescription>
-            Mark a day as leave. Your utilization will be adjusted automatically.
+            Click dates to select them. Already-logged dates are shown in amber and can't be re-selected.
           </DialogDescription>
         </DialogHeader>
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-2">
-            <FormField
-              control={form.control}
-              name="date"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Date</FormLabel>
-                  <FormControl><Input type="date" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+        <div className="space-y-4 pt-1">
+          {/* Calendar with multi-select */}
+          <div className="flex justify-center rounded-lg border border-border bg-muted/20 p-2">
+            <Calendar
+              mode="multiple"
+              selected={selectedDates}
+              onSelect={(dates) => setSelectedDates(dates ?? [])}
+              disabled={[
+                { dayOfWeek: [0, 6] },          // weekends always disabled
+                ...alreadyLoggedDates,            // already-logged days disabled
+              ]}
+              modifiers={{ alreadyLogged: alreadyLoggedDates }}
+              modifiersClassNames={{
+                alreadyLogged: 'opacity-40 line-through text-amber-600',
+              }}
+              className="mx-auto"
             />
+          </div>
 
-            <FormField
-              control={form.control}
-              name="note"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Note <span className="text-muted-foreground font-normal">(Optional)</span></FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. Sick leave, Personal" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="outline" onClick={() => handleClose(false)}>Cancel</Button>
-              <Button
-                type="submit"
-                className="bg-amber-500 hover:bg-amber-600 text-white"
-                disabled={logLeaveMutation.isPending}
-              >
-                {logLeaveMutation.isPending ? 'Logging...' : 'Log Leave'}
-              </Button>
+          {/* Selected date chips */}
+          {selectedDates.length > 0 && (
+            <div>
+              <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-2">
+                Selected — {selectedDates.length} day{selectedDates.length !== 1 ? 's' : ''}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {[...selectedDates]
+                  .sort((a, b) => a.getTime() - b.getTime())
+                  .map(d => (
+                    <Badge
+                      key={d.toISOString()}
+                      variant="secondary"
+                      className="font-mono text-xs cursor-pointer hover:bg-destructive/10 hover:text-destructive transition-colors"
+                      onClick={() => setSelectedDates(prev => prev.filter(x => x.toISOString() !== d.toISOString()))}
+                    >
+                      {format(d, 'EEE MMM d')} ×
+                    </Badge>
+                  ))}
+              </div>
             </div>
-          </form>
-        </Form>
+          )}
 
-        {/* This month's leaves */}
+          {/* Note */}
+          <div>
+            <label className="text-sm font-medium mb-1.5 block">
+              Reason <span className="text-muted-foreground font-normal">(Optional)</span>
+            </label>
+            <Input
+              placeholder="e.g. Sick leave, Personal, Family"
+              value={note}
+              onChange={e => setNote(e.target.value)}
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" onClick={() => handleClose(false)}>Cancel</Button>
+            <Button
+              onClick={handleSubmit}
+              className="bg-amber-500 hover:bg-amber-600 text-white"
+              disabled={selectedDates.length === 0 || bulkMutation.isPending}
+            >
+              {bulkMutation.isPending
+                ? 'Logging...'
+                : selectedDates.length === 0
+                  ? 'Select dates'
+                  : `Log ${selectedDates.length} day${selectedDates.length !== 1 ? 's' : ''}`}
+            </Button>
+          </div>
+        </div>
+
+        {/* Already-logged leaves for this month */}
         {myLeaves && myLeaves.length > 0 && (
           <div className="border-t border-border pt-4 mt-2">
-            <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-2">This Month's Leaves</p>
-            <div className="space-y-1 max-h-36 overflow-y-auto">
+            <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-2">
+              Already logged this month
+            </p>
+            <div className="space-y-1 max-h-32 overflow-y-auto">
               {myLeaves.map((leave: any) => (
                 <div key={leave.id} className="flex items-center justify-between gap-2 rounded px-2 py-1.5 bg-muted/40 hover:bg-muted/60">
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium font-mono">
-                      {format(new Date(leave.date), 'EEE, MMM dd')}
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-sm font-medium font-mono shrink-0">
+                      {format(new Date(leave.date + 'T00:00:00'), 'EEE, MMM dd')}
                     </span>
                     {leave.note && (
-                      <span className="text-xs text-muted-foreground italic">{leave.note}</span>
+                      <span className="text-xs text-muted-foreground italic truncate">{leave.note}</span>
                     )}
                   </div>
                   <Button

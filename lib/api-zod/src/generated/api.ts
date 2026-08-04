@@ -1060,6 +1060,31 @@ export const LogLeaveResponse = zod.object({
 
 
 /**
+ * @summary Log multiple leave days at once (skips duplicates)
+ */
+
+
+
+export const LogLeavesBulkBody = zod.object({
+  "dates": zod.array(zod.coerce.date()).min(1),
+  "note": zod.string().optional()
+})
+
+export const LogLeavesBulkResponse = zod.object({
+  "created": zod.array(zod.object({
+  "id": zod.int(),
+  "userId": zod.int(),
+  "userName": zod.string(),
+  "userRole": zod.string(),
+  "date": zod.coerce.date(),
+  "note": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "skipped": zod.array(zod.coerce.date()).describe('Dates that already had a leave logged (duplicates ignored)')
+})
+
+
+/**
  * @summary Delete a leave entry
  */
 export const DeleteLeaveParams = zod.object({

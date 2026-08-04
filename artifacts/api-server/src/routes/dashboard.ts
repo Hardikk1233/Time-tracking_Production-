@@ -32,7 +32,7 @@ function countWorkingDaysEffective(
     if (d > 0 && d < 6 && !holidaySet.has(dateStr)) count++;
     cur.setDate(cur.getDate() + 1);
   }
-  return Math.max(count, 1); // avoid divide-by-zero
+  return count; // callers guard against 0 via capacityHours > 0 checks
 }
 
 /** Legacy sync version (no holiday awareness) — kept for callers that haven't migrated. */

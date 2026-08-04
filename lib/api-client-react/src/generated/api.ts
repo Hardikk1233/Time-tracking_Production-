@@ -34,6 +34,8 @@ import type {
   GetTeamUtilizationParams,
   HealthStatus,
   Leave,
+  LeaveBulkInput,
+  LeaveBulkResult,
   LeaveInput,
   ListLeavesParams,
   ListProjectsParams,
@@ -3779,6 +3781,77 @@ export const useLogLeave = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getLogLeaveMutationOptions(options));
+    }
+
+export const getLogLeavesBulkUrl = () => {
+
+
+
+
+  return `/api/leaves/bulk`
+}
+
+/**
+ * @summary Log multiple leave days at once (skips duplicates)
+ */
+export const logLeavesBulk = async (leaveBulkInput: LeaveBulkInput, options?: Parameters<typeof customFetch>[1]): Promise<LeaveBulkResult> => {
+
+  return customFetch<LeaveBulkResult>(getLogLeavesBulkUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(leaveBulkInput)
+  }
+);}
+
+
+
+
+
+export const getLogLeavesBulkMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logLeavesBulk>>, TError,{data: BodyType<LeaveBulkInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof logLeavesBulk>>, TError,{data: BodyType<LeaveBulkInput>}, TContext> => {
+
+const mutationKey = ['logLeavesBulk'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof logLeavesBulk>>, {data: BodyType<LeaveBulkInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  logLeavesBulk(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LogLeavesBulkMutationResult = NonNullable<Awaited<ReturnType<typeof logLeavesBulk>>>
+    export type LogLeavesBulkMutationBody = BodyType<LeaveBulkInput>
+    export type LogLeavesBulkMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Log multiple leave days at once (skips duplicates)
+ */
+export const useLogLeavesBulk = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logLeavesBulk>>, TError,{data: BodyType<LeaveBulkInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof logLeavesBulk>>,
+        TError,
+        {data: BodyType<LeaveBulkInput>},
+        TContext
+      > => {
+      return useMutation(getLogLeavesBulkMutationOptions(options));
     }
 
 export const getDeleteLeaveUrl = (id: number,) => {

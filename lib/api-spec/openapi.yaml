@@ -992,6 +992,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/Leave"
 
+  /leaves/bulk:
+    post:
+      operationId: logLeavesBulk
+      tags: [leaves]
+      summary: Log multiple leave days at once (skips duplicates)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeaveBulkInput"
+      responses:
+        "201":
+          description: Bulk result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaveBulkResult"
+
   /leaves/{id}:
     delete:
       operationId: deleteLeave
@@ -1527,3 +1546,31 @@ components:
           format: date
         note:
           type: string
+
+    LeaveBulkInput:
+      type: object
+      required: [dates]
+      properties:
+        dates:
+          type: array
+          items:
+            type: string
+            format: date
+          minItems: 1
+        note:
+          type: string
+
+    LeaveBulkResult:
+      type: object
+      required: [created, skipped]
+      properties:
+        created:
+          type: array
+          items:
+            $ref: "#/components/schemas/Leave"
+        skipped:
+          type: array
+          description: Dates that already had a leave logged (duplicates ignored)
+          items:
+            type: string
+            format: date

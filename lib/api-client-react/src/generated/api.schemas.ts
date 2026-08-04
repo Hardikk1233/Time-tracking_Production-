@@ -346,6 +346,18 @@ export interface LeaveInput {
   note?: string;
 }
 
+export interface LeaveBulkInput {
+  /** @minItems 1 */
+  dates: string[];
+  note?: string;
+}
+
+export interface LeaveBulkResult {
+  created: Leave[];
+  /** Dates that already had a leave logged (duplicates ignored) */
+  skipped: string[];
+}
+
 export type ListUsersParams = {
 role?: ListUsersRole;
 reportingToId?: number;
