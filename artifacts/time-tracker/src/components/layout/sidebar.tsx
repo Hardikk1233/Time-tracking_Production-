@@ -27,7 +27,9 @@ export function Sidebar() {
   const handleLogout = () => {
     logout.mutate(undefined, {
       onSuccess: () => {
-        queryClient.setQueryData(getGetMeQueryKey(), undefined);
+        // Use null (not undefined) so React Query keeps 'success' state,
+        // avoiding isLoading=true and the spinner flash during transition.
+        queryClient.setQueryData(getGetMeQueryKey(), null as any);
         setLocation('/login');
       }
     });
