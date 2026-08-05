@@ -3,8 +3,9 @@ import { useLocation } from 'wouter';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
-import { useLogin, LoginInput } from '@workspace/api-client-react';
+import { useLogin, LoginInput, getGetMeQueryKey } from '@workspace/api-client-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -21,6 +22,7 @@ export default function Login() {
   const { isAuthenticated, isLoading } = useAuth();
   const loginMutation = useLogin();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -42,7 +44,8 @@ export default function Login() {
 
   const onSubmit = (data: z.infer<typeof loginSchema>) => {
     loginMutation.mutate({ data }, {
-      onSuccess: () => {
+      onSuccess: (user) => {
+        queryClient.setQueryData(getGetMeQueryKey(), user);
         setLocation('/dashboard');
       },
       onError: (error: any) => {

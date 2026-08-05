@@ -12,8 +12,9 @@ import {
   ShieldCheck,
   CalendarDays
 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
-import { useLogout } from '@workspace/api-client-react';
+import { useLogout, getGetMeQueryKey } from '@workspace/api-client-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -21,10 +22,12 @@ export function Sidebar() {
   const [location, setLocation] = useLocation();
   const { user, isLoading } = useAuth();
   const logout = useLogout();
+  const queryClient = useQueryClient();
 
   const handleLogout = () => {
     logout.mutate(undefined, {
       onSuccess: () => {
+        queryClient.setQueryData(getGetMeQueryKey(), undefined);
         setLocation('/login');
       }
     });
