@@ -1,52 +1,80 @@
 import { Router, type IRouter } from "express";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, or } from "drizzle-orm";
 import {
   db,
   projectsTable,
   clientsTable,
   projectUsersTable,
   clientUsersTable,
+  projectTasksTable,
+  tasksTable,
   usersTable,
 } from "@workspace/db";
 
 const router: IRouter = Router();
 
-async function getVisibleClientIds(userId: number): Promise<number[] | null> {
+const CAN_MANAGE_PROJECTS = ["associate", "avp", "md"];
+
+async function getCurrentUserRole(userId: number) {
   const [u] = await db
     .select({ role: usersTable.role })
     .from(usersTable)
     .where(eq(usersTable.id, userId));
+  return u?.role ?? "analyst";
+}
 
-  if (u?.role === "md") return null;
+// Projects are visible to: MDs (all), and anyone assigned to the project's
+// client OR assigned directly to the project.
+async function getVisibleProjectScope(
+  userId: number,
+): Promise<{ clientIds: number[]; projectIds: number[] } | null> {
+  const role = await getCurrentUserRole(userId);
+  if (role === "md") return null;
 
-  const rows = await db
-    .select({ clientId: clientUsersTable.clientId })
-    .from(clientUsersTable)
-    .where(eq(clientUsersTable.userId, userId));
+  const [clientRows, projectRows] = await Promise.all([
+    db
+      .select({ clientId: clientUsersTable.clientId })
+      .from(clientUsersTable)
+      .where(eq(clientUsersTable.userId, userId)),
+    db
+      .select({ projectId: projectUsersTable.projectId })
+      .from(projectUsersTable)
+      .where(eq(projectUsersTable.userId, userId)),
+  ]);
 
-  return rows.map((r) => r.clientId);
+  return {
+    clientIds: clientRows.map((r) => r.clientId),
+    projectIds: projectRows.map((r) => r.projectId),
+  };
 }
 
 router.get("/projects", async (req, res): Promise<void> => {
   const { clientId } = req.query as { clientId?: string };
 
-  const visibleClientIds = await getVisibleClientIds(req.session.userId!);
+  const scope = await getVisibleProjectScope(req.session.userId!);
 
-  let whereClause;
+  let visibilityClause;
+  if (scope !== null) {
+    if (scope.clientIds.length === 0 && scope.projectIds.length === 0) {
+      res.json([]);
+      return;
+    }
+    const clauses = [];
+    if (scope.clientIds.length > 0) {
+      clauses.push(inArray(projectsTable.clientId, scope.clientIds));
+    }
+    if (scope.projectIds.length > 0) {
+      clauses.push(inArray(projectsTable.id, scope.projectIds));
+    }
+    visibilityClause = or(...clauses);
+  }
+
+  let whereClause = visibilityClause;
   if (clientId) {
     const cId = parseInt(clientId, 10);
-    // If user doesn't have access to this specific client, return empty
-    if (visibleClientIds !== null && !visibleClientIds.includes(cId)) {
-      res.json([]);
-      return;
-    }
-    whereClause = eq(projectsTable.clientId, cId);
-  } else if (visibleClientIds !== null) {
-    if (visibleClientIds.length === 0) {
-      res.json([]);
-      return;
-    }
-    whereClause = inArray(projectsTable.clientId, visibleClientIds);
+    whereClause = visibilityClause
+      ? and(eq(projectsTable.clientId, cId), visibilityClause)
+      : eq(projectsTable.clientId, cId);
   }
 
   const rows = await db
@@ -67,10 +95,18 @@ router.get("/projects", async (req, res): Promise<void> => {
 });
 
 router.post("/projects", async (req, res): Promise<void> => {
-  const { clientId, name, description } = req.body as {
+  const role = await getCurrentUserRole(req.session.userId!);
+  if (!CAN_MANAGE_PROJECTS.includes(role)) {
+    res.status(403).json({ error: "Only Associates and above can create projects" });
+    return;
+  }
+
+  const { clientId, name, description, taskIds, userIds } = req.body as {
     clientId?: number;
     name?: string;
     description?: string;
+    taskIds?: number[];
+    userIds?: number[];
   };
 
   if (!clientId || !name) {
@@ -83,6 +119,23 @@ router.post("/projects", async (req, res): Promise<void> => {
     .values({ clientId, name, description: description ?? null })
     .returning();
 
+  if (Array.isArray(taskIds) && taskIds.length > 0) {
+    await db
+      .insert(projectTasksTable)
+      .values(taskIds.map((taskId) => ({ projectId: project.id, taskId })))
+      .onConflictDoNothing();
+  }
+
+  // Auto-assign the creator so they can see the project, plus any explicitly chosen users
+  const assignees = new Set<number>([req.session.userId!]);
+  if (Array.isArray(userIds)) {
+    userIds.forEach((id) => typeof id === "number" && assignees.add(id));
+  }
+  await db
+    .insert(projectUsersTable)
+    .values([...assignees].map((userId) => ({ projectId: project.id, userId })))
+    .onConflictDoNothing();
+
   const [client] = await db
     .select({ name: clientsTable.name })
     .from(clientsTable)
@@ -94,6 +147,24 @@ router.post("/projects", async (req, res): Promise<void> => {
   });
 });
 
+async function assertProjectVisible(
+  userId: number,
+  projectId: number,
+): Promise<boolean> {
+  const scope = await getVisibleProjectScope(userId);
+  if (scope === null) return true;
+
+  if (scope.projectIds.includes(projectId)) return true;
+  if (scope.clientIds.length === 0) return false;
+
+  const [project] = await db
+    .select({ clientId: projectsTable.clientId })
+    .from(projectsTable)
+    .where(eq(projectsTable.id, projectId));
+
+  return !!project && scope.clientIds.includes(project.clientId);
+}
+
 router.get("/projects/:projectId", async (req, res): Promise<void> => {
   const projectId = parseInt(
     Array.isArray(req.params.projectId)
@@ -103,6 +174,11 @@ router.get("/projects/:projectId", async (req, res): Promise<void> => {
   );
   if (isNaN(projectId)) {
     res.status(400).json({ error: "Invalid project ID" });
+    return;
+  }
+
+  if (!(await assertProjectVisible(req.session.userId!, projectId))) {
+    res.status(403).json({ error: "Access denied" });
     return;
   }
 
@@ -136,6 +212,12 @@ router.patch("/projects/:projectId", async (req, res): Promise<void> => {
   );
   if (isNaN(projectId)) {
     res.status(400).json({ error: "Invalid project ID" });
+    return;
+  }
+
+  const role = await getCurrentUserRole(req.session.userId!);
+  if (!CAN_MANAGE_PROJECTS.includes(role)) {
+    res.status(403).json({ error: "Only Associates and above can edit projects" });
     return;
   }
 
@@ -184,6 +266,12 @@ router.delete("/projects/:projectId", async (req, res): Promise<void> => {
     return;
   }
 
+  const role = await getCurrentUserRole(req.session.userId!);
+  if (!CAN_MANAGE_PROJECTS.includes(role)) {
+    res.status(403).json({ error: "Only Associates and above can delete projects" });
+    return;
+  }
+
   const [project] = await db
     .delete(projectsTable)
     .where(eq(projectsTable.id, projectId))
@@ -197,7 +285,7 @@ router.delete("/projects/:projectId", async (req, res): Promise<void> => {
   res.json({ message: "Project deleted" });
 });
 
-// ─── Project assignments ──────────────────────────────────────────────────────
+// ─── Project user assignments ──────────────────────────────────────────────
 
 router.get(
   "/projects/:projectId/assignments",
@@ -244,6 +332,12 @@ router.post(
       return;
     }
 
+    const role = await getCurrentUserRole(req.session.userId!);
+    if (!CAN_MANAGE_PROJECTS.includes(role)) {
+      res.status(403).json({ error: "Only Associates and above can assign users to projects" });
+      return;
+    }
+
     const { userId } = req.body as { userId?: number };
     if (!userId) {
       res.status(400).json({ error: "userId is required" });
@@ -279,6 +373,12 @@ router.delete(
       return;
     }
 
+    const role = await getCurrentUserRole(req.session.userId!);
+    if (!CAN_MANAGE_PROJECTS.includes(role)) {
+      res.status(403).json({ error: "Only Associates and above can remove users from projects" });
+      return;
+    }
+
     await db
       .delete(projectUsersTable)
       .where(
@@ -289,6 +389,110 @@ router.delete(
       );
 
     res.json({ message: "User removed from project" });
+  },
+);
+
+// ─── Project task assignments (global catalog subset enabled per project) ──
+
+router.get(
+  "/projects/:projectId/tasks",
+  async (req, res): Promise<void> => {
+    const projectId = parseInt(
+      Array.isArray(req.params.projectId)
+        ? req.params.projectId[0]
+        : req.params.projectId,
+      10,
+    );
+    if (isNaN(projectId)) {
+      res.status(400).json({ error: "Invalid project ID" });
+      return;
+    }
+
+    const rows = await db
+      .select({
+        id: tasksTable.id,
+        name: tasksTable.name,
+        description: tasksTable.description,
+        createdAt: tasksTable.createdAt,
+      })
+      .from(projectTasksTable)
+      .innerJoin(tasksTable, eq(projectTasksTable.taskId, tasksTable.id))
+      .where(eq(projectTasksTable.projectId, projectId))
+      .orderBy(tasksTable.name);
+
+    res.json(rows);
+  },
+);
+
+router.post(
+  "/projects/:projectId/tasks",
+  async (req, res): Promise<void> => {
+    const projectId = parseInt(
+      Array.isArray(req.params.projectId)
+        ? req.params.projectId[0]
+        : req.params.projectId,
+      10,
+    );
+    if (isNaN(projectId)) {
+      res.status(400).json({ error: "Invalid project ID" });
+      return;
+    }
+
+    const role = await getCurrentUserRole(req.session.userId!);
+    if (!CAN_MANAGE_PROJECTS.includes(role)) {
+      res.status(403).json({ error: "Only Associates and above can manage project tasks" });
+      return;
+    }
+
+    const { taskId } = req.body as { taskId?: number };
+    if (!taskId) {
+      res.status(400).json({ error: "taskId is required" });
+      return;
+    }
+
+    await db
+      .insert(projectTasksTable)
+      .values({ projectId, taskId })
+      .onConflictDoNothing();
+
+    res.json({ message: "Task enabled for project" });
+  },
+);
+
+router.delete(
+  "/projects/:projectId/tasks/:taskId",
+  async (req, res): Promise<void> => {
+    const projectId = parseInt(
+      Array.isArray(req.params.projectId)
+        ? req.params.projectId[0]
+        : req.params.projectId,
+      10,
+    );
+    const taskId = parseInt(
+      Array.isArray(req.params.taskId) ? req.params.taskId[0] : req.params.taskId,
+      10,
+    );
+    if (isNaN(projectId) || isNaN(taskId)) {
+      res.status(400).json({ error: "Invalid IDs" });
+      return;
+    }
+
+    const role = await getCurrentUserRole(req.session.userId!);
+    if (!CAN_MANAGE_PROJECTS.includes(role)) {
+      res.status(403).json({ error: "Only Associates and above can manage project tasks" });
+      return;
+    }
+
+    await db
+      .delete(projectTasksTable)
+      .where(
+        and(
+          eq(projectTasksTable.projectId, projectId),
+          eq(projectTasksTable.taskId, taskId),
+        ),
+      );
+
+    res.json({ message: "Task removed from project" });
   },
 );
 

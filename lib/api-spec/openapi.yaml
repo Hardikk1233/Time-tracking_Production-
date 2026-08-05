@@ -478,7 +478,59 @@ paths:
               schema:
                 $ref: "#/components/schemas/MessageResponse"
 
-  # ─── Tasks ──────────────────────────────────────────────────────────────
+  /projects/{projectId}/tasks:
+    get:
+      operationId: listProjectTasks
+      tags: [projects]
+      summary: List tasks enabled for a project
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Tasks enabled for the project
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Task"
+    post:
+      operationId: assignTaskToProject
+      tags: [projects]
+      summary: Enable a global task for a project
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskAssignmentInput"
+      responses:
+        "200":
+          description: Assigned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /projects/{projectId}/tasks/{taskId}:
+    delete:
+      operationId: removeTaskFromProject
+      tags: [projects]
+      summary: Remove a task from a project
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  # ─── Tasks (global catalog) ────────────────────────────────────────────
   /tasks:
     get:
       operationId: listTasks
@@ -1238,6 +1290,16 @@ components:
           minLength: 1
         description:
           type: string
+        taskIds:
+          type: array
+          items:
+            type: integer
+          description: "Global tasks enabled for this project"
+        userIds:
+          type: array
+          items:
+            type: integer
+          description: "Users who can access this project"
 
     ProjectUpdate:
       type: object
@@ -1248,21 +1310,13 @@ components:
         description:
           type: ["string", "null"]
 
-    # ─── Tasks ────────────────────────────────────────────────────────────
+    # ─── Tasks (global catalog) ──────────────────────────────────────────
     Task:
       type: object
-      required: [id, projectId, projectName, name, createdAt]
+      required: [id, name, createdAt]
       properties:
         id:
           type: integer
-        projectId:
-          type: integer
-        projectName:
-          type: string
-        clientId:
-          type: integer
-        clientName:
-          type: string
         name:
           type: string
         description:
@@ -1273,10 +1327,8 @@ components:
 
     TaskInput:
       type: object
-      required: [projectId, name]
+      required: [name]
       properties:
-        projectId:
-          type: integer
         name:
           type: string
           minLength: 1
@@ -1295,7 +1347,7 @@ components:
     # ─── Time Entries ─────────────────────────────────────────────────────
     TimeEntry:
       type: object
-      required: [id, userId, userName, taskId, taskName, projectId, projectName, clientId, clientName, hours, date, status, createdAt]
+      required: [id, userId, userName, taskId, taskName, hours, date, status, createdAt]
       properties:
         id:
           type: integer
@@ -1310,13 +1362,14 @@ components:
         taskName:
           type: string
         projectId:
-          type: integer
+          type: ["integer", "null"]
+          description: "null for legacy entries logged before tasks became a global catalog"
         projectName:
-          type: string
+          type: ["string", "null"]
         clientId:
-          type: integer
+          type: ["integer", "null"]
         clientName:
-          type: string
+          type: ["string", "null"]
         hours:
           type: number
         date:
@@ -1343,8 +1396,10 @@ components:
 
     TimeEntryInput:
       type: object
-      required: [taskId, hours, date]
+      required: [projectId, taskId, hours, date]
       properties:
+        projectId:
+          type: integer
         taskId:
           type: integer
         hours:
@@ -1385,6 +1440,13 @@ components:
       required: [userId]
       properties:
         userId:
+          type: integer
+
+    TaskAssignmentInput:
+      type: object
+      required: [taskId]
+      properties:
+        taskId:
           type: integer
 
     # ─── Dashboard ────────────────────────────────────────────────────────

@@ -140,6 +140,10 @@ export interface ProjectInput {
   /** @minLength 1 */
   name: string;
   description?: string;
+  /** Global tasks enabled for this project */
+  taskIds?: number[];
+  /** Users who can access this project */
+  userIds?: number[];
 }
 
 export interface ProjectUpdate {
@@ -151,10 +155,6 @@ export interface ProjectUpdate {
 
 export interface Task {
   id: number;
-  projectId: number;
-  projectName: string;
-  clientId?: number;
-  clientName?: string;
   name: string;
   /** @nullable */
   description?: string | null;
@@ -162,7 +162,6 @@ export interface Task {
 }
 
 export interface TaskInput {
-  projectId: number;
   /** @minLength 1 */
   name: string;
   description?: string;
@@ -191,10 +190,17 @@ export interface TimeEntry {
   userRole?: string;
   taskId: number;
   taskName: string;
-  projectId: number;
-  projectName: string;
-  clientId: number;
-  clientName: string;
+  /**
+     * null for legacy entries logged before tasks became a global catalog
+     * @nullable
+     */
+  projectId?: number | null;
+  /** @nullable */
+  projectName?: string | null;
+  /** @nullable */
+  clientId?: number | null;
+  /** @nullable */
+  clientName?: string | null;
   hours: number;
   date: string;
   /** @nullable */
@@ -218,6 +224,7 @@ export interface TimeEntry {
 }
 
 export interface TimeEntryInput {
+  projectId: number;
   taskId: number;
   /**
      * @minimum 0.25
@@ -249,6 +256,10 @@ export interface SplitHoursInput {
 
 export interface UserAssignmentInput {
   userId: number;
+}
+
+export interface TaskAssignmentInput {
+  taskId: number;
 }
 
 export interface DashboardSummary {

@@ -6,10 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface Task {
-  id: number;
-  name: string;
-  /** @nullable */
-  description?: string | null;
-  createdAt: Date;
+export interface TaskAssignmentInput {
+  taskId: number;
 }

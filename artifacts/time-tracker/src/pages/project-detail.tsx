@@ -8,33 +8,23 @@ import {
   useRemoveUserFromProject,
   useListUsers,
   useListTasks,
+  useListProjectTasks,
+  useAssignTaskToProject,
+  useRemoveTaskFromProject,
   getListProjectAssignmentsQueryKey,
-  getListTasksQueryKey,
-  useCreateTask,
-  useDeleteTask,
+  getListProjectTasksQueryKey,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, FolderKanban, Users, CheckSquare, UserPlus, UserMinus, Plus, Trash2, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, FolderKanban, Users, CheckSquare, UserPlus, UserMinus, ShieldCheck } from 'lucide-react';
 import { Link } from 'wouter';
 import { format } from 'date-fns';
-
-const taskSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  description: z.string().optional(),
-});
 
 const ROLE_ORDER = ['md', 'avp', 'associate', 'analyst'] as const;
 const ROLE_LABELS: Record<string, string> = { md: 'Managing Directors', avp: 'AVPs', associate: 'Associates', analyst: 'Analysts' };
@@ -48,21 +38,27 @@ export default function ProjectDetail() {
 
   const projectId = parseInt(params?.id || '0', 10);
   const [selectedUserId, setSelectedUserId] = useState<string>('');
-  const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string>('');
 
   const { data: project, isLoading: isLoadingProject } = useGetProject(projectId);
   const { data: assignments, isLoading: isLoadingAssignments } = useListProjectAssignments(projectId);
   const { data: allUsers } = useListUsers();
-  const { data: tasks, isLoading: isLoadingTasks } = useListTasks({ projectId });
+  const { data: tasks, isLoading: isLoadingTasks } = useListProjectTasks(projectId);
+  const { data: allTasks } = useListTasks();
 
   const assignMutation = useAssignUserToProject();
   const removeMutation = useRemoveUserFromProject();
-  const deleteTaskMutation = useDeleteTask();
+  const assignTaskMutation = useAssignTaskToProject();
+  const removeTaskMutation = useRemoveTaskFromProject();
 
-  const isManager = ['avp', 'md'].includes(user?.role || '');
+  // Associates and above can manage a project's team and tasks
+  const isManager = ['associate', 'avp', 'md'].includes(user?.role || '');
 
   const assignedIds = new Set((assignments || []).map(u => u.id));
   const unassignedUsers = (allUsers || []).filter(u => !assignedIds.has(u.id));
+
+  const enabledTaskIds = new Set((tasks || []).map(t => t.id));
+  const unassignedTasks = (allTasks || []).filter(t => !enabledTaskIds.has(t.id));
 
   // Group assigned users by role
   const assignmentsByRole = ROLE_ORDER.reduce((acc, role) => {
@@ -98,14 +94,33 @@ export default function ProjectDetail() {
     );
   };
 
-  const handleDeleteTask = (taskId: number) => {
-    if (confirm('Delete this task?')) {
-      deleteTaskMutation.mutate({ taskId }, {
+  const handleAssignTask = () => {
+    if (!selectedTaskId) return;
+    assignTaskMutation.mutate(
+      { projectId, data: { taskId: Number(selectedTaskId) } },
+      {
         onSuccess: () => {
-          toast({ title: 'Task deleted' });
-          queryClient.invalidateQueries({ queryKey: getListTasksQueryKey({ projectId }) });
+          toast({ title: 'Task enabled for project' });
+          queryClient.invalidateQueries({ queryKey: getListProjectTasksQueryKey(projectId) });
+          setSelectedTaskId('');
         },
-      });
+        onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to enable task.' }),
+      }
+    );
+  };
+
+  const handleRemoveTask = (taskId: number) => {
+    if (confirm('Remove this task from the project? Time entries already logged against it will be unaffected.')) {
+      removeTaskMutation.mutate(
+        { projectId, taskId },
+        {
+          onSuccess: () => {
+            toast({ title: 'Task removed from project' });
+            queryClient.invalidateQueries({ queryKey: getListProjectTasksQueryKey(projectId) });
+          },
+          onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to remove task.' }),
+        }
+      );
     }
   };
 
@@ -174,12 +189,31 @@ export default function ProjectDetail() {
                 Tasks
                 <Badge variant="secondary" className="font-mono text-[10px]">{tasks?.length || 0}</Badge>
               </CardTitle>
-              {isManager && (
-                <CreateTaskInlineDialog open={isTaskDialogOpen} onOpenChange={setIsTaskDialogOpen} projectId={projectId} />
-              )}
             </div>
           </CardHeader>
-          <CardContent className="pt-4">
+          <CardContent className="pt-4 space-y-4">
+            {isManager && (
+              <div className="flex gap-2">
+                <Select value={selectedTaskId} onValueChange={setSelectedTaskId}>
+                  <SelectTrigger className="flex-1 bg-background">
+                    <SelectValue placeholder="Enable a task from the catalog..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {unassignedTasks.length === 0 ? (
+                      <div className="p-2 text-sm text-muted-foreground text-center">All catalog tasks enabled</div>
+                    ) : (
+                      unassignedTasks.map(t => (
+                        <SelectItem key={t.id} value={t.id.toString()}>{t.name}</SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                <Button size="sm" onClick={handleAssignTask} disabled={!selectedTaskId || assignTaskMutation.isPending} className="shrink-0">
+                  <CheckSquare className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
+
             {isLoadingTasks ? (
               <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
             ) : tasks && tasks.length > 0 ? (
@@ -197,17 +231,17 @@ export default function ProjectDetail() {
                       <Button
                         variant="ghost" size="icon"
                         className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => handleDeleteTask(t.id)}
-                        disabled={deleteTaskMutation.isPending}
+                        onClick={() => handleRemoveTask(t.id)}
+                        disabled={removeTaskMutation.isPending}
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <UserMinus className="w-3.5 h-3.5" />
                       </Button>
                     )}
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="py-8 text-center text-muted-foreground font-mono text-sm border border-dashed border-border rounded-md">NO TASKS YET</div>
+              <div className="py-8 text-center text-muted-foreground font-mono text-sm border border-dashed border-border rounded-md">NO TASKS ENABLED YET</div>
             )}
           </CardContent>
         </Card>
@@ -297,64 +331,3 @@ export default function ProjectDetail() {
   );
 }
 
-function CreateTaskInlineDialog({ open, onOpenChange, projectId }: { open: boolean; onOpenChange: (v: boolean) => void; projectId: number }) {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-  const createMutation = useCreateTask();
-
-  const form = useForm<z.infer<typeof taskSchema>>({
-    resolver: zodResolver(taskSchema),
-    defaultValues: { name: '', description: '' },
-  });
-
-  const onSubmit = (data: z.infer<typeof taskSchema>) => {
-    createMutation.mutate(
-      { data: { ...data, projectId } },
-      {
-        onSuccess: () => {
-          toast({ title: 'Task created' });
-          queryClient.invalidateQueries({ queryKey: getListTasksQueryKey({ projectId }) });
-          form.reset();
-          onOpenChange(false);
-        },
-        onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to create task.' }),
-      }
-    );
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button size="sm" className="h-7 text-xs"><Plus className="w-3.5 h-3.5 mr-1" />Add Task</Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-[400px]">
-        <DialogHeader>
-          <DialogTitle>Create Task</DialogTitle>
-          <DialogDescription>Add a new task to this project.</DialogDescription>
-        </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
-            <FormField control={form.control} name="name" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Task Name</FormLabel>
-                <FormControl><Input placeholder="Research & Discovery" {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
-            <FormField control={form.control} name="description" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Description (Optional)</FormLabel>
-                <FormControl><Input placeholder="Brief details..." {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
-            <div className="pt-2 flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button type="submit" disabled={createMutation.isPending}>{createMutation.isPending ? 'Creating...' : 'Create Task'}</Button>
-            </div>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
-  );
-}

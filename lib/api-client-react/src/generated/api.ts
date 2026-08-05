@@ -52,6 +52,7 @@ import type {
   PublicHolidayInput,
   SplitHoursInput,
   Task,
+  TaskAssignmentInput,
   TaskInput,
   TaskUpdate,
   TimeEntry,
@@ -1946,6 +1947,228 @@ export const useRemoveUserFromProject = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getRemoveUserFromProjectMutationOptions(options));
+    }
+
+export const getListProjectTasksUrl = (projectId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/tasks`
+}
+
+/**
+ * @summary List tasks enabled for a project
+ */
+export const listProjectTasks = async (projectId: number, options?: Parameters<typeof customFetch>[1]): Promise<Task[]> => {
+
+  return customFetch<Task[]>(getListProjectTasksUrl(projectId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListProjectTasksQueryKey = (projectId: number,) => {
+    return [
+    `/api/projects/${projectId}/tasks`
+    ] as const;
+    }
+
+
+export const getListProjectTasksQueryOptions = <TData = Awaited<ReturnType<typeof listProjectTasks>>, TError = ErrorType<unknown>>(projectId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProjectTasks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListProjectTasksQueryKey(projectId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listProjectTasks>>> = ({ signal }) => listProjectTasks(projectId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listProjectTasks>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListProjectTasksQueryResult = NonNullable<Awaited<ReturnType<typeof listProjectTasks>>>
+export type ListProjectTasksQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List tasks enabled for a project
+ */
+
+export function useListProjectTasks<TData = Awaited<ReturnType<typeof listProjectTasks>>, TError = ErrorType<unknown>>(
+ projectId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProjectTasks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListProjectTasksQueryOptions(projectId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAssignTaskToProjectUrl = (projectId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/tasks`
+}
+
+/**
+ * @summary Enable a global task for a project
+ */
+export const assignTaskToProject = async (projectId: number,
+    taskAssignmentInput: TaskAssignmentInput, options?: Parameters<typeof customFetch>[1]): Promise<MessageResponse> => {
+
+  return customFetch<MessageResponse>(getAssignTaskToProjectUrl(projectId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(taskAssignmentInput)
+  }
+);}
+
+
+
+
+
+export const getAssignTaskToProjectMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignTaskToProject>>, TError,{projectId: number;data: BodyType<TaskAssignmentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof assignTaskToProject>>, TError,{projectId: number;data: BodyType<TaskAssignmentInput>}, TContext> => {
+
+const mutationKey = ['assignTaskToProject'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof assignTaskToProject>>, {projectId: number;data: BodyType<TaskAssignmentInput>}> = (props) => {
+          const {projectId,data} = props ?? {};
+
+          return  assignTaskToProject(projectId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AssignTaskToProjectMutationResult = NonNullable<Awaited<ReturnType<typeof assignTaskToProject>>>
+    export type AssignTaskToProjectMutationBody = BodyType<TaskAssignmentInput>
+    export type AssignTaskToProjectMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Enable a global task for a project
+ */
+export const useAssignTaskToProject = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignTaskToProject>>, TError,{projectId: number;data: BodyType<TaskAssignmentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof assignTaskToProject>>,
+        TError,
+        {projectId: number;data: BodyType<TaskAssignmentInput>},
+        TContext
+      > => {
+      return useMutation(getAssignTaskToProjectMutationOptions(options));
+    }
+
+export const getRemoveTaskFromProjectUrl = (projectId: number,
+    taskId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/tasks/${taskId}`
+}
+
+/**
+ * @summary Remove a task from a project
+ */
+export const removeTaskFromProject = async (projectId: number,
+    taskId: number, options?: Parameters<typeof customFetch>[1]): Promise<MessageResponse> => {
+
+  return customFetch<MessageResponse>(getRemoveTaskFromProjectUrl(projectId,taskId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getRemoveTaskFromProjectMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeTaskFromProject>>, TError,{projectId: number;taskId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof removeTaskFromProject>>, TError,{projectId: number;taskId: number}, TContext> => {
+
+const mutationKey = ['removeTaskFromProject'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeTaskFromProject>>, {projectId: number;taskId: number}> = (props) => {
+          const {projectId,taskId} = props ?? {};
+
+          return  removeTaskFromProject(projectId,taskId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveTaskFromProjectMutationResult = NonNullable<Awaited<ReturnType<typeof removeTaskFromProject>>>
+
+    export type RemoveTaskFromProjectMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Remove a task from a project
+ */
+export const useRemoveTaskFromProject = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeTaskFromProject>>, TError,{projectId: number;taskId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof removeTaskFromProject>>,
+        TError,
+        {projectId: number;taskId: number},
+        TContext
+      > => {
+      return useMutation(getRemoveTaskFromProjectMutationOptions(options));
     }
 
 export const getListTasksUrl = (params?: ListTasksParams,) => {

@@ -4,7 +4,6 @@ import {
   useListTasks, 
   useCreateTask, 
   useDeleteTask,
-  useListProjects,
   getListTasksQueryKey
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -14,17 +13,15 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Plus, Trash2, CheckSquare } from 'lucide-react';
 
 const taskSchema = z.object({
-  projectId: z.coerce.number().min(1, 'Project is required'),
   name: z.string().min(1, 'Name is required'),
   description: z.string().optional(),
 });
@@ -35,25 +32,23 @@ export default function Tasks() {
   const { toast } = useToast();
   
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [projectFilter, setProjectFilter] = useState<string>('all');
   
-  const queryParams = { 
-    ...(projectFilter !== 'all' ? { projectId: Number(projectFilter) } : {}) 
-  };
-  
-  const { data: tasks, isLoading } = useListTasks(queryParams);
-  const { data: projects } = useListProjects();
+  const { data: tasks, isLoading } = useListTasks();
   const deleteMutation = useDeleteTask();
 
+  // Global task catalog: only AVPs and MDs can add/remove entries
   const isManager = ['avp', 'md'].includes(user?.role || '');
 
   const handleDelete = (id: number) => {
-    if (confirm('Are you sure you want to delete this task?')) {
+    if (confirm('Are you sure you want to delete this task from the catalog?')) {
       deleteMutation.mutate({ taskId: id }, {
         onSuccess: () => {
           toast({ title: 'Task deleted' });
           queryClient.invalidateQueries({ queryKey: getListTasksQueryKey() });
-        }
+        },
+        onError: (err: any) => {
+          toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to delete task.' });
+        },
       });
     }
   };
@@ -63,26 +58,12 @@ export default function Tasks() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Tasks</h1>
-          <p className="text-muted-foreground font-mono text-sm mt-1">Billable units of work</p>
+          <p className="text-muted-foreground font-mono text-sm mt-1">Firm-wide catalog of billable work types</p>
         </div>
         
-        <div className="flex items-center gap-3">
-          <Select value={projectFilter} onValueChange={setProjectFilter}>
-            <SelectTrigger className="w-[250px] bg-card">
-              <SelectValue placeholder="All Projects" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Projects</SelectItem>
-              {projects?.map(p => (
-                <SelectItem key={p.id} value={p.id.toString()}>{p.clientName} - {p.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {isManager && (
-            <CreateTaskDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} projects={projects || []} />
-          )}
-        </div>
+        {isManager && (
+          <CreateTaskDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} />
+        )}
       </div>
 
       <Card className="shadow-sm border-border overflow-hidden">
@@ -91,8 +72,7 @@ export default function Tasks() {
             <thead>
               <tr className="border-b border-border bg-muted/30 text-left text-xs uppercase tracking-wider font-mono text-muted-foreground">
                 <th className="px-6 py-4 font-medium">Task Name</th>
-                <th className="px-6 py-4 font-medium">Project</th>
-                <th className="px-6 py-4 font-medium">Client</th>
+                <th className="px-6 py-4 font-medium">Description</th>
                 <th className="px-6 py-4 font-medium">Created</th>
                 {isManager && <th className="px-6 py-4 font-medium text-right">Actions</th>}
               </tr>
@@ -103,7 +83,6 @@ export default function Tasks() {
                   <tr key={i}>
                     <td className="px-6 py-4"><Skeleton className="h-4 w-48" /></td>
                     <td className="px-6 py-4"><Skeleton className="h-4 w-32" /></td>
-                    <td className="px-6 py-4"><Skeleton className="h-4 w-24" /></td>
                     <td className="px-6 py-4"><Skeleton className="h-4 w-20" /></td>
                     {isManager && <td className="px-6 py-4"><Skeleton className="h-8 w-8 ml-auto" /></td>}
                   </tr>
@@ -114,14 +93,10 @@ export default function Tasks() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <CheckSquare className="w-4 h-4 text-primary opacity-50" />
-                        <div className="flex flex-col">
-                          <span className="font-medium text-foreground">{task.name}</span>
-                          {task.description && <span className="text-xs text-muted-foreground">{task.description}</span>}
-                        </div>
+                        <span className="font-medium text-foreground">{task.name}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 font-medium">{task.projectName}</td>
-                    <td className="px-6 py-4 font-mono text-xs text-muted-foreground">{task.clientName}</td>
+                    <td className="px-6 py-4 text-muted-foreground">{task.description || '—'}</td>
                     <td className="px-6 py-4 font-mono text-xs text-muted-foreground">
                       {format(new Date(task.createdAt), 'MMM dd, yyyy')}
                     </td>
@@ -141,7 +116,7 @@ export default function Tasks() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={isManager ? 5 : 4} className="px-6 py-12 text-center text-muted-foreground font-mono text-sm border-b-0">
+                  <td colSpan={isManager ? 4 : 3} className="px-6 py-12 text-center text-muted-foreground font-mono text-sm border-b-0">
                     NO TASKS FOUND
                   </td>
                 </tr>
@@ -154,24 +129,27 @@ export default function Tasks() {
   );
 }
 
-function CreateTaskDialog({ open, onOpenChange, projects }: { open: boolean, onOpenChange: (open: boolean) => void, projects: any[] }) {
+function CreateTaskDialog({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const createMutation = useCreateTask();
 
   const form = useForm<z.infer<typeof taskSchema>>({
     resolver: zodResolver(taskSchema),
-    defaultValues: { projectId: undefined, name: '', description: '' },
+    defaultValues: { name: '', description: '' },
   });
 
   const onSubmit = (data: z.infer<typeof taskSchema>) => {
     createMutation.mutate({ data }, {
       onSuccess: () => {
-        toast({ title: 'Task created' });
+        toast({ title: 'Task added to catalog' });
         queryClient.invalidateQueries({ queryKey: getListTasksQueryKey() });
         form.reset();
         onOpenChange(false);
-      }
+      },
+      onError: (err: any) => {
+        toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to create task.' });
+      },
     });
   };
 
@@ -185,35 +163,12 @@ function CreateTaskDialog({ open, onOpenChange, projects }: { open: boolean, onO
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Create Task</DialogTitle>
-          <DialogDescription>Define a specific unit of work for time tracking.</DialogDescription>
+          <DialogTitle>Add Task to Catalog</DialogTitle>
+          <DialogDescription>Define a firm-wide unit of work. Once added, any project can enable it.</DialogDescription>
         </DialogHeader>
         
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
-            <FormField
-              control={form.control}
-              name="projectId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Project</FormLabel>
-                  <Select onValueChange={(val) => field.onChange(Number(val))} value={field.value?.toString()}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a project" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {projects.map(p => (
-                        <SelectItem key={p.id} value={p.id.toString()}>{p.clientName} - {p.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
             <FormField
               control={form.control}
               name="name"

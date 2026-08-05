@@ -7,6 +7,7 @@
  */
 
 export interface TimeEntryInput {
+  projectId: number;
   taskId: number;
   /**
      * @minimum 0.25

@@ -525,7 +525,7 @@ function LogTimeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
 
   const onSubmit = (data: TimeEntryForm) => {
     createMutation.mutate(
-      { data: { taskId: data.taskId, hours: data.hours, date: data.date, description: data.description || undefined } },
+      { data: { projectId: data.projectId, taskId: data.taskId, hours: data.hours, date: data.date, description: data.description || undefined } },
       {
         onSuccess: () => {
           toast({ title: 'Time entry logged successfully' });

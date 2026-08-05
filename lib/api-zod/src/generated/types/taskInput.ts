@@ -7,7 +7,6 @@
  */
 
 export interface TaskInput {
-  projectId: number;
   /** @minLength 1 */
   name: string;
   description?: string;

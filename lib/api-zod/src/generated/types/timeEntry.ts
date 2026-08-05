@@ -14,10 +14,17 @@ export interface TimeEntry {
   userRole?: string;
   taskId: number;
   taskName: string;
-  projectId: number;
-  projectName: string;
-  clientId: number;
-  clientName: string;
+  /**
+     * null for legacy entries logged before tasks became a global catalog
+     * @nullable
+     */
+  projectId?: number | null;
+  /** @nullable */
+  projectName?: string | null;
+  /** @nullable */
+  clientId?: number | null;
+  /** @nullable */
+  clientName?: string | null;
   hours: number;
   date: Date;
   /** @nullable */

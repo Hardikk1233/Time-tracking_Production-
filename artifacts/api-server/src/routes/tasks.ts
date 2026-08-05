@@ -1,67 +1,74 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, tasksTable, projectsTable, clientsTable } from "@workspace/db";
+import { db, tasksTable, projectTasksTable, usersTable } from "@workspace/db";
 
 const router: IRouter = Router();
+
+async function getCurrentUserRole(userId: number) {
+  const [u] = await db
+    .select({ role: usersTable.role })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId));
+  return u?.role ?? "analyst";
+}
+
+// ─── Global task catalog ───────────────────────────────────────────────────
 
 router.get("/tasks", async (req, res): Promise<void> => {
   const { projectId } = req.query as { projectId?: string };
 
-  const rows = await db
-    .select({
-      id: tasksTable.id,
-      projectId: tasksTable.projectId,
-      projectName: projectsTable.name,
-      clientId: projectsTable.clientId,
-      clientName: clientsTable.name,
-      name: tasksTable.name,
-      description: tasksTable.description,
-      createdAt: tasksTable.createdAt,
-    })
-    .from(tasksTable)
-    .innerJoin(projectsTable, eq(tasksTable.projectId, projectsTable.id))
-    .innerJoin(clientsTable, eq(projectsTable.clientId, clientsTable.id))
-    .where(
-      projectId ? eq(tasksTable.projectId, parseInt(projectId, 10)) : undefined,
-    )
-    .orderBy(tasksTable.name);
+  if (projectId) {
+    const pId = parseInt(projectId, 10);
+    const rows = await db
+      .select({
+        id: tasksTable.id,
+        name: tasksTable.name,
+        description: tasksTable.description,
+        createdAt: tasksTable.createdAt,
+      })
+      .from(projectTasksTable)
+      .innerJoin(tasksTable, eq(projectTasksTable.taskId, tasksTable.id))
+      .where(eq(projectTasksTable.projectId, pId))
+      .orderBy(tasksTable.name);
 
+    res.json(rows);
+    return;
+  }
+
+  const rows = await db.select().from(tasksTable).orderBy(tasksTable.name);
   res.json(rows);
 });
 
 router.post("/tasks", async (req, res): Promise<void> => {
-  const { projectId, name, description } = req.body as {
-    projectId?: number;
+  const role = await getCurrentUserRole(req.session.userId!);
+  if (!["avp", "md"].includes(role)) {
+    res.status(403).json({ error: "Only AVPs and MDs can add tasks to the catalog" });
+    return;
+  }
+
+  const { name, description } = req.body as {
     name?: string;
     description?: string;
   };
 
-  if (!projectId || !name) {
-    res.status(400).json({ error: "projectId and name are required" });
+  if (!name) {
+    res.status(400).json({ error: "name is required" });
     return;
   }
 
-  const [task] = await db
-    .insert(tasksTable)
-    .values({ projectId, name, description: description ?? null })
-    .returning();
-
-  const [proj] = await db
-    .select({
-      name: projectsTable.name,
-      clientId: projectsTable.clientId,
-      clientName: clientsTable.name,
-    })
-    .from(projectsTable)
-    .innerJoin(clientsTable, eq(projectsTable.clientId, clientsTable.id))
-    .where(eq(projectsTable.id, projectId));
-
-  res.status(201).json({
-    ...task,
-    projectName: proj?.name ?? "",
-    clientId: proj?.clientId ?? 0,
-    clientName: proj?.clientName ?? "",
-  });
+  try {
+    const [task] = await db
+      .insert(tasksTable)
+      .values({ name, description: description ?? null })
+      .returning();
+    res.status(201).json(task);
+  } catch (err: any) {
+    if (err?.code === "23505") {
+      res.status(409).json({ error: "A task with this name already exists" });
+      return;
+    }
+    throw err;
+  }
 });
 
 router.get("/tasks/:taskId", async (req, res): Promise<void> => {
@@ -75,19 +82,8 @@ router.get("/tasks/:taskId", async (req, res): Promise<void> => {
   }
 
   const [row] = await db
-    .select({
-      id: tasksTable.id,
-      projectId: tasksTable.projectId,
-      projectName: projectsTable.name,
-      clientId: projectsTable.clientId,
-      clientName: clientsTable.name,
-      name: tasksTable.name,
-      description: tasksTable.description,
-      createdAt: tasksTable.createdAt,
-    })
+    .select()
     .from(tasksTable)
-    .innerJoin(projectsTable, eq(tasksTable.projectId, projectsTable.id))
-    .innerJoin(clientsTable, eq(projectsTable.clientId, clientsTable.id))
     .where(eq(tasksTable.id, taskId));
 
   if (!row) {
@@ -108,6 +104,12 @@ router.patch("/tasks/:taskId", async (req, res): Promise<void> => {
     return;
   }
 
+  const role = await getCurrentUserRole(req.session.userId!);
+  if (!["avp", "md"].includes(role)) {
+    res.status(403).json({ error: "Only AVPs and MDs can edit tasks" });
+    return;
+  }
+
   const { name, description } = req.body as {
     name?: string;
     description?: string | null;
@@ -122,33 +124,26 @@ router.patch("/tasks/:taskId", async (req, res): Promise<void> => {
     return;
   }
 
-  const [task] = await db
-    .update(tasksTable)
-    .set(updates)
-    .where(eq(tasksTable.id, taskId))
-    .returning();
+  try {
+    const [task] = await db
+      .update(tasksTable)
+      .set(updates)
+      .where(eq(tasksTable.id, taskId))
+      .returning();
 
-  if (!task) {
-    res.status(404).json({ error: "Task not found" });
-    return;
+    if (!task) {
+      res.status(404).json({ error: "Task not found" });
+      return;
+    }
+
+    res.json(task);
+  } catch (err: any) {
+    if (err?.code === "23505") {
+      res.status(409).json({ error: "A task with this name already exists" });
+      return;
+    }
+    throw err;
   }
-
-  const [proj] = await db
-    .select({
-      name: projectsTable.name,
-      clientId: projectsTable.clientId,
-      clientName: clientsTable.name,
-    })
-    .from(projectsTable)
-    .innerJoin(clientsTable, eq(projectsTable.clientId, clientsTable.id))
-    .where(eq(projectsTable.id, task.projectId));
-
-  res.json({
-    ...task,
-    projectName: proj?.name ?? "",
-    clientId: proj?.clientId ?? 0,
-    clientName: proj?.clientName ?? "",
-  });
 });
 
 router.delete("/tasks/:taskId", async (req, res): Promise<void> => {
@@ -161,17 +156,33 @@ router.delete("/tasks/:taskId", async (req, res): Promise<void> => {
     return;
   }
 
-  const [task] = await db
-    .delete(tasksTable)
-    .where(eq(tasksTable.id, taskId))
-    .returning();
-
-  if (!task) {
-    res.status(404).json({ error: "Task not found" });
+  const role = await getCurrentUserRole(req.session.userId!);
+  if (!["avp", "md"].includes(role)) {
+    res.status(403).json({ error: "Only AVPs and MDs can delete tasks" });
     return;
   }
 
-  res.json({ message: "Task deleted" });
+  try {
+    const [task] = await db
+      .delete(tasksTable)
+      .where(eq(tasksTable.id, taskId))
+      .returning();
+
+    if (!task) {
+      res.status(404).json({ error: "Task not found" });
+      return;
+    }
+
+    res.json({ message: "Task deleted" });
+  } catch (err: any) {
+    if (err?.code === "23503") {
+      res.status(400).json({
+        error: "Cannot delete a task that has logged time entries against it",
+      });
+      return;
+    }
+    throw err;
+  }
 });
 
 export default router;

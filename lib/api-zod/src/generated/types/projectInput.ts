@@ -11,4 +11,8 @@ export interface ProjectInput {
   /** @minLength 1 */
   name: string;
   description?: string;
+  /** Global tasks enabled for this project */
+  taskIds?: number[];
+  /** Users who can access this project */
+  userIds?: number[];
 }

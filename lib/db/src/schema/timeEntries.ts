@@ -8,12 +8,18 @@ import {
 } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 import { tasksTable } from "./tasks";
+import { projectsTable } from "./projects";
 
 export const timeEntriesTable = pgTable("time_entries", {
   id: serial("id").primaryKey(),
   userId: integer("user_id")
     .notNull()
     .references(() => usersTable.id),
+  // Nullable because tasks are now a global catalog decoupled from a single
+  // project; the project a time entry was logged against is now explicit.
+  // (Existing rows created before this change may have a null projectId —
+  // that historical link was lost when tasks stopped being per-project.)
+  projectId: integer("project_id").references(() => projectsTable.id),
   taskId: integer("task_id")
     .notNull()
     .references(() => tasksTable.id),

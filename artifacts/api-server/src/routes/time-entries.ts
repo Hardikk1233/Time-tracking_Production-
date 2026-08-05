@@ -9,6 +9,7 @@ import {
   clientsTable,
   projectUsersTable,
   clientUsersTable,
+  projectTasksTable,
 } from "@workspace/db";
 
 const router: IRouter = Router();
@@ -90,8 +91,10 @@ async function buildEntryRows(conditions?: ReturnType<typeof eq>[]) {
     .from(timeEntriesTable)
     .innerJoin(usersTable, eq(timeEntriesTable.userId, usersTable.id))
     .innerJoin(tasksTable, eq(timeEntriesTable.taskId, tasksTable.id))
-    .innerJoin(projectsTable, eq(tasksTable.projectId, projectsTable.id))
-    .innerJoin(clientsTable, eq(projectsTable.clientId, clientsTable.id))
+    // Left joins: legacy entries logged before tasks became a global catalog
+    // may have a null projectId (the original per-task project link is gone).
+    .leftJoin(projectsTable, eq(timeEntriesTable.projectId, projectsTable.id))
+    .leftJoin(clientsTable, eq(projectsTable.clientId, clientsTable.id))
     .where(whereClause)
     .orderBy(sql`${timeEntriesTable.createdAt} DESC`);
 
@@ -136,7 +139,7 @@ router.get("/time-entries", async (req, res): Promise<void> => {
 
   if (userId) conditions.push(eq(timeEntriesTable.userId, parseInt(userId, 10)));
   if (taskId) conditions.push(eq(timeEntriesTable.taskId, parseInt(taskId, 10)));
-  if (projectId) conditions.push(eq(projectsTable.id, parseInt(projectId, 10)));
+  if (projectId) conditions.push(eq(timeEntriesTable.projectId, parseInt(projectId, 10)));
   if (clientId) conditions.push(eq(clientsTable.id, parseInt(clientId, 10)));
   if (startDate) conditions.push(gte(timeEntriesTable.date, startDate));
   if (endDate) conditions.push(lte(timeEntriesTable.date, endDate));
@@ -153,15 +156,30 @@ router.get("/time-entries", async (req, res): Promise<void> => {
 });
 
 router.post("/time-entries", async (req, res): Promise<void> => {
-  const { taskId, hours, date, description } = req.body as {
+  const { projectId, taskId, hours, date, description } = req.body as {
+    projectId?: number;
     taskId?: number;
     hours?: number;
     date?: string;
     description?: string;
   };
 
-  if (!taskId || !hours || !date) {
-    res.status(400).json({ error: "taskId, hours, and date are required" });
+  if (!projectId || !taskId || !hours || !date) {
+    res.status(400).json({ error: "projectId, taskId, hours, and date are required" });
+    return;
+  }
+
+  const [enabled] = await db
+    .select()
+    .from(projectTasksTable)
+    .where(
+      and(
+        eq(projectTasksTable.projectId, projectId),
+        eq(projectTasksTable.taskId, taskId),
+      ),
+    );
+  if (!enabled) {
+    res.status(400).json({ error: "This task is not enabled for the selected project" });
     return;
   }
 
@@ -171,6 +189,7 @@ router.post("/time-entries", async (req, res): Promise<void> => {
     .insert(timeEntriesTable)
     .values({
       userId,
+      projectId,
       taskId,
       hours,
       date,

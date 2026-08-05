@@ -10,7 +10,7 @@ type LeaveRow = {
   userRole: string;
   date: string;
   note: string | null;
-  createdAt: string;
+  createdAt: Date;
 };
 
 const router: IRouter = Router();

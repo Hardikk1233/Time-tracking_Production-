@@ -162,10 +162,9 @@ router.get("/dashboard/client-hours", async (req, res): Promise<void> => {
     })
     .from(clientsTable)
     .leftJoin(projectsTable, eq(projectsTable.clientId, clientsTable.id))
-    .leftJoin(tasksTable, eq(tasksTable.projectId, projectsTable.id))
     .leftJoin(
       timeEntriesTable,
-      and(eq(timeEntriesTable.taskId, tasksTable.id), entryWhere),
+      and(eq(timeEntriesTable.projectId, projectsTable.id), entryWhere),
     )
     .groupBy(clientsTable.id, clientsTable.name)
     .orderBy(sql`COALESCE(SUM(${timeEntriesTable.hours}), 0) DESC`);
@@ -234,8 +233,7 @@ router.get("/dashboard/client-hours-trend", async (req, res): Promise<void> => {
       totalHours: sql<number>`COALESCE(SUM(${timeEntriesTable.hours}), 0)`,
     })
     .from(timeEntriesTable)
-    .innerJoin(tasksTable, eq(timeEntriesTable.taskId, tasksTable.id))
-    .innerJoin(projectsTable, eq(tasksTable.projectId, projectsTable.id))
+    .innerJoin(projectsTable, eq(timeEntriesTable.projectId, projectsTable.id))
     .innerJoin(clientsTable, eq(projectsTable.clientId, clientsTable.id))
     .where(and(...conditions))
     .groupBy(periodExpr)
@@ -444,8 +442,8 @@ router.get("/dashboard/recent-activity", async (req, res): Promise<void> => {
     .from(timeEntriesTable)
     .innerJoin(usersTable, eq(timeEntriesTable.userId, usersTable.id))
     .innerJoin(tasksTable, eq(timeEntriesTable.taskId, tasksTable.id))
-    .innerJoin(projectsTable, eq(tasksTable.projectId, projectsTable.id))
-    .innerJoin(clientsTable, eq(projectsTable.clientId, clientsTable.id))
+    .leftJoin(projectsTable, eq(timeEntriesTable.projectId, projectsTable.id))
+    .leftJoin(clientsTable, eq(projectsTable.clientId, clientsTable.id))
     .orderBy(sql`${timeEntriesTable.createdAt} DESC`)
     .limit(limitNum);
 
@@ -488,8 +486,8 @@ router.get("/dashboard/pending-approvals", async (req, res): Promise<void> => {
     .from(timeEntriesTable)
     .innerJoin(usersTable, eq(timeEntriesTable.userId, usersTable.id))
     .innerJoin(tasksTable, eq(timeEntriesTable.taskId, tasksTable.id))
-    .innerJoin(projectsTable, eq(tasksTable.projectId, projectsTable.id))
-    .innerJoin(clientsTable, eq(projectsTable.clientId, clientsTable.id))
+    .leftJoin(projectsTable, eq(timeEntriesTable.projectId, projectsTable.id))
+    .leftJoin(clientsTable, eq(projectsTable.clientId, clientsTable.id))
     .where(eq(timeEntriesTable.status, "pending"))
     .orderBy(sql`${timeEntriesTable.createdAt} ASC`);
 

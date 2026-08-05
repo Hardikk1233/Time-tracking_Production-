@@ -53,10 +53,12 @@ export function Sidebar() {
   const navItems = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Time Entries', path: '/time-entries', icon: Clock },
-    ...(isAssociateOrAbove ? [{ name: 'Approvals', path: '/approvals', icon: CheckSquare }] : []),
+    ...(isAssociateOrAbove ? [
+      { name: 'Approvals', path: '/approvals', icon: CheckSquare },
+      { name: 'Projects', path: '/projects', icon: FolderKanban },
+    ] : []),
     ...(isAvpOrAbove ? [
       { name: 'Clients', path: '/clients', icon: Briefcase },
-      { name: 'Projects', path: '/projects', icon: FolderKanban },
       { name: 'Tasks', path: '/tasks', icon: CheckSquare },
       { name: 'Team', path: '/team', icon: Users }
     ] : []),

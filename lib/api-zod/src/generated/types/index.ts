@@ -42,6 +42,7 @@ export * from './publicHoliday';
 export * from './publicHolidayInput';
 export * from './splitHoursInput';
 export * from './task';
+export * from './taskAssignmentInput';
 export * from './taskInput';
 export * from './taskUpdate';
 export * from './timeEntry';

@@ -355,7 +355,9 @@ export const ListProjectsResponse = zod.array(ListProjectsResponseItem)
 export const CreateProjectBody = zod.object({
   "clientId": zod.int(),
   "name": zod.string().min(1),
-  "description": zod.string().optional()
+  "description": zod.string().optional(),
+  "taskIds": zod.array(zod.int()).optional().describe('Global tasks enabled for this project'),
+  "userIds": zod.array(zod.int()).optional().describe('Users who can access this project')
 })
 
 export const CreateProjectResponse = zod.object({
@@ -471,6 +473,51 @@ export const RemoveUserFromProjectResponse = zod.object({
 
 
 /**
+ * @summary List tasks enabled for a project
+ */
+export const ListProjectTasksParams = zod.object({
+  "projectId": zod.coerce.number().int()
+})
+
+export const ListProjectTasksResponseItem = zod.object({
+  "id": zod.int(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListProjectTasksResponse = zod.array(ListProjectTasksResponseItem)
+
+
+/**
+ * @summary Enable a global task for a project
+ */
+export const AssignTaskToProjectParams = zod.object({
+  "projectId": zod.coerce.number().int()
+})
+
+export const AssignTaskToProjectBody = zod.object({
+  "taskId": zod.int()
+})
+
+export const AssignTaskToProjectResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
+ * @summary Remove a task from a project
+ */
+export const RemoveTaskFromProjectParams = zod.object({
+  "projectId": zod.coerce.number().int(),
+  "taskId": zod.coerce.number().int()
+})
+
+export const RemoveTaskFromProjectResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
  * @summary List tasks
  */
 export const ListTasksQueryParams = zod.object({
@@ -479,10 +526,6 @@ export const ListTasksQueryParams = zod.object({
 
 export const ListTasksResponseItem = zod.object({
   "id": zod.int(),
-  "projectId": zod.int(),
-  "projectName": zod.string(),
-  "clientId": zod.int().optional(),
-  "clientName": zod.string().optional(),
   "name": zod.string(),
   "description": zod.string().nullish(),
   "createdAt": zod.coerce.date()
@@ -497,17 +540,12 @@ export const ListTasksResponse = zod.array(ListTasksResponseItem)
 
 
 export const CreateTaskBody = zod.object({
-  "projectId": zod.int(),
   "name": zod.string().min(1),
   "description": zod.string().optional()
 })
 
 export const CreateTaskResponse = zod.object({
   "id": zod.int(),
-  "projectId": zod.int(),
-  "projectName": zod.string(),
-  "clientId": zod.int().optional(),
-  "clientName": zod.string().optional(),
   "name": zod.string(),
   "description": zod.string().nullish(),
   "createdAt": zod.coerce.date()
@@ -523,10 +561,6 @@ export const GetTaskParams = zod.object({
 
 export const GetTaskResponse = zod.object({
   "id": zod.int(),
-  "projectId": zod.int(),
-  "projectName": zod.string(),
-  "clientId": zod.int().optional(),
-  "clientName": zod.string().optional(),
   "name": zod.string(),
   "description": zod.string().nullish(),
   "createdAt": zod.coerce.date()
@@ -550,10 +584,6 @@ export const UpdateTaskBody = zod.object({
 
 export const UpdateTaskResponse = zod.object({
   "id": zod.int(),
-  "projectId": zod.int(),
-  "projectName": zod.string(),
-  "clientId": zod.int().optional(),
-  "clientName": zod.string().optional(),
   "name": zod.string(),
   "description": zod.string().nullish(),
   "createdAt": zod.coerce.date()
@@ -593,10 +623,10 @@ export const ListTimeEntriesResponseItem = zod.object({
   "userRole": zod.string().optional(),
   "taskId": zod.int(),
   "taskName": zod.string(),
-  "projectId": zod.int(),
-  "projectName": zod.string(),
-  "clientId": zod.int(),
-  "clientName": zod.string(),
+  "projectId": zod.int().nullish().describe('null for legacy entries logged before tasks became a global catalog'),
+  "projectName": zod.string().nullish(),
+  "clientId": zod.int().nullish(),
+  "clientName": zod.string().nullish(),
   "hours": zod.number(),
   "date": zod.coerce.date(),
   "description": zod.string().nullish(),
@@ -619,6 +649,7 @@ export const createTimeEntryBodyHoursMax = 24;
 
 
 export const CreateTimeEntryBody = zod.object({
+  "projectId": zod.int(),
   "taskId": zod.int(),
   "hours": zod.number().min(createTimeEntryBodyHoursMin).max(createTimeEntryBodyHoursMax),
   "date": zod.coerce.date(),
@@ -632,10 +663,10 @@ export const CreateTimeEntryResponse = zod.object({
   "userRole": zod.string().optional(),
   "taskId": zod.int(),
   "taskName": zod.string(),
-  "projectId": zod.int(),
-  "projectName": zod.string(),
-  "clientId": zod.int(),
-  "clientName": zod.string(),
+  "projectId": zod.int().nullish().describe('null for legacy entries logged before tasks became a global catalog'),
+  "projectName": zod.string().nullish(),
+  "clientId": zod.int().nullish(),
+  "clientName": zod.string().nullish(),
   "hours": zod.number(),
   "date": zod.coerce.date(),
   "description": zod.string().nullish(),
@@ -662,10 +693,10 @@ export const GetTimeEntryResponse = zod.object({
   "userRole": zod.string().optional(),
   "taskId": zod.int(),
   "taskName": zod.string(),
-  "projectId": zod.int(),
-  "projectName": zod.string(),
-  "clientId": zod.int(),
-  "clientName": zod.string(),
+  "projectId": zod.int().nullish().describe('null for legacy entries logged before tasks became a global catalog'),
+  "projectName": zod.string().nullish(),
+  "clientId": zod.int().nullish(),
+  "clientName": zod.string().nullish(),
   "hours": zod.number(),
   "date": zod.coerce.date(),
   "description": zod.string().nullish(),
@@ -703,10 +734,10 @@ export const UpdateTimeEntryResponse = zod.object({
   "userRole": zod.string().optional(),
   "taskId": zod.int(),
   "taskName": zod.string(),
-  "projectId": zod.int(),
-  "projectName": zod.string(),
-  "clientId": zod.int(),
-  "clientName": zod.string(),
+  "projectId": zod.int().nullish().describe('null for legacy entries logged before tasks became a global catalog'),
+  "projectName": zod.string().nullish(),
+  "clientId": zod.int().nullish(),
+  "clientName": zod.string().nullish(),
   "hours": zod.number(),
   "date": zod.coerce.date(),
   "description": zod.string().nullish(),
@@ -753,10 +784,10 @@ export const SplitTimeEntryResponse = zod.object({
   "userRole": zod.string().optional(),
   "taskId": zod.int(),
   "taskName": zod.string(),
-  "projectId": zod.int(),
-  "projectName": zod.string(),
-  "clientId": zod.int(),
-  "clientName": zod.string(),
+  "projectId": zod.int().nullish().describe('null for legacy entries logged before tasks became a global catalog'),
+  "projectName": zod.string().nullish(),
+  "clientId": zod.int().nullish(),
+  "clientName": zod.string().nullish(),
   "hours": zod.number(),
   "date": zod.coerce.date(),
   "description": zod.string().nullish(),
@@ -783,10 +814,10 @@ export const ApproveTimeEntryResponse = zod.object({
   "userRole": zod.string().optional(),
   "taskId": zod.int(),
   "taskName": zod.string(),
-  "projectId": zod.int(),
-  "projectName": zod.string(),
-  "clientId": zod.int(),
-  "clientName": zod.string(),
+  "projectId": zod.int().nullish().describe('null for legacy entries logged before tasks became a global catalog'),
+  "projectName": zod.string().nullish(),
+  "clientId": zod.int().nullish(),
+  "clientName": zod.string().nullish(),
   "hours": zod.number(),
   "date": zod.coerce.date(),
   "description": zod.string().nullish(),
@@ -813,10 +844,10 @@ export const RejectTimeEntryResponse = zod.object({
   "userRole": zod.string().optional(),
   "taskId": zod.int(),
   "taskName": zod.string(),
-  "projectId": zod.int(),
-  "projectName": zod.string(),
-  "clientId": zod.int(),
-  "clientName": zod.string(),
+  "projectId": zod.int().nullish().describe('null for legacy entries logged before tasks became a global catalog'),
+  "projectName": zod.string().nullish(),
+  "clientId": zod.int().nullish(),
+  "clientName": zod.string().nullish(),
   "hours": zod.number(),
   "date": zod.coerce.date(),
   "description": zod.string().nullish(),
@@ -909,10 +940,10 @@ export const GetRecentActivityResponseItem = zod.object({
   "userRole": zod.string().optional(),
   "taskId": zod.int(),
   "taskName": zod.string(),
-  "projectId": zod.int(),
-  "projectName": zod.string(),
-  "clientId": zod.int(),
-  "clientName": zod.string(),
+  "projectId": zod.int().nullish().describe('null for legacy entries logged before tasks became a global catalog'),
+  "projectName": zod.string().nullish(),
+  "clientId": zod.int().nullish(),
+  "clientName": zod.string().nullish(),
   "hours": zod.number(),
   "date": zod.coerce.date(),
   "description": zod.string().nullish(),
@@ -962,10 +993,10 @@ export const GetPendingApprovalsResponseItem = zod.object({
   "userRole": zod.string().optional(),
   "taskId": zod.int(),
   "taskName": zod.string(),
-  "projectId": zod.int(),
-  "projectName": zod.string(),
-  "clientId": zod.int(),
-  "clientName": zod.string(),
+  "projectId": zod.int().nullish().describe('null for legacy entries logged before tasks became a global catalog'),
+  "projectName": zod.string().nullish(),
+  "clientId": zod.int().nullish(),
+  "clientName": zod.string().nullish(),
   "hours": zod.number(),
   "date": zod.coerce.date(),
   "description": zod.string().nullish(),

@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/lib/auth';
-import { 
-  useListProjects, 
-  useCreateProject, 
+import {
+  useListProjects,
+  useCreateProject,
   useDeleteProject,
   useListClients,
-  getListProjectsQueryKey
+  useListTasks,
+  useListUsers,
+  getListProjectsQueryKey,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -21,14 +23,18 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, Trash2, FolderKanban, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, FolderKanban, ChevronRight, Check } from 'lucide-react';
 
 const projectSchema = z.object({
   clientId: z.coerce.number().min(1, 'Client is required'),
   name: z.string().min(1, 'Name is required'),
   description: z.string().optional(),
+  taskIds: z.array(z.number()).optional(),
+  userIds: z.array(z.number()).optional(),
 });
+type ProjectForm = z.infer<typeof projectSchema>;
 
 export default function Projects() {
   const { user } = useAuth();
@@ -46,7 +52,8 @@ export default function Projects() {
   const { data: clients } = useListClients();
   const deleteMutation = useDeleteProject();
 
-  const isManager = ['avp', 'md'].includes(user?.role || '');
+  // Associates and above can create and delete projects
+  const canManageProjects = ['associate', 'avp', 'md'].includes(user?.role || '');
 
   const handleDelete = (id: number) => {
     if (confirm('Are you sure you want to delete this project?')) {
@@ -80,7 +87,7 @@ export default function Projects() {
             </SelectContent>
           </Select>
 
-          {isManager && (
+          {canManageProjects && (
             <CreateProjectDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} clients={clients || []} />
           )}
         </div>
@@ -105,7 +112,7 @@ export default function Projects() {
                   <div className="p-2 bg-primary/10 rounded-md text-primary">
                     <FolderKanban className="w-5 h-5" />
                   </div>
-                  {isManager && (
+                  {canManageProjects && (
                     <Button 
                       variant="ghost" 
                       size="icon" 
@@ -144,23 +151,83 @@ export default function Projects() {
   );
 }
 
+function MultiSelectList({
+  items,
+  selectedIds,
+  onToggle,
+  emptyLabel,
+  renderLabel,
+}: {
+  items: { id: number; label: string }[];
+  selectedIds: number[];
+  onToggle: (id: number) => void;
+  emptyLabel: string;
+  renderLabel?: (label: string) => React.ReactNode;
+}) {
+  if (items.length === 0) {
+    return <p className="text-xs text-muted-foreground italic">{emptyLabel}</p>;
+  }
+  return (
+    <div className="grid grid-cols-1 gap-1 max-h-36 overflow-y-auto rounded-md border border-input bg-background p-2">
+      {items.map((item) => {
+        const selected = selectedIds.includes(item.id);
+        return (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onToggle(item.id)}
+            className={`flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors text-left ${
+              selected ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted text-foreground'
+            }`}
+          >
+            <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+              selected ? 'bg-primary border-primary' : 'border-input'
+            }`}>
+              {selected && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+            </div>
+            <span>{renderLabel ? renderLabel(item.label) : item.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function CreateProjectDialog({ open, onOpenChange, clients }: { open: boolean, onOpenChange: (open: boolean) => void, clients: any[] }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const createMutation = useCreateProject();
 
-  const form = useForm<z.infer<typeof projectSchema>>({
+  const { data: allTasks } = useListTasks();
+  const { data: allUsers } = useListUsers();
+
+  const form = useForm<ProjectForm>({
     resolver: zodResolver(projectSchema),
-    defaultValues: { clientId: undefined, name: '', description: '' },
+    defaultValues: { clientId: undefined, name: '', description: '', taskIds: [], userIds: [] },
   });
 
-  const onSubmit = (data: z.infer<typeof projectSchema>) => {
-    createMutation.mutate({ data }, {
+  const selectedTaskIds: number[] = form.watch('taskIds') ?? [];
+  const selectedUserIds: number[] = form.watch('userIds') ?? [];
+
+  const toggleTask = (id: number) => {
+    const current = form.getValues('taskIds') ?? [];
+    form.setValue('taskIds', current.includes(id) ? current.filter((x) => x !== id) : [...current, id]);
+  };
+  const toggleUser = (id: number) => {
+    const current = form.getValues('userIds') ?? [];
+    form.setValue('userIds', current.includes(id) ? current.filter((x) => x !== id) : [...current, id]);
+  };
+
+  const onSubmit = (data: ProjectForm) => {
+    createMutation.mutate({ data: data as any }, {
       onSuccess: () => {
         toast({ title: 'Project created' });
         queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
-        form.reset();
+        form.reset({ clientId: undefined, name: '', description: '', taskIds: [], userIds: [] });
         onOpenChange(false);
+      },
+      onError: (err: any) => {
+        toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to create project.' });
       }
     });
   };
@@ -173,14 +240,14 @@ function CreateProjectDialog({ open, onOpenChange, clients }: { open: boolean, o
           New Project
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle>Create Project</DialogTitle>
           <DialogDescription>Create a new project under a client.</DialogDescription>
         </DialogHeader>
         
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4 max-h-[70vh] overflow-y-auto pr-1">
             <FormField
               control={form.control}
               name="clientId"
@@ -223,7 +290,7 @@ function CreateProjectDialog({ open, onOpenChange, clients }: { open: boolean, o
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Description</FormLabel>
+                  <FormLabel>Description <span className="text-muted-foreground font-normal">(Optional)</span></FormLabel>
                   <FormControl>
                     <Input placeholder="Scope of work" {...field} />
                   </FormControl>
@@ -231,6 +298,32 @@ function CreateProjectDialog({ open, onOpenChange, clients }: { open: boolean, o
                 </FormItem>
               )}
             />
+
+            <div className="space-y-2">
+              <Label>Tasks <span className="text-muted-foreground font-normal">(Optional — tasks the team can log time against)</span></Label>
+              <MultiSelectList
+                items={(allTasks || []).map(t => ({ id: t.id, label: t.name }))}
+                selectedIds={selectedTaskIds}
+                onToggle={toggleTask}
+                emptyLabel="No tasks in the catalog yet."
+              />
+              {selectedTaskIds.length > 0 && (
+                <p className="text-xs text-primary mt-1 font-mono">{selectedTaskIds.length} selected</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Users <span className="text-muted-foreground font-normal">(Optional — who can access this project)</span></Label>
+              <MultiSelectList
+                items={(allUsers || []).map(u => ({ id: u.id, label: `${u.name} (${u.role})` }))}
+                selectedIds={selectedUserIds}
+                onToggle={toggleUser}
+                emptyLabel="No users found."
+              />
+              {selectedUserIds.length > 0 && (
+                <p className="text-xs text-primary mt-1 font-mono">{selectedUserIds.length} selected</p>
+              )}
+            </div>
 
             <div className="pt-4 flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
