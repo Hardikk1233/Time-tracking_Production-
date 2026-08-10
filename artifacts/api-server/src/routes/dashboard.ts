@@ -8,6 +8,8 @@ import {
   tasksTable,
   projectsTable,
   clientsTable,
+  clientUsersTable,
+  projectUsersTable,
   publicHolidaysTable,
   leavesTable,
 } from "@workspace/db";
@@ -461,8 +463,62 @@ router.get("/dashboard/recent-activity", async (req, res): Promise<void> => {
 });
 
 // ─── Pending approvals ────────────────────────────────────────────────────────
+// Scoped by the approver's role:
+//   MD         → all pending entries across all clients
+//   AVP        → pending entries only for clients the AVP is assigned to
+//   Associate  → pending entries only for projects the Associate is assigned to
+// Entries logged by the approver themselves are excluded (can't self-approve).
 
 router.get("/dashboard/pending-approvals", async (req, res): Promise<void> => {
+  const currentUserId = req.session.userId!;
+  const [currentUser] = await db
+    .select({ role: usersTable.role })
+    .from(usersTable)
+    .where(eq(usersTable.id, currentUserId));
+
+  const role = currentUser?.role ?? "analyst";
+
+  // Build scope condition based on role
+  let scopeCondition: ReturnType<typeof eq> | undefined;
+
+  if (role === "avp") {
+    // Only entries whose project belongs to a client the AVP manages
+    const myClients = await db
+      .selectDistinct({ clientId: clientUsersTable.clientId })
+      .from(clientUsersTable)
+      .where(eq(clientUsersTable.userId, currentUserId));
+    const myClientIds = myClients.map((r) => r.clientId);
+    if (myClientIds.length === 0) {
+      res.json([]);
+      return;
+    }
+    scopeCondition = inArray(projectsTable.clientId, myClientIds) as any;
+  } else if (role === "associate") {
+    // Only entries whose project the Associate is assigned to
+    const myProjects = await db
+      .selectDistinct({ projectId: projectUsersTable.projectId })
+      .from(projectUsersTable)
+      .where(eq(projectUsersTable.userId, currentUserId));
+    const myProjectIds = myProjects.map((r) => r.projectId);
+    if (myProjectIds.length === 0) {
+      res.json([]);
+      return;
+    }
+    scopeCondition = inArray(timeEntriesTable.projectId, myProjectIds) as any;
+  } else if (role !== "md") {
+    // Analyst (or unknown) — no approval access
+    res.json([]);
+    return;
+  }
+  // MD: scopeCondition stays undefined → no extra filter → sees everything
+
+  const conditions: ReturnType<typeof eq>[] = [
+    eq(timeEntriesTable.status, "pending") as any,
+    // Exclude the approver's own entries
+    sql`${timeEntriesTable.userId} != ${currentUserId}` as any,
+  ];
+  if (scopeCondition) conditions.push(scopeCondition);
+
   const rows = await db
     .select({
       id: timeEntriesTable.id,
@@ -486,9 +542,9 @@ router.get("/dashboard/pending-approvals", async (req, res): Promise<void> => {
     .from(timeEntriesTable)
     .innerJoin(usersTable, eq(timeEntriesTable.userId, usersTable.id))
     .innerJoin(tasksTable, eq(timeEntriesTable.taskId, tasksTable.id))
-    .leftJoin(projectsTable, eq(timeEntriesTable.projectId, projectsTable.id))
-    .leftJoin(clientsTable, eq(projectsTable.clientId, clientsTable.id))
-    .where(eq(timeEntriesTable.status, "pending"))
+    .innerJoin(projectsTable, eq(timeEntriesTable.projectId, projectsTable.id))
+    .innerJoin(clientsTable, eq(projectsTable.clientId, clientsTable.id))
+    .where(and(...conditions))
     .orderBy(sql`${timeEntriesTable.createdAt} ASC`);
 
   res.json(
