@@ -183,17 +183,29 @@ router.delete("/users/:userId", async (req, res): Promise<void> => {
     return;
   }
 
-  const [user] = await db
-    .delete(usersTable)
-    .where(eq(usersTable.id, userId))
-    .returning();
+  try {
+    const [user] = await db
+      .delete(usersTable)
+      .where(eq(usersTable.id, userId))
+      .returning();
 
-  if (!user) {
-    res.status(404).json({ error: "User not found" });
-    return;
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    res.json({ message: "User deleted" });
+  } catch (err: any) {
+    // Drizzle wraps the pg error; the FK violation code is on err.cause
+    const pgCode = err?.code ?? err?.cause?.code;
+    if (pgCode === "23503") {
+      res.status(400).json({
+        error: "Cannot delete a user who has logged time entries. Remove their time entries first, or deactivate the account instead.",
+      });
+      return;
+    }
+    throw err;
   }
-
-  res.json({ message: "User deleted" });
 });
 
 export default router;

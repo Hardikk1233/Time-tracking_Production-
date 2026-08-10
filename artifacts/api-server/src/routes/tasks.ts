@@ -175,9 +175,11 @@ router.delete("/tasks/:taskId", async (req, res): Promise<void> => {
 
     res.json({ message: "Task deleted" });
   } catch (err: any) {
-    if (err?.code === "23503") {
+    // Drizzle wraps the pg error; the FK violation code is on err.cause
+    const pgCode = err?.code ?? err?.cause?.code;
+    if (pgCode === "23503") {
       res.status(400).json({
-        error: "Cannot delete a task that has logged time entries against it",
+        error: "Cannot delete a task that has logged time entries against it. Remove or reassign those entries first.",
       });
       return;
     }
