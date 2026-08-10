@@ -62,12 +62,12 @@ export function Sidebar() {
       { name: 'Approvals', path: '/approvals', icon: CheckSquare },
       { name: 'Projects', path: '/projects', icon: FolderKanban },
     ] : []),
-    ...(true ? [
+    ...(isAvpOrAbove ? [
       { name: 'Clients', path: '/clients', icon: Briefcase },
       { name: 'Tasks', path: '/tasks', icon: CheckSquare },
       { name: 'Team', path: '/team', icon: Users },
-      { name: 'Reports', path: '/reports', icon: BarChart2 },
     ] : []),
+    { name: 'Reports', path: '/reports', icon: BarChart2 },
     ...(isMd ? [{ name: 'Holidays', path: '/holidays', icon: CalendarDays }] : [])
   ];
 
