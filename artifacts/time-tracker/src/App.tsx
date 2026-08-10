@@ -16,6 +16,7 @@ import Tasks from '@/pages/tasks';
 import Team from '@/pages/team';
 import Approvals from '@/pages/approvals';
 import Holidays from '@/pages/holidays';
+import Reports from '@/pages/reports';
 
 const queryClient = new QueryClient();
 
@@ -33,6 +34,7 @@ function ProtectedRoutes() {
         <Route path="/team" component={Team} />
         <Route path="/holidays" component={Holidays} />
         <Route path="/approvals" component={Approvals} />
+        <Route path="/reports" component={Reports} />
         <Route component={NotFound} />
       </Switch>
     </MainLayout>

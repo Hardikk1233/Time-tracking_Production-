@@ -7,10 +7,10 @@ import {
   Briefcase, 
   FolderKanban, 
   CheckSquare, 
-  Settings,
   LogOut,
   ShieldCheck,
-  CalendarDays
+  CalendarDays,
+  BarChart2,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
@@ -65,7 +65,8 @@ export function Sidebar() {
     ...(isAvpOrAbove ? [
       { name: 'Clients', path: '/clients', icon: Briefcase },
       { name: 'Tasks', path: '/tasks', icon: CheckSquare },
-      { name: 'Team', path: '/team', icon: Users }
+      { name: 'Team', path: '/team', icon: Users },
+      { name: 'Reports', path: '/reports', icon: BarChart2 },
     ] : []),
     ...(isMd ? [{ name: 'Holidays', path: '/holidays', icon: CalendarDays }] : [])
   ];

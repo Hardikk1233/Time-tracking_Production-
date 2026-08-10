@@ -341,6 +341,103 @@ export interface PublicHolidayInput {
   name: string;
 }
 
+export type ReportFilterUserRole = typeof ReportFilterUserRole[keyof typeof ReportFilterUserRole];
+
+
+export const ReportFilterUserRole = {
+  analyst: 'analyst',
+  associate: 'associate',
+  avp: 'avp',
+  md: 'md',
+} as const;
+
+export interface ReportFilterUser {
+  id: number;
+  name: string;
+  role: ReportFilterUserRole;
+}
+
+export interface ReportFilterClient {
+  id: number;
+  name: string;
+}
+
+export interface ReportFilterProject {
+  id: number;
+  name: string;
+  clientId: number;
+}
+
+export interface ReportFilterOptions {
+  users: ReportFilterUser[];
+  clients: ReportFilterClient[];
+  projects: ReportFilterProject[];
+}
+
+export type UtilizationReportRowRole = typeof UtilizationReportRowRole[keyof typeof UtilizationReportRowRole];
+
+
+export const UtilizationReportRowRole = {
+  analyst: 'analyst',
+  associate: 'associate',
+  avp: 'avp',
+  md: 'md',
+} as const;
+
+export interface UtilizationReportRow {
+  userId: number;
+  userName: string;
+  role: UtilizationReportRowRole;
+  /** Calendar working days (Mon-Fri minus public holidays) */
+  workingDays: number;
+  /** Leave days taken within the period */
+  leaveDays: number;
+  /** workingDays minus leaveDays */
+  availableDays: number;
+  /** Total hours logged in the period */
+  hoursLogged: number;
+  /** Billable hours logged in the period */
+  billableHours: number;
+  /** availableDays × 8 */
+  targetHours: number;
+  /** billableHours / targetHours × 100 */
+  utilization: number;
+}
+
+export type EfficiencyReportRowRole = typeof EfficiencyReportRowRole[keyof typeof EfficiencyReportRowRole];
+
+
+export const EfficiencyReportRowRole = {
+  analyst: 'analyst',
+  associate: 'associate',
+  avp: 'avp',
+  md: 'md',
+} as const;
+
+export interface EfficiencyReportRow {
+  userId: number;
+  userName: string;
+  role: EfficiencyReportRowRole;
+  totalHours: number;
+  billableHours: number;
+  nonBillableHours: number;
+  approvedHours: number;
+  /** billableHours / totalHours × 100 */
+  billablePct: number;
+}
+
+export interface ClientHoursReportRow {
+  clientId: number;
+  clientName: string;
+  projectId: number;
+  projectName: string;
+  totalHours: number;
+  billableHours: number;
+  nonBillableHours: number;
+  /** Number of distinct contributors */
+  contributorCount: number;
+}
+
 export interface Leave {
   id: number;
   userId: number;
@@ -450,5 +547,64 @@ export type ListLeavesParams = {
 startDate?: string;
 endDate?: string;
 userId?: number;
+};
+
+export type GetUtilizationReportParams = {
+startDate?: string;
+endDate?: string;
+/**
+ * Comma-separated user IDs
+ */
+userIds?: string;
+/**
+ * Comma-separated client IDs
+ */
+clientIds?: string;
+/**
+ * Comma-separated project IDs
+ */
+projectIds?: string;
+/**
+ * Comma-separated roles (analyst,associate,avp)
+ */
+roles?: string;
+};
+
+export type GetEfficiencyReportParams = {
+startDate?: string;
+endDate?: string;
+/**
+ * Comma-separated user IDs
+ */
+userIds?: string;
+/**
+ * Comma-separated client IDs
+ */
+clientIds?: string;
+/**
+ * Comma-separated project IDs
+ */
+projectIds?: string;
+/**
+ * Comma-separated roles (analyst,associate,avp)
+ */
+roles?: string;
+};
+
+export type GetClientHoursReportParams = {
+startDate?: string;
+endDate?: string;
+/**
+ * Comma-separated client IDs
+ */
+clientIds?: string;
+/**
+ * Comma-separated project IDs
+ */
+projectIds?: string;
+/**
+ * Comma-separated user IDs
+ */
+userIds?: string;
 };
 

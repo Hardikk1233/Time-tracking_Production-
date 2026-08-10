@@ -28,6 +28,8 @@ tags:
     description: Public holiday management
   - name: leaves
     description: Employee leave management
+  - name: reports
+    description: Custom reports (AVP and MD only)
 
 paths:
   /healthz:
@@ -1082,6 +1084,161 @@ paths:
               schema:
                 $ref: "#/components/schemas/MessageResponse"
 
+  # ─── Reports (AVP and MD only) ───────────────────────────────────────────
+  /reports/filter-options:
+    get:
+      operationId: getReportFilterOptions
+      tags: [reports]
+      summary: Scoped filter options for the current user (AVP/MD only)
+      responses:
+        "200":
+          description: Scoped users, clients, and projects
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportFilterOptions"
+        "403":
+          description: Forbidden
+
+  /reports/utilization:
+    get:
+      operationId: getUtilizationReport
+      tags: [reports]
+      summary: Per-user utilization report (AVP/MD only)
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: userIds
+          in: query
+          schema:
+            type: string
+            description: Comma-separated user IDs
+        - name: clientIds
+          in: query
+          schema:
+            type: string
+            description: Comma-separated client IDs
+        - name: projectIds
+          in: query
+          schema:
+            type: string
+            description: Comma-separated project IDs
+        - name: roles
+          in: query
+          schema:
+            type: string
+            description: Comma-separated roles (analyst,associate,avp)
+      responses:
+        "200":
+          description: Utilization report rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UtilizationReportRow"
+        "403":
+          description: Forbidden
+
+  /reports/efficiency:
+    get:
+      operationId: getEfficiencyReport
+      tags: [reports]
+      summary: Per-user billable efficiency report (AVP/MD only)
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: userIds
+          in: query
+          schema:
+            type: string
+            description: Comma-separated user IDs
+        - name: clientIds
+          in: query
+          schema:
+            type: string
+            description: Comma-separated client IDs
+        - name: projectIds
+          in: query
+          schema:
+            type: string
+            description: Comma-separated project IDs
+        - name: roles
+          in: query
+          schema:
+            type: string
+            description: Comma-separated roles (analyst,associate,avp)
+      responses:
+        "200":
+          description: Efficiency report rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EfficiencyReportRow"
+        "403":
+          description: Forbidden
+
+  /reports/client-hours:
+    get:
+      operationId: getClientHoursReport
+      tags: [reports]
+      summary: Hours by client and project report (AVP/MD only)
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: clientIds
+          in: query
+          schema:
+            type: string
+            description: Comma-separated client IDs
+        - name: projectIds
+          in: query
+          schema:
+            type: string
+            description: Comma-separated project IDs
+        - name: userIds
+          in: query
+          schema:
+            type: string
+            description: Comma-separated user IDs
+      responses:
+        "200":
+          description: Client hours report rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClientHoursReportRow"
+        "403":
+          description: Forbidden
+
 components:
   parameters:
     UserId:
@@ -1576,6 +1733,134 @@ components:
           format: date
         name:
           type: string
+
+    # ─── Reports ─────────────────────────────────────────────────────────
+    ReportFilterUser:
+      type: object
+      required: [id, name, role]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        role:
+          type: string
+          enum: [analyst, associate, avp, md]
+
+    ReportFilterClient:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+
+    ReportFilterProject:
+      type: object
+      required: [id, name, clientId]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        clientId:
+          type: integer
+
+    ReportFilterOptions:
+      type: object
+      required: [users, clients, projects]
+      properties:
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportFilterUser"
+        clients:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportFilterClient"
+        projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportFilterProject"
+
+    UtilizationReportRow:
+      type: object
+      required: [userId, userName, role, workingDays, leaveDays, availableDays, hoursLogged, billableHours, targetHours, utilization]
+      properties:
+        userId:
+          type: integer
+        userName:
+          type: string
+        role:
+          type: string
+          enum: [analyst, associate, avp, md]
+        workingDays:
+          type: integer
+          description: "Calendar working days (Mon-Fri minus public holidays)"
+        leaveDays:
+          type: integer
+          description: "Leave days taken within the period"
+        availableDays:
+          type: integer
+          description: "workingDays minus leaveDays"
+        hoursLogged:
+          type: number
+          description: "Total hours logged in the period"
+        billableHours:
+          type: number
+          description: "Billable hours logged in the period"
+        targetHours:
+          type: number
+          description: "availableDays × 8"
+        utilization:
+          type: number
+          description: "billableHours / targetHours × 100"
+
+    EfficiencyReportRow:
+      type: object
+      required: [userId, userName, role, totalHours, billableHours, nonBillableHours, approvedHours, billablePct]
+      properties:
+        userId:
+          type: integer
+        userName:
+          type: string
+        role:
+          type: string
+          enum: [analyst, associate, avp, md]
+        totalHours:
+          type: number
+        billableHours:
+          type: number
+        nonBillableHours:
+          type: number
+        approvedHours:
+          type: number
+        billablePct:
+          type: number
+          description: "billableHours / totalHours × 100"
+
+    ClientHoursReportRow:
+      type: object
+      required: [clientId, clientName, projectId, projectName, totalHours, billableHours, nonBillableHours, contributorCount]
+      properties:
+        clientId:
+          type: integer
+        clientName:
+          type: string
+        projectId:
+          type: integer
+        projectName:
+          type: string
+        totalHours:
+          type: number
+        billableHours:
+          type: number
+        nonBillableHours:
+          type: number
+        contributorCount:
+          type: integer
+          description: "Number of distinct contributors"
 
     # ─── Leaves ───────────────────────────────────────────────────────────
     Leave:

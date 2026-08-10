@@ -9,6 +9,7 @@ import timeEntriesRouter from "./time-entries";
 import dashboardRouter from "./dashboard";
 import holidaysRouter from "./holidays";
 import leavesRouter from "./leaves";
+import reportsRouter from "./reports";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -27,5 +28,6 @@ router.use(timeEntriesRouter);
 router.use(dashboardRouter);
 router.use(holidaysRouter);
 router.use(leavesRouter);
+router.use(reportsRouter);
 
 export default router;
