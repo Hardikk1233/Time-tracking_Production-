@@ -28,6 +28,6 @@ router.use(timeEntriesRouter);
 router.use(dashboardRouter);
 router.use(holidaysRouter);
 router.use(leavesRouter);
-router.use(reportsRouter);
+router.use("/reports", reportsRouter);
 
 export default router;

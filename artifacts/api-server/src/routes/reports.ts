@@ -129,9 +129,12 @@ async function resolveScope(
   return { scopedUserIds: subIds, scopedClientIds: avpClientIds };
 }
 
-// ─── Auth middleware: attach role to request ──────────────────────────────────
+// ─── Auth middleware: re-verify role and attach to request ───────────────────
+// Mounted without a path prefix so Express does NOT strip the path, allowing
+// the route handlers below (which carry the full /filter-options etc. path) to
+// match correctly.
 
-router.use("/reports", async (req, res, next) => {
+router.use(async (req, res, next) => {
   const userId = req.session.userId!;
   const [user] = await db
     .select({ role: usersTable.role })
@@ -147,10 +150,10 @@ router.use("/reports", async (req, res, next) => {
   next();
 });
 
-// ─── GET /reports/filter-options ─────────────────────────────────────────────
+// ─── GET /filter-options ──────────────────────────────────────────────────────
 // Returns scoped users, clients, and projects the current user may filter by.
 
-router.get("/reports/filter-options", async (req, res): Promise<void> => {
+router.get("/filter-options", async (req, res): Promise<void> => {
   const currentRole = (req as any)._reporterRole as string;
   const currentUserId = (req as any)._reporterUserId as number;
 
@@ -208,7 +211,7 @@ router.get("/reports/filter-options", async (req, res): Promise<void> => {
 
 // ─── GET /reports/utilization ─────────────────────────────────────────────────
 
-router.get("/reports/utilization", async (req, res): Promise<void> => {
+router.get("/utilization", async (req, res): Promise<void> => {
   const currentRole = (req as any)._reporterRole as string;
   const currentUserId = (req as any)._reporterUserId as number;
 
@@ -361,7 +364,7 @@ router.get("/reports/utilization", async (req, res): Promise<void> => {
 
 // ─── GET /reports/efficiency ──────────────────────────────────────────────────
 
-router.get("/reports/efficiency", async (req, res): Promise<void> => {
+router.get("/efficiency", async (req, res): Promise<void> => {
   const currentRole = (req as any)._reporterRole as string;
   const currentUserId = (req as any)._reporterUserId as number;
 
@@ -479,7 +482,7 @@ router.get("/reports/efficiency", async (req, res): Promise<void> => {
 
 // ─── GET /reports/client-hours ────────────────────────────────────────────────
 
-router.get("/reports/client-hours", async (req, res): Promise<void> => {
+router.get("/client-hours", async (req, res): Promise<void> => {
   const currentRole = (req as any)._reporterRole as string;
   const currentUserId = (req as any)._reporterUserId as number;
 
