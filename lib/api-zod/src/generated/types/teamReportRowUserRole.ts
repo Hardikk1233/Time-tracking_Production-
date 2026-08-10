@@ -6,10 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type MemberHoursBreakdownRole = typeof MemberHoursBreakdownRole[keyof typeof MemberHoursBreakdownRole];
+export type TeamReportRowUserRole = typeof TeamReportRowUserRole[keyof typeof TeamReportRowUserRole];
 
 
-export const MemberHoursBreakdownRole = {
+export const TeamReportRowUserRole = {
   analyst: 'analyst',
   associate: 'associate',
   avp: 'avp',

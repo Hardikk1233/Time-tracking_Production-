@@ -1102,11 +1102,11 @@ paths:
     get:
       operationId: getClientReport
       tags: [reports]
-      summary: Monthly hours summary + per-member breakdown for a client
+      summary: Per-client utilization table (all windows) + optional monthly chart for one client
       parameters:
         - name: clientId
           in: query
-          required: true
+          required: false
           schema:
             type: integer
         - name: startDate
@@ -1732,55 +1732,77 @@ components:
           items:
             $ref: "#/components/schemas/ReportFilterProject"
 
-    MonthlyHoursSummary:
+    ClientPeriodStats:
       type: object
-      required: [month, totalHours, billableHours, nonBillableHours]
+      required: [billableHours, contractedHours, utilization]
+      properties:
+        billableHours:
+          type: number
+        contractedHours:
+          type: number
+          description: "fteCount × workingDays × 8"
+        utilization:
+          type: number
+          description: "billableHours / contractedHours × 100"
+
+    ClientUtilizationRow:
+      type: object
+      required: [clientId, clientName, fteCount, selectedRange, last3m, last6m, last12m]
+      properties:
+        clientId:
+          type: integer
+        clientName:
+          type: string
+        fteCount:
+          type: number
+        selectedRange:
+          $ref: "#/components/schemas/ClientPeriodStats"
+        last3m:
+          $ref: "#/components/schemas/ClientPeriodStats"
+        last6m:
+          $ref: "#/components/schemas/ClientPeriodStats"
+        last12m:
+          $ref: "#/components/schemas/ClientPeriodStats"
+
+    MonthlyClientRow:
+      type: object
+      required: [month, billableHours, contractedHours, utilization]
       properties:
         month:
           type: string
           description: "YYYY-MM"
-        totalHours:
-          type: number
         billableHours:
           type: number
-        nonBillableHours:
+        contractedHours:
+          type: number
+        utilization:
           type: number
 
-    MemberHoursBreakdown:
+    ClientReport:
       type: object
-      required: [userId, userName, role, totalHours, billableHours, nonBillableHours]
+      required: [clientSummary]
+      properties:
+        clientSummary:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientUtilizationRow"
+        monthlySummary:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/MonthlyClientRow"
+
+    TeamReportRow:
+      type: object
+      required: [userId, userName, userRole, clientId, clientName, projectId, projectName, taskId, taskName, totalHours, billableHours, nonBillableHours, efficiency]
       properties:
         userId:
           type: integer
         userName:
           type: string
-        role:
+        userRole:
           type: string
           enum: [analyst, associate, avp, md]
-        totalHours:
-          type: number
-        billableHours:
-          type: number
-        nonBillableHours:
-          type: number
-
-    ClientReport:
-      type: object
-      required: [monthlySummary, memberBreakdown]
-      properties:
-        monthlySummary:
-          type: array
-          items:
-            $ref: "#/components/schemas/MonthlyHoursSummary"
-        memberBreakdown:
-          type: array
-          items:
-            $ref: "#/components/schemas/MemberHoursBreakdown"
-
-    TeamReportRow:
-      type: object
-      required: [clientId, clientName, projectId, projectName, taskId, taskName, totalHours, billableHours, nonBillableHours]
-      properties:
         clientId:
           type: integer
         clientName:
@@ -1799,6 +1821,9 @@ components:
           type: number
         nonBillableHours:
           type: number
+        efficiency:
+          type: number
+          description: "billableHours / totalHours × 100"
 
     MyReportRow:
       type: object

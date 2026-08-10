@@ -374,39 +374,51 @@ export interface ReportFilterOptions {
   projects: ReportFilterProject[];
 }
 
-export interface MonthlyHoursSummary {
-  /** YYYY-MM */
-  month: string;
-  totalHours: number;
+export interface ClientPeriodStats {
   billableHours: number;
-  nonBillableHours: number;
+  /** fteCount × workingDays × 8 */
+  contractedHours: number;
+  /** billableHours / contractedHours × 100 */
+  utilization: number;
 }
 
-export type MemberHoursBreakdownRole = typeof MemberHoursBreakdownRole[keyof typeof MemberHoursBreakdownRole];
+export interface ClientUtilizationRow {
+  clientId: number;
+  clientName: string;
+  fteCount: number;
+  selectedRange: ClientPeriodStats;
+  last3m: ClientPeriodStats;
+  last6m: ClientPeriodStats;
+  last12m: ClientPeriodStats;
+}
+
+export interface MonthlyClientRow {
+  /** YYYY-MM */
+  month: string;
+  billableHours: number;
+  contractedHours: number;
+  utilization: number;
+}
+
+export interface ClientReport {
+  clientSummary: ClientUtilizationRow[];
+  monthlySummary?: MonthlyClientRow[] | null;
+}
+
+export type TeamReportRowUserRole = typeof TeamReportRowUserRole[keyof typeof TeamReportRowUserRole];
 
 
-export const MemberHoursBreakdownRole = {
+export const TeamReportRowUserRole = {
   analyst: 'analyst',
   associate: 'associate',
   avp: 'avp',
   md: 'md',
 } as const;
 
-export interface MemberHoursBreakdown {
+export interface TeamReportRow {
   userId: number;
   userName: string;
-  role: MemberHoursBreakdownRole;
-  totalHours: number;
-  billableHours: number;
-  nonBillableHours: number;
-}
-
-export interface ClientReport {
-  monthlySummary: MonthlyHoursSummary[];
-  memberBreakdown: MemberHoursBreakdown[];
-}
-
-export interface TeamReportRow {
+  userRole: TeamReportRowUserRole;
   clientId: number;
   clientName: string;
   projectId: number;
@@ -416,6 +428,8 @@ export interface TeamReportRow {
   totalHours: number;
   billableHours: number;
   nonBillableHours: number;
+  /** billableHours / totalHours × 100 */
+  efficiency: number;
 }
 
 export interface MyReportRow {
@@ -561,7 +575,7 @@ userId?: number;
 };
 
 export type GetClientReportParams = {
-clientId: number;
+clientId?: number;
 startDate?: string;
 endDate?: string;
 };

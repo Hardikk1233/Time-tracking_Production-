@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, gte, lte, sql, inArray } from "drizzle-orm";
-import { format } from "date-fns";
+import { format, subMonths, startOfMonth, endOfMonth, eachMonthOfInterval } from "date-fns";
 import {
   db,
   timeEntriesTable,
@@ -15,7 +15,7 @@ import {
 
 const router: IRouter = Router();
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Shared helpers ────────────────────────────────────────────────────────────
 
 async function fetchHolidaySet(startDate: string, endDate: string): Promise<Set<string>> {
   const rows = await db
@@ -25,126 +25,113 @@ async function fetchHolidaySet(startDate: string, endDate: string): Promise<Set<
   return new Set(rows.map((r) => r.date));
 }
 
-function countWorkingDays(
-  startDate: string,
-  endDate: string,
-  holidaySet: Set<string>,
-): number {
-  const end = new Date(endDate);
+function countWorkingDays(start: string, end: string, holidaySet: Set<string>): number {
+  const endDate = new Date(end);
   let count = 0;
-  const cur = new Date(startDate);
-  while (cur <= end) {
+  const cur = new Date(start);
+  while (cur <= endDate) {
     const d = cur.getDay();
-    const dateStr = format(cur, "yyyy-MM-dd");
-    if (d > 0 && d < 6 && !holidaySet.has(dateStr)) count++;
+    if (d > 0 && d < 6 && !holidaySet.has(format(cur, "yyyy-MM-dd"))) count++;
     cur.setDate(cur.getDate() + 1);
   }
   return count;
 }
 
-function resolveRange(
-  startDate?: string,
-  endDate?: string,
-): { start: string; end: string } {
+function resolveRange(startDate?: string, endDate?: string): { start: string; end: string } {
   const now = new Date();
-  const start =
-    startDate ?? format(new Date(now.getFullYear(), now.getMonth(), 1), "yyyy-MM-dd");
-  const end =
-    endDate ?? format(new Date(now.getFullYear(), now.getMonth() + 1, 0), "yyyy-MM-dd");
-  return { start, end };
+  return {
+    start: startDate ?? format(startOfMonth(now), "yyyy-MM-dd"),
+    end: endDate ?? format(now, "yyyy-MM-dd"),
+  };
 }
 
-/** Returns all userIds in the AVP's subordinate tree (direct + indirect reports). */
-async function getSubordinateUserIds(avpId: number): Promise<number[]> {
-  const direct = await db
-    .select({ id: usersTable.id })
-    .from(usersTable)
-    .where(eq(usersTable.reportingToId, avpId));
-  const directIds = direct.map((r) => r.id);
-
-  let indirectIds: number[] = [];
-  if (directIds.length > 0) {
-    const indirect = await db
-      .select({ id: usersTable.id })
-      .from(usersTable)
-      .where(inArray(usersTable.reportingToId, directIds));
-    indirectIds = indirect.map((r) => r.id);
-  }
-  return [avpId, ...directIds, ...indirectIds];
-}
-
-/** Returns clientIds the user is directly assigned to. */
-async function getUserClientIds(userId: number): Promise<number[]> {
-  const rows = await db
-    .selectDistinct({ clientId: clientUsersTable.clientId })
-    .from(clientUsersTable)
-    .where(eq(clientUsersTable.userId, userId));
-  return rows.map((r) => r.clientId);
-}
-
-/** Parse comma-separated or repeated query param into numbers. Returns null when absent. */
 function parseIds(param: string | string[] | undefined): number[] | null {
   if (!param) return null;
   const raw = Array.isArray(param) ? param.join(",") : param;
-  const ids = raw
-    .split(",")
-    .map((s) => parseInt(s.trim(), 10))
-    .filter((n) => !isNaN(n) && n > 0);
+  const ids = raw.split(",").map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n) && n > 0);
   return ids.length > 0 ? ids : null;
 }
 
-/**
- * Intersect a scope list with a caller-supplied filter list.
- * null scope = unrestricted (MD) — apply filterIds as-is.
- * null filterIds = no filter — return scope as-is.
- * [] either side = empty result.
- */
-function intersect(
-  scopedIds: number[] | null,
-  filterIds: number[] | null,
-): number[] | null {
+function intersect(scopedIds: number[] | null, filterIds: number[] | null): number[] | null {
   if (scopedIds === null) return filterIds;
   if (filterIds === null) return scopedIds;
   const set = new Set(filterIds);
   return scopedIds.filter((id) => set.has(id));
 }
 
-type Scope = {
-  scopedUserIds: number[] | null; // null = unrestricted
-  scopedClientIds: number[] | null; // null = unrestricted
-};
-
-/** Resolve data-access scope for the current user. */
-async function resolveScope(currentUserId: number, currentRole: string): Promise<Scope> {
-  if (currentRole === "md") {
-    return { scopedUserIds: null, scopedClientIds: null };
+async function getSubordinateUserIds(avpId: number): Promise<number[]> {
+  const direct = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.reportingToId, avpId));
+  const directIds = direct.map((r) => r.id);
+  let indirectIds: number[] = [];
+  if (directIds.length > 0) {
+    const indirect = await db.select({ id: usersTable.id }).from(usersTable).where(inArray(usersTable.reportingToId, directIds));
+    indirectIds = indirect.map((r) => r.id);
   }
+  return [avpId, ...directIds, ...indirectIds];
+}
+
+async function getUserClientIds(userId: number): Promise<number[]> {
+  const rows = await db.selectDistinct({ clientId: clientUsersTable.clientId }).from(clientUsersTable).where(eq(clientUsersTable.userId, userId));
+  return rows.map((r) => r.clientId);
+}
+
+type Scope = { scopedUserIds: number[] | null; scopedClientIds: number[] | null };
+
+async function resolveScope(currentUserId: number, currentRole: string): Promise<Scope> {
+  if (currentRole === "md") return { scopedUserIds: null, scopedClientIds: null };
   if (currentRole === "avp") {
-    const [subIds, clientIds] = await Promise.all([
-      getSubordinateUserIds(currentUserId),
-      getUserClientIds(currentUserId),
-    ]);
+    const [subIds, clientIds] = await Promise.all([getSubordinateUserIds(currentUserId), getUserClientIds(currentUserId)]);
     return { scopedUserIds: subIds, scopedClientIds: clientIds };
   }
-  // analyst or associate: only their own hours, their assigned clients
   const clientIds = await getUserClientIds(currentUserId);
   return { scopedUserIds: [currentUserId], scopedClientIds: clientIds };
 }
 
-// ─── Auth middleware ───────────────────────────────────────────────────────────
-// Allow all roles; scope is enforced per-endpoint.
+/** Sum billable hours per clientId for a time window. */
+async function getBillablePerClient(
+  clientIds: number[],
+  scopedUserIds: number[] | null,
+  start: string,
+  end: string,
+): Promise<Map<number, number>> {
+  if (clientIds.length === 0) return new Map();
+  const conds: Parameters<typeof and>[0][] = [
+    gte(timeEntriesTable.date, start),
+    lte(timeEntriesTable.date, end),
+    inArray(projectsTable.clientId, clientIds) as any,
+  ];
+  if (scopedUserIds !== null) {
+    if (scopedUserIds.length === 0) return new Map(clientIds.map((id) => [id, 0]));
+    conds.push(inArray(timeEntriesTable.userId, scopedUserIds) as any);
+  }
+  const rows = await db
+    .select({
+      clientId: projectsTable.clientId,
+      // Use fully-qualified column so SELECT and GROUP BY match exactly
+      billable: sql<number>`COALESCE(SUM("time_entries"."billable_hours"), 0)`,
+    })
+    .from(timeEntriesTable)
+    .innerJoin(projectsTable, eq(projectsTable.id, timeEntriesTable.projectId))
+    .where(and(...conds))
+    .groupBy(projectsTable.clientId);
+  return new Map(rows.map((r) => [r.clientId, Number(r.billable)]));
+}
+
+function buildPeriodStats(billable: number, fteCount: number, workingDays: number) {
+  const contracted = fteCount * workingDays * 8;
+  return {
+    billableHours: billable,
+    contractedHours: contracted,
+    utilization: contracted > 0 ? Math.round((billable / contracted) * 1000) / 10 : 0,
+  };
+}
+
+// ─── Auth middleware (all roles) ───────────────────────────────────────────────
 
 router.use(async (req, res, next) => {
   const userId = req.session.userId!;
-  const [user] = await db
-    .select({ role: usersTable.role })
-    .from(usersTable)
-    .where(eq(usersTable.id, userId));
-
-  if (!user) {
-    res.status(403).json({ error: "User not found" });
-    return;
-  }
+  const [user] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, userId));
+  if (!user) { res.status(403).json({ error: "User not found" }); return; }
   (req as any)._reporterRole = user.role;
   (req as any)._reporterUserId = userId;
   next();
@@ -155,7 +142,6 @@ router.use(async (req, res, next) => {
 router.get("/filter-options", async (req, res): Promise<void> => {
   const currentRole = (req as any)._reporterRole as string;
   const currentUserId = (req as any)._reporterUserId as number;
-
   const { scopedUserIds, scopedClientIds } = await resolveScope(currentUserId, currentRole);
 
   const [usersResult, clientsResult] = await Promise.all([
@@ -185,103 +171,155 @@ router.get("/filter-options", async (req, res): Promise<void> => {
 });
 
 // ─── GET /client-report ───────────────────────────────────────────────────────
-// Monthly summary chart data + per-member hours breakdown for a client.
+// Returns:
+//   - clientSummary: per-client utilization table (4 time windows) — always
+//   - monthlySummary: monthly chart for selected client — when clientId given
 
 router.get("/client-report", async (req, res): Promise<void> => {
   const currentRole = (req as any)._reporterRole as string;
   const currentUserId = (req as any)._reporterUserId as number;
 
-  const { clientId: rawClientId, startDate, endDate } = req.query as Record<string, string | undefined>;
-
-  const clientId = rawClientId ? parseInt(rawClientId, 10) : null;
-  if (!clientId || isNaN(clientId)) {
-    res.status(400).json({ error: "clientId is required" });
-    return;
-  }
-
+  const { startDate, endDate, clientId: rawClientId } = req.query as Record<string, string | undefined>;
+  const focusClientId = rawClientId ? parseInt(rawClientId, 10) : null;
   const { start, end } = resolveRange(startDate, endDate);
 
   const { scopedUserIds, scopedClientIds } = await resolveScope(currentUserId, currentRole);
 
-  // Verify the user can access this client
-  if (scopedClientIds !== null && !scopedClientIds.includes(clientId)) {
-    res.status(403).json({ error: "Access to this client is not permitted" });
+  if (scopedUserIds !== null && scopedUserIds.length === 0) {
+    res.json({ clientSummary: [], monthlySummary: null });
     return;
   }
 
-  // Get all projects for this client
-  const clientProjects = await db
-    .select({ id: projectsTable.id })
-    .from(projectsTable)
-    .where(eq(projectsTable.clientId, clientId));
-  const projectIds = clientProjects.map((p) => p.id);
+  // Determine visible clients
+  const now = new Date();
+  const visibleClientIds = scopedClientIds;
 
-  if (projectIds.length === 0) {
-    res.json({ monthlySummary: [], memberBreakdown: [] });
+  if (visibleClientIds !== null && visibleClientIds.length === 0) {
+    res.json({ clientSummary: [], monthlySummary: null });
     return;
   }
 
-  // Build WHERE for time entries
-  const entryConditions: Parameters<typeof and>[0][] = [
-    gte(timeEntriesTable.date, start),
-    lte(timeEntriesTable.date, end),
-    inArray(timeEntriesTable.projectId, projectIds) as any,
-  ];
-  if (scopedUserIds !== null) {
-    if (scopedUserIds.length === 0) {
-      res.json({ monthlySummary: [], memberBreakdown: [] });
+  // Fetch client metadata (name, fteCount) for all visible clients
+  const clientRows =
+    visibleClientIds === null
+      ? await db.select({ id: clientsTable.id, name: clientsTable.name, fteCount: clientsTable.fteCount }).from(clientsTable).orderBy(clientsTable.name)
+      : await db.select({ id: clientsTable.id, name: clientsTable.name, fteCount: clientsTable.fteCount }).from(clientsTable).where(inArray(clientsTable.id, visibleClientIds)).orderBy(clientsTable.name);
+
+  if (clientRows.length === 0) {
+    res.json({ clientSummary: [], monthlySummary: null });
+    return;
+  }
+
+  const allClientIds = clientRows.map((c) => c.id);
+
+  // Time windows
+  const last3mStart = format(startOfMonth(subMonths(now, 3)), "yyyy-MM-dd");
+  const last3mEnd   = format(endOfMonth(subMonths(now, 1)), "yyyy-MM-dd");
+  const last6mStart = format(startOfMonth(subMonths(now, 6)), "yyyy-MM-dd");
+  const last6mEnd   = last3mEnd;
+  const last12mStart = format(startOfMonth(subMonths(now, 12)), "yyyy-MM-dd");
+  const last12mEnd   = last3mEnd;
+
+  // Fetch all holidays covering the maximum needed window
+  const overallStart = [start, last12mStart].sort()[0];
+  const overallEnd   = [end, last3mEnd].sort().reverse()[0];
+  const holidaySet = await fetchHolidaySet(overallStart, overallEnd);
+
+  // Working days per window
+  const wdSelected = countWorkingDays(start, end, holidaySet);
+  const wd3m  = countWorkingDays(last3mStart,  last3mEnd,  holidaySet);
+  const wd6m  = countWorkingDays(last6mStart,  last6mEnd,  holidaySet);
+  const wd12m = countWorkingDays(last12mStart, last12mEnd, holidaySet);
+
+  // Billable hours per client per window (4 parallel queries)
+  const [billableSelected, billable3m, billable6m, billable12m] = await Promise.all([
+    getBillablePerClient(allClientIds, scopedUserIds, start, end),
+    getBillablePerClient(allClientIds, scopedUserIds, last3mStart, last3mEnd),
+    getBillablePerClient(allClientIds, scopedUserIds, last6mStart, last6mEnd),
+    getBillablePerClient(allClientIds, scopedUserIds, last12mStart, last12mEnd),
+  ]);
+
+  const clientSummary = clientRows.map((c) => ({
+    clientId: c.id,
+    clientName: c.name,
+    fteCount: c.fteCount,
+    selectedRange: buildPeriodStats(billableSelected.get(c.id) ?? 0, c.fteCount, wdSelected),
+    last3m:  buildPeriodStats(billable3m.get(c.id)  ?? 0, c.fteCount, wd3m),
+    last6m:  buildPeriodStats(billable6m.get(c.id)  ?? 0, c.fteCount, wd6m),
+    last12m: buildPeriodStats(billable12m.get(c.id) ?? 0, c.fteCount, wd12m),
+  }));
+
+  // Monthly chart — only when a specific client is requested
+  let monthlySummary: object[] | null = null;
+
+  if (focusClientId) {
+    // Verify access
+    if (visibleClientIds !== null && !visibleClientIds.includes(focusClientId)) {
+      res.status(403).json({ error: "Access to this client is not permitted" });
       return;
     }
-    entryConditions.push(inArray(timeEntriesTable.userId, scopedUserIds) as any);
+    const focusClient = clientRows.find((c) => c.id === focusClientId);
+    if (!focusClient) { res.json({ clientSummary, monthlySummary: [] }); return; }
+
+    const clientProjects = await db.select({ id: projectsTable.id }).from(projectsTable).where(eq(projectsTable.clientId, focusClientId));
+    const projectIds = clientProjects.map((p) => p.id);
+
+    if (projectIds.length > 0) {
+      const entryConds: Parameters<typeof and>[0][] = [
+        gte(timeEntriesTable.date, start),
+        lte(timeEntriesTable.date, end),
+        inArray(timeEntriesTable.projectId, projectIds) as any,
+      ];
+      if (scopedUserIds !== null && scopedUserIds.length > 0) {
+        entryConds.push(inArray(timeEntriesTable.userId, scopedUserIds) as any);
+      }
+
+      // Use a string literal for the TO_CHAR expression so SELECT and GROUP BY
+      // generate byte-for-byte identical SQL (avoiding Drizzle's context-dependent
+      // table-prefix behaviour which makes PostgreSQL reject the GROUP BY).
+      const monthExpr = sql<string>`TO_CHAR("time_entries"."date", 'YYYY-MM')`;
+
+      const monthlyRows = await db
+        .select({
+          month: monthExpr,
+          billableHours: sql<number>`COALESCE(SUM("time_entries"."billable_hours"), 0)`,
+        })
+        .from(timeEntriesTable)
+        .where(and(...entryConds))
+        .groupBy(monthExpr)
+        .orderBy(monthExpr);
+
+      // Build a map of month → billableHours, then fill in all months in the range
+      const billableByMonth = new Map(monthlyRows.map((r) => [r.month, Number(r.billableHours)]));
+
+      const months = eachMonthOfInterval({ start: new Date(start), end: new Date(end) });
+      monthlySummary = months.map((monthDate) => {
+        const monthStr = format(monthDate, "yyyy-MM");
+        const mStart = format(startOfMonth(monthDate), "yyyy-MM-dd");
+        const mEnd   = format(endOfMonth(monthDate), "yyyy-MM-dd");
+        // Cap to the requested range
+        const wStart = mStart < start ? start : mStart;
+        const wEnd   = mEnd > end ? end : mEnd;
+        const wd = countWorkingDays(wStart, wEnd, holidaySet);
+        const contracted = focusClient.fteCount * wd * 8;
+        const billable = billableByMonth.get(monthStr) ?? 0;
+        return {
+          month: monthStr,
+          billableHours: billable,
+          contractedHours: contracted,
+          utilization: contracted > 0 ? Math.round((billable / contracted) * 1000) / 10 : 0,
+        };
+      });
+    } else {
+      monthlySummary = [];
+    }
   }
-  const entryWhere = and(...entryConditions);
 
-  // Monthly summary
-  const monthlySummaryRaw = await db
-    .select({
-      month: sql<string>`TO_CHAR(${timeEntriesTable.date}, 'YYYY-MM')`,
-      totalHours: sql<number>`SUM(${timeEntriesTable.hours})`,
-      billableHours: sql<number>`SUM(COALESCE(${timeEntriesTable.billableHours}, 0))`,
-    })
-    .from(timeEntriesTable)
-    .where(entryWhere)
-    .groupBy(sql`TO_CHAR(${timeEntriesTable.date}, 'YYYY-MM')`)
-    .orderBy(sql`TO_CHAR(${timeEntriesTable.date}, 'YYYY-MM')`);
-
-  // Member breakdown
-  const memberBreakdownRaw = await db
-    .select({
-      userId: usersTable.id,
-      userName: usersTable.name,
-      role: usersTable.role,
-      totalHours: sql<number>`COALESCE(SUM(${timeEntriesTable.hours}), 0)`,
-      billableHours: sql<number>`COALESCE(SUM(COALESCE(${timeEntriesTable.billableHours}, 0)), 0)`,
-    })
-    .from(usersTable)
-    .innerJoin(timeEntriesTable, and(eq(timeEntriesTable.userId, usersTable.id), entryWhere))
-    .groupBy(usersTable.id, usersTable.name, usersTable.role)
-    .orderBy(usersTable.name);
-
-  res.json({
-    monthlySummary: monthlySummaryRaw.map((r) => ({
-      month: r.month,
-      totalHours: Number(r.totalHours),
-      billableHours: Number(r.billableHours),
-      nonBillableHours: Number(r.totalHours) - Number(r.billableHours),
-    })),
-    memberBreakdown: memberBreakdownRaw.map((r) => ({
-      userId: r.userId,
-      userName: r.userName,
-      role: r.role,
-      totalHours: Number(r.totalHours),
-      billableHours: Number(r.billableHours),
-      nonBillableHours: Number(r.totalHours) - Number(r.billableHours),
-    })),
-  });
+  res.json({ clientSummary, monthlySummary });
 });
 
 // ─── GET /team-report ─────────────────────────────────────────────────────────
-// Hours by Project and Task for selected users and clients.
+// Hours by User → Client → Project → Task
 
 router.get("/team-report", async (req, res): Promise<void> => {
   const currentRole = (req as any)._reporterRole as string;
@@ -291,152 +329,131 @@ router.get("/team-report", async (req, res): Promise<void> => {
     req.query as Record<string, string | string[] | undefined>;
 
   const { start, end } = resolveRange(startDate as string | undefined, endDate as string | undefined);
-  const filterUserIds = parseIds(rawUserIds as string | undefined);
+  const filterUserIds   = parseIds(rawUserIds as string | undefined);
   const filterClientIds = parseIds(rawClientIds as string | undefined);
 
   const { scopedUserIds, scopedClientIds } = await resolveScope(currentUserId, currentRole);
 
-  const effectiveUserIds = intersect(scopedUserIds, filterUserIds);
+  const effectiveUserIds   = intersect(scopedUserIds, filterUserIds);
   const effectiveClientIds = intersect(scopedClientIds, filterClientIds);
 
   if (effectiveUserIds !== null && effectiveUserIds.length === 0) { res.json([]); return; }
   if (effectiveClientIds !== null && effectiveClientIds.length === 0) { res.json([]); return; }
 
-  // Resolve project IDs from client scope
   let effectiveProjectIds: number[] | null = null;
   if (effectiveClientIds !== null) {
-    const projRows = await db
-      .select({ id: projectsTable.id })
-      .from(projectsTable)
-      .where(inArray(projectsTable.clientId, effectiveClientIds));
+    const projRows = await db.select({ id: projectsTable.id }).from(projectsTable).where(inArray(projectsTable.clientId, effectiveClientIds));
     if (projRows.length === 0) { res.json([]); return; }
     effectiveProjectIds = projRows.map((r) => r.id);
   }
 
-  const entryConds: Parameters<typeof and>[0][] = [
+  const conds: Parameters<typeof and>[0][] = [
     gte(timeEntriesTable.date, start),
     lte(timeEntriesTable.date, end),
   ];
-  if (effectiveUserIds) entryConds.push(inArray(timeEntriesTable.userId, effectiveUserIds) as any);
-  if (effectiveProjectIds) entryConds.push(inArray(timeEntriesTable.projectId, effectiveProjectIds) as any);
+  if (effectiveUserIds)    conds.push(inArray(timeEntriesTable.userId,    effectiveUserIds) as any);
+  if (effectiveProjectIds) conds.push(inArray(timeEntriesTable.projectId, effectiveProjectIds) as any);
 
   const rows = await db
     .select({
-      clientId: clientsTable.id,
+      userId:    usersTable.id,
+      userName:  usersTable.name,
+      userRole:  usersTable.role,
+      clientId:  clientsTable.id,
       clientName: clientsTable.name,
-      projectId: projectsTable.id,
+      projectId:  projectsTable.id,
       projectName: projectsTable.name,
-      taskId: tasksTable.id,
-      taskName: tasksTable.name,
-      totalHours: sql<number>`SUM(${timeEntriesTable.hours})`,
+      taskId:    tasksTable.id,
+      taskName:  tasksTable.name,
+      totalHours:   sql<number>`SUM(${timeEntriesTable.hours})`,
       billableHours: sql<number>`SUM(COALESCE(${timeEntriesTable.billableHours}, 0))`,
     })
     .from(timeEntriesTable)
+    .innerJoin(usersTable,    eq(usersTable.id,    timeEntriesTable.userId))
     .innerJoin(projectsTable, eq(projectsTable.id, timeEntriesTable.projectId))
-    .innerJoin(clientsTable, eq(clientsTable.id, projectsTable.clientId))
-    .innerJoin(tasksTable, eq(tasksTable.id, timeEntriesTable.taskId))
-    .where(and(...entryConds))
-    .groupBy(clientsTable.id, clientsTable.name, projectsTable.id, projectsTable.name, tasksTable.id, tasksTable.name)
-    .orderBy(clientsTable.name, projectsTable.name, tasksTable.name);
+    .innerJoin(clientsTable,  eq(clientsTable.id,  projectsTable.clientId))
+    .innerJoin(tasksTable,    eq(tasksTable.id,    timeEntriesTable.taskId))
+    .where(and(...conds))
+    .groupBy(
+      usersTable.id, usersTable.name, usersTable.role,
+      clientsTable.id, clientsTable.name,
+      projectsTable.id, projectsTable.name,
+      tasksTable.id, tasksTable.name,
+    )
+    .orderBy(usersTable.name, clientsTable.name, projectsTable.name, tasksTable.name);
 
-  res.json(
-    rows.map((r) => ({
-      clientId: r.clientId,
-      clientName: r.clientName,
-      projectId: r.projectId,
-      projectName: r.projectName,
-      taskId: r.taskId,
-      taskName: r.taskName,
-      totalHours: Number(r.totalHours),
-      billableHours: Number(r.billableHours),
-      nonBillableHours: Number(r.totalHours) - Number(r.billableHours),
-    })),
-  );
+  res.json(rows.map((r) => {
+    const total   = Number(r.totalHours);
+    const billable = Number(r.billableHours);
+    return {
+      userId: r.userId, userName: r.userName, userRole: r.userRole,
+      clientId: r.clientId, clientName: r.clientName,
+      projectId: r.projectId, projectName: r.projectName,
+      taskId: r.taskId, taskName: r.taskName,
+      totalHours: total,
+      billableHours: billable,
+      nonBillableHours: total - billable,
+      efficiency: total > 0 ? Math.round((billable / total) * 1000) / 10 : 0,
+    };
+  }));
 });
 
 // ─── GET /my-report ───────────────────────────────────────────────────────────
-// Current user's hours by Project and Task with utilization + efficiency summary.
 
 router.get("/my-report", async (req, res): Promise<void> => {
   const currentUserId = (req as any)._reporterUserId as number;
-
   const { startDate, endDate } = req.query as Record<string, string | undefined>;
   const { start, end } = resolveRange(startDate, endDate);
 
   const [rows, holidaySet] = await Promise.all([
     db
       .select({
-        clientId: clientsTable.id,
+        clientId:   clientsTable.id,
         clientName: clientsTable.name,
-        projectId: projectsTable.id,
+        projectId:  projectsTable.id,
         projectName: projectsTable.name,
-        taskId: tasksTable.id,
+        taskId:   tasksTable.id,
         taskName: tasksTable.name,
-        totalHours: sql<number>`SUM(${timeEntriesTable.hours})`,
+        totalHours:   sql<number>`SUM(${timeEntriesTable.hours})`,
         billableHours: sql<number>`SUM(COALESCE(${timeEntriesTable.billableHours}, 0))`,
       })
       .from(timeEntriesTable)
       .innerJoin(projectsTable, eq(projectsTable.id, timeEntriesTable.projectId))
-      .innerJoin(clientsTable, eq(clientsTable.id, projectsTable.clientId))
-      .innerJoin(tasksTable, eq(tasksTable.id, timeEntriesTable.taskId))
-      .where(
-        and(
-          eq(timeEntriesTable.userId, currentUserId),
-          gte(timeEntriesTable.date, start),
-          lte(timeEntriesTable.date, end),
-        ),
-      )
+      .innerJoin(clientsTable,  eq(clientsTable.id,  projectsTable.clientId))
+      .innerJoin(tasksTable,    eq(tasksTable.id,    timeEntriesTable.taskId))
+      .where(and(eq(timeEntriesTable.userId, currentUserId), gte(timeEntriesTable.date, start), lte(timeEntriesTable.date, end)))
       .groupBy(clientsTable.id, clientsTable.name, projectsTable.id, projectsTable.name, tasksTable.id, tasksTable.name)
       .orderBy(clientsTable.name, projectsTable.name, tasksTable.name),
     fetchHolidaySet(start, end),
   ]);
 
-  const leaveRows = await db
-    .select({ date: leavesTable.date })
-    .from(leavesTable)
-    .where(
-      and(
-        eq(leavesTable.userId, currentUserId),
-        gte(leavesTable.date, start),
-        lte(leavesTable.date, end),
-      ),
-    );
+  const leaveRows = await db.select({ date: leavesTable.date }).from(leavesTable)
+    .where(and(eq(leavesTable.userId, currentUserId), gte(leavesTable.date, start), lte(leavesTable.date, end)));
 
   const workingDays = countWorkingDays(start, end, holidaySet);
-  const leaveDays = leaveRows.filter((l) => {
-    const d = new Date(l.date).getDay();
-    return d > 0 && d < 6 && !holidaySet.has(l.date);
-  }).length;
+  const leaveDays = leaveRows.filter((l) => { const d = new Date(l.date).getDay(); return d > 0 && d < 6 && !holidaySet.has(l.date); }).length;
   const availableDays = Math.max(workingDays - leaveDays, 0);
   const targetHours = availableDays * 8;
 
   const entries = rows.map((r) => ({
-    clientId: r.clientId,
-    clientName: r.clientName,
-    projectId: r.projectId,
-    projectName: r.projectName,
-    taskId: r.taskId,
-    taskName: r.taskName,
+    clientId: r.clientId, clientName: r.clientName,
+    projectId: r.projectId, projectName: r.projectName,
+    taskId: r.taskId, taskName: r.taskName,
     totalHours: Number(r.totalHours),
     billableHours: Number(r.billableHours),
     nonBillableHours: Number(r.totalHours) - Number(r.billableHours),
   }));
 
-  const totalHours = entries.reduce((s, e) => s + e.totalHours, 0);
+  const totalHours   = entries.reduce((s, e) => s + e.totalHours, 0);
   const billableHours = entries.reduce((s, e) => s + e.billableHours, 0);
 
   res.json({
     entries,
     summary: {
-      workingDays,
-      leaveDays,
-      availableDays,
-      targetHours,
-      totalHours,
-      billableHours,
+      workingDays, leaveDays, availableDays, targetHours, totalHours, billableHours,
       nonBillableHours: totalHours - billableHours,
       utilization: targetHours > 0 ? Math.round((billableHours / targetHours) * 1000) / 10 : 0,
-      efficiency: totalHours > 0 ? Math.round((billableHours / totalHours) * 1000) / 10 : 0,
+      efficiency:  totalHours  > 0 ? Math.round((billableHours / totalHours)  * 1000) / 10 : 0,
     },
   });
 });

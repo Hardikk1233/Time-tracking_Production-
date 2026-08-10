@@ -5,10 +5,10 @@
  * Time Tracking API
  * OpenAPI spec version: 0.1.0
  */
-import type { MemberHoursBreakdown } from './memberHoursBreakdown';
-import type { MonthlyHoursSummary } from './monthlyHoursSummary';
+import type { ClientUtilizationRow } from './clientUtilizationRow';
+import type { MonthlyClientRow } from './monthlyClientRow';
 
 export interface ClientReport {
-  monthlySummary: MonthlyHoursSummary[];
-  memberBreakdown: MemberHoursBreakdown[];
+  clientSummary: ClientUtilizationRow[];
+  monthlySummary?: MonthlyClientRow[] | null;
 }

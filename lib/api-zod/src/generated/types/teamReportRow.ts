@@ -5,8 +5,12 @@
  * Time Tracking API
  * OpenAPI spec version: 0.1.0
  */
+import type { TeamReportRowUserRole } from './teamReportRowUserRole';
 
 export interface TeamReportRow {
+  userId: number;
+  userName: string;
+  userRole: TeamReportRowUserRole;
   clientId: number;
   clientName: string;
   projectId: number;
@@ -16,4 +20,6 @@ export interface TeamReportRow {
   totalHours: number;
   billableHours: number;
   nonBillableHours: number;
+  /** billableHours / totalHours × 100 */
+  efficiency: number;
 }

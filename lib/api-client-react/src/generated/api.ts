@@ -4232,7 +4232,7 @@ export function useGetReportFilterOptions<TData = Awaited<ReturnType<typeof getR
 
 
 
-export const getGetClientReportUrl = (params: GetClientReportParams,) => {
+export const getGetClientReportUrl = (params?: GetClientReportParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
@@ -4248,9 +4248,9 @@ export const getGetClientReportUrl = (params: GetClientReportParams,) => {
 }
 
 /**
- * @summary Monthly hours summary + per-member breakdown for a client
+ * @summary Per-client utilization table (all windows) + optional monthly chart for one client
  */
-export const getClientReport = async (params: GetClientReportParams, options?: Parameters<typeof customFetch>[1]): Promise<ClientReport> => {
+export const getClientReport = async (params?: GetClientReportParams, options?: Parameters<typeof customFetch>[1]): Promise<ClientReport> => {
 
   return customFetch<ClientReport>(getGetClientReportUrl(params),
   {
@@ -4272,7 +4272,7 @@ export const getGetClientReportQueryKey = (params?: GetClientReportParams,) => {
     }
 
 
-export const getGetClientReportQueryOptions = <TData = Awaited<ReturnType<typeof getClientReport>>, TError = ErrorType<unknown>>(params: GetClientReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClientReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetClientReportQueryOptions = <TData = Awaited<ReturnType<typeof getClientReport>>, TError = ErrorType<unknown>>(params?: GetClientReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClientReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -4295,11 +4295,11 @@ export type GetClientReportQueryError = ErrorType<unknown>
 
 
 /**
- * @summary Monthly hours summary + per-member breakdown for a client
+ * @summary Per-client utilization table (all windows) + optional monthly chart for one client
  */
 
 export function useGetClientReport<TData = Awaited<ReturnType<typeof getClientReport>>, TError = ErrorType<unknown>>(
- params: GetClientReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClientReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: GetClientReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClientReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 

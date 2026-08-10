@@ -6,10 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface MonthlyHoursSummary {
+export interface MonthlyClientRow {
   /** YYYY-MM */
   month: string;
-  totalHours: number;
   billableHours: number;
-  nonBillableHours: number;
+  contractedHours: number;
+  utilization: number;
 }

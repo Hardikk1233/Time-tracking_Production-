@@ -7,7 +7,7 @@
  */
 
 export type GetClientReportParams = {
-clientId: number;
+clientId?: number;
 startDate?: Date;
 endDate?: Date;
 };
