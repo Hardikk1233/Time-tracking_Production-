@@ -16,5 +16,6 @@ export interface User {
   reportingToId?: number | null;
   /** @nullable */
   reportingToName?: string | null;
+  isActive?: boolean;
   createdAt: Date;
 }

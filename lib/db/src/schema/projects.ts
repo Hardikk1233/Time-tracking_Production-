@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, timestamp, boolean } from "drizzle-orm/pg-core";
 import { clientsTable } from "./clients";
 
 export const projectsTable = pgTable("projects", {
@@ -8,6 +8,7 @@ export const projectsTable = pgTable("projects", {
     .references(() => clientsTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   description: text("description"),
+  isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

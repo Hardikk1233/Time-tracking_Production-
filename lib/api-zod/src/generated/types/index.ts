@@ -7,6 +7,8 @@
  */
 
 export * from './client';
+export * from './clientFteHistory';
+export * from './clientFteHistoryInput';
 export * from './clientHours';
 export * from './clientHoursTrendPoint';
 export * from './clientInput';

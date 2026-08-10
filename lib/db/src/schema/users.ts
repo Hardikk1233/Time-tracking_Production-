@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, timestamp, boolean } from "drizzle-orm/pg-core";
 
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -9,6 +9,7 @@ export const usersTable = pgTable("users", {
     .notNull()
     .default("analyst"),
   reportingToId: integer("reporting_to_id"),
+  isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

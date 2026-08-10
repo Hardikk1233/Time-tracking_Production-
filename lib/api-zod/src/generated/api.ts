@@ -24,6 +24,8 @@ export const LoginBody = zod.object({
   "password": zod.string()
 })
 
+export const loginResponseIsActiveDefault = true;
+
 export const LoginResponse = zod.object({
   "id": zod.int(),
   "name": zod.string(),
@@ -31,6 +33,7 @@ export const LoginResponse = zod.object({
   "role": zod.enum(['analyst', 'associate', 'avp', 'md']),
   "reportingToId": zod.int().nullish(),
   "reportingToName": zod.string().nullish(),
+  "isActive": zod.boolean().default(loginResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
 
@@ -46,6 +49,8 @@ export const LogoutResponse = zod.object({
 /**
  * @summary Get current user
  */
+export const getMeResponseIsActiveDefault = true;
+
 export const GetMeResponse = zod.object({
   "id": zod.int(),
   "name": zod.string(),
@@ -53,6 +58,7 @@ export const GetMeResponse = zod.object({
   "role": zod.enum(['analyst', 'associate', 'avp', 'md']),
   "reportingToId": zod.int().nullish(),
   "reportingToName": zod.string().nullish(),
+  "isActive": zod.boolean().default(getMeResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
 
@@ -65,6 +71,8 @@ export const ListUsersQueryParams = zod.object({
   "reportingToId": zod.coerce.number().int().optional()
 })
 
+export const listUsersResponseIsActiveDefault = true;
+
 export const ListUsersResponseItem = zod.object({
   "id": zod.int(),
   "name": zod.string(),
@@ -72,6 +80,7 @@ export const ListUsersResponseItem = zod.object({
   "role": zod.enum(['analyst', 'associate', 'avp', 'md']),
   "reportingToId": zod.int().nullish(),
   "reportingToName": zod.string().nullish(),
+  "isActive": zod.boolean().default(listUsersResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
 export const ListUsersResponse = zod.array(ListUsersResponseItem)
@@ -93,6 +102,8 @@ export const CreateUserBody = zod.object({
   "reportingToId": zod.int().nullish()
 })
 
+export const createUserResponseIsActiveDefault = true;
+
 export const CreateUserResponse = zod.object({
   "id": zod.int(),
   "name": zod.string(),
@@ -100,6 +111,7 @@ export const CreateUserResponse = zod.object({
   "role": zod.enum(['analyst', 'associate', 'avp', 'md']),
   "reportingToId": zod.int().nullish(),
   "reportingToName": zod.string().nullish(),
+  "isActive": zod.boolean().default(createUserResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
 
@@ -111,6 +123,8 @@ export const GetUserParams = zod.object({
   "userId": zod.coerce.number().int()
 })
 
+export const getUserResponseIsActiveDefault = true;
+
 export const GetUserResponse = zod.object({
   "id": zod.int(),
   "name": zod.string(),
@@ -118,6 +132,7 @@ export const GetUserResponse = zod.object({
   "role": zod.enum(['analyst', 'associate', 'avp', 'md']),
   "reportingToId": zod.int().nullish(),
   "reportingToName": zod.string().nullish(),
+  "isActive": zod.boolean().default(getUserResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
 
@@ -139,8 +154,11 @@ export const UpdateUserBody = zod.object({
   "email": zod.email().optional(),
   "role": zod.enum(['analyst', 'associate', 'avp', 'md']).optional(),
   "reportingToId": zod.int().nullish(),
-  "password": zod.string().min(updateUserBodyPasswordMin).optional()
+  "password": zod.string().min(updateUserBodyPasswordMin).optional(),
+  "isActive": zod.boolean().optional()
 })
+
+export const updateUserResponseIsActiveDefault = true;
 
 export const UpdateUserResponse = zod.object({
   "id": zod.int(),
@@ -149,6 +167,7 @@ export const UpdateUserResponse = zod.object({
   "role": zod.enum(['analyst', 'associate', 'avp', 'md']),
   "reportingToId": zod.int().nullish(),
   "reportingToName": zod.string().nullish(),
+  "isActive": zod.boolean().default(updateUserResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
 
@@ -171,13 +190,14 @@ export const DeleteUserResponse = zod.object({
 export const listClientsResponseFteCountMin = 0.1;
 export const listClientsResponseFteCountMax = 100;
 
-
+export const listClientsResponseIsActiveDefault = true;
 
 export const ListClientsResponseItem = zod.object({
   "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish(),
   "fteCount": zod.number().min(listClientsResponseFteCountMin).max(listClientsResponseFteCountMax).describe('Number of full-time equivalents; 1 FTE = 8h\/day, 40h\/week, 160h\/month'),
+  "isActive": zod.boolean().default(listClientsResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
 export const ListClientsResponse = zod.array(ListClientsResponseItem)
@@ -203,13 +223,14 @@ export const CreateClientBody = zod.object({
 export const createClientResponseFteCountMin = 0.1;
 export const createClientResponseFteCountMax = 100;
 
-
+export const createClientResponseIsActiveDefault = true;
 
 export const CreateClientResponse = zod.object({
   "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish(),
   "fteCount": zod.number().min(createClientResponseFteCountMin).max(createClientResponseFteCountMax).describe('Number of full-time equivalents; 1 FTE = 8h\/day, 40h\/week, 160h\/month'),
+  "isActive": zod.boolean().default(createClientResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
 
@@ -224,13 +245,14 @@ export const GetClientParams = zod.object({
 export const getClientResponseFteCountMin = 0.1;
 export const getClientResponseFteCountMax = 100;
 
-
+export const getClientResponseIsActiveDefault = true;
 
 export const GetClientResponse = zod.object({
   "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish(),
   "fteCount": zod.number().min(getClientResponseFteCountMin).max(getClientResponseFteCountMax).describe('Number of full-time equivalents; 1 FTE = 8h\/day, 40h\/week, 160h\/month'),
+  "isActive": zod.boolean().default(getClientResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
 
@@ -251,19 +273,21 @@ export const updateClientBodyFteCountMax = 100;
 export const UpdateClientBody = zod.object({
   "name": zod.string().min(1).optional(),
   "description": zod.string().nullish(),
-  "fteCount": zod.number().min(updateClientBodyFteCountMin).max(updateClientBodyFteCountMax).optional()
+  "fteCount": zod.number().min(updateClientBodyFteCountMin).max(updateClientBodyFteCountMax).optional(),
+  "isActive": zod.boolean().optional()
 })
 
 export const updateClientResponseFteCountMin = 0.1;
 export const updateClientResponseFteCountMax = 100;
 
-
+export const updateClientResponseIsActiveDefault = true;
 
 export const UpdateClientResponse = zod.object({
   "id": zod.int(),
   "name": zod.string(),
   "description": zod.string().nullish(),
   "fteCount": zod.number().min(updateClientResponseFteCountMin).max(updateClientResponseFteCountMax).describe('Number of full-time equivalents; 1 FTE = 8h\/day, 40h\/week, 160h\/month'),
+  "isActive": zod.boolean().default(updateClientResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
 
@@ -287,6 +311,8 @@ export const ListClientAssignmentsParams = zod.object({
   "clientId": zod.coerce.number().int()
 })
 
+export const listClientAssignmentsResponseIsActiveDefault = true;
+
 export const ListClientAssignmentsResponseItem = zod.object({
   "id": zod.int(),
   "name": zod.string(),
@@ -294,6 +320,7 @@ export const ListClientAssignmentsResponseItem = zod.object({
   "role": zod.enum(['analyst', 'associate', 'avp', 'md']),
   "reportingToId": zod.int().nullish(),
   "reportingToName": zod.string().nullish(),
+  "isActive": zod.boolean().default(listClientAssignmentsResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
 export const ListClientAssignmentsResponse = zod.array(ListClientAssignmentsResponseItem)
@@ -329,11 +356,82 @@ export const RemoveUserFromClientResponse = zod.object({
 
 
 /**
+ * @summary List FTE history for a client
+ */
+export const ListClientFteHistoryParams = zod.object({
+  "clientId": zod.coerce.number().int()
+})
+
+export const listClientFteHistoryResponseFteCountMin = 0.1;
+export const listClientFteHistoryResponseFteCountMax = 100;
+
+
+
+export const ListClientFteHistoryResponseItem = zod.object({
+  "id": zod.int(),
+  "clientId": zod.int(),
+  "fteCount": zod.number().min(listClientFteHistoryResponseFteCountMin).max(listClientFteHistoryResponseFteCountMax),
+  "effectiveFrom": zod.coerce.date().describe('First day this FTE count applies (YYYY-MM-DD)'),
+  "effectiveTo": zod.coerce.date().nullish().describe('Last day this FTE count applies; null means open-ended (current)'),
+  "createdAt": zod.coerce.date()
+})
+export const ListClientFteHistoryResponse = zod.array(ListClientFteHistoryResponseItem)
+
+
+/**
+ * @summary Add an FTE history entry for a client
+ */
+export const AddClientFteHistoryParams = zod.object({
+  "clientId": zod.coerce.number().int()
+})
+
+export const addClientFteHistoryBodyFteCountMin = 0.1;
+export const addClientFteHistoryBodyFteCountMax = 100;
+
+
+
+export const AddClientFteHistoryBody = zod.object({
+  "fteCount": zod.number().min(addClientFteHistoryBodyFteCountMin).max(addClientFteHistoryBodyFteCountMax),
+  "effectiveFrom": zod.coerce.date(),
+  "effectiveTo": zod.coerce.date().nullish()
+})
+
+export const addClientFteHistoryResponseFteCountMin = 0.1;
+export const addClientFteHistoryResponseFteCountMax = 100;
+
+
+
+export const AddClientFteHistoryResponse = zod.object({
+  "id": zod.int(),
+  "clientId": zod.int(),
+  "fteCount": zod.number().min(addClientFteHistoryResponseFteCountMin).max(addClientFteHistoryResponseFteCountMax),
+  "effectiveFrom": zod.coerce.date().describe('First day this FTE count applies (YYYY-MM-DD)'),
+  "effectiveTo": zod.coerce.date().nullish().describe('Last day this FTE count applies; null means open-ended (current)'),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete an FTE history entry
+ */
+export const DeleteClientFteHistoryParams = zod.object({
+  "clientId": zod.coerce.number().int(),
+  "entryId": zod.coerce.number().int()
+})
+
+export const DeleteClientFteHistoryResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
  * @summary List projects
  */
 export const ListProjectsQueryParams = zod.object({
   "clientId": zod.coerce.number().int().optional()
 })
+
+export const listProjectsResponseIsActiveDefault = true;
 
 export const ListProjectsResponseItem = zod.object({
   "id": zod.int(),
@@ -341,6 +439,7 @@ export const ListProjectsResponseItem = zod.object({
   "clientName": zod.string(),
   "name": zod.string(),
   "description": zod.string().nullish(),
+  "isActive": zod.boolean().default(listProjectsResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
 export const ListProjectsResponse = zod.array(ListProjectsResponseItem)
@@ -360,12 +459,15 @@ export const CreateProjectBody = zod.object({
   "userIds": zod.array(zod.int()).optional().describe('Users who can access this project')
 })
 
+export const createProjectResponseIsActiveDefault = true;
+
 export const CreateProjectResponse = zod.object({
   "id": zod.int(),
   "clientId": zod.int(),
   "clientName": zod.string(),
   "name": zod.string(),
   "description": zod.string().nullish(),
+  "isActive": zod.boolean().default(createProjectResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
 
@@ -377,12 +479,15 @@ export const GetProjectParams = zod.object({
   "projectId": zod.coerce.number().int()
 })
 
+export const getProjectResponseIsActiveDefault = true;
+
 export const GetProjectResponse = zod.object({
   "id": zod.int(),
   "clientId": zod.int(),
   "clientName": zod.string(),
   "name": zod.string(),
   "description": zod.string().nullish(),
+  "isActive": zod.boolean().default(getProjectResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
 
@@ -399,8 +504,11 @@ export const UpdateProjectParams = zod.object({
 
 export const UpdateProjectBody = zod.object({
   "name": zod.string().min(1).optional(),
-  "description": zod.string().nullish()
+  "description": zod.string().nullish(),
+  "isActive": zod.boolean().optional()
 })
+
+export const updateProjectResponseIsActiveDefault = true;
 
 export const UpdateProjectResponse = zod.object({
   "id": zod.int(),
@@ -408,6 +516,7 @@ export const UpdateProjectResponse = zod.object({
   "clientName": zod.string(),
   "name": zod.string(),
   "description": zod.string().nullish(),
+  "isActive": zod.boolean().default(updateProjectResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
 
@@ -431,6 +540,8 @@ export const ListProjectAssignmentsParams = zod.object({
   "projectId": zod.coerce.number().int()
 })
 
+export const listProjectAssignmentsResponseIsActiveDefault = true;
+
 export const ListProjectAssignmentsResponseItem = zod.object({
   "id": zod.int(),
   "name": zod.string(),
@@ -438,6 +549,7 @@ export const ListProjectAssignmentsResponseItem = zod.object({
   "role": zod.enum(['analyst', 'associate', 'avp', 'md']),
   "reportingToId": zod.int().nullish(),
   "reportingToName": zod.string().nullish(),
+  "isActive": zod.boolean().default(listProjectAssignmentsResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
 export const ListProjectAssignmentsResponse = zod.array(ListProjectAssignmentsResponseItem)

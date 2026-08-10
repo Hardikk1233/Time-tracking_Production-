@@ -21,6 +21,7 @@ async function formatUser(user: typeof usersTable.$inferSelect) {
     role: user.role,
     reportingToId: user.reportingToId ?? null,
     reportingToName,
+    isActive: user.isActive,
     createdAt: user.createdAt,
   };
 }
@@ -139,12 +140,13 @@ router.patch("/users/:userId", async (req, res): Promise<void> => {
     return;
   }
 
-  const { name, email, role, reportingToId, password } = req.body as {
+  const { name, email, role, reportingToId, password, isActive } = req.body as {
     name?: string;
     email?: string;
     role?: string;
     reportingToId?: number | null;
     password?: string;
+    isActive?: boolean;
   };
 
   const updates: Partial<typeof usersTable.$inferInsert> = {};
@@ -153,6 +155,7 @@ router.patch("/users/:userId", async (req, res): Promise<void> => {
   if (role) updates.role = role as "analyst" | "associate" | "avp" | "md";
   if (reportingToId !== undefined) updates.reportingToId = reportingToId;
   if (password) updates.passwordHash = bcrypt.hashSync(password, 10);
+  if (isActive !== undefined) updates.isActive = isActive;
 
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No fields to update" });

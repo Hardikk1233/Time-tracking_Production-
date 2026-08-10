@@ -1,9 +1,10 @@
 import { Router, type IRouter } from "express";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, or, isNull, gte, lte } from "drizzle-orm";
 import {
   db,
   clientsTable,
   clientUsersTable,
+  clientFteHistoryTable,
   usersTable,
 } from "@workspace/db";
 
@@ -146,10 +147,11 @@ router.patch("/clients/:clientId", async (req, res): Promise<void> => {
     return;
   }
 
-  const { name, description, fteCount } = req.body as {
+  const { name, description, fteCount, isActive } = req.body as {
     name?: string;
     description?: string | null;
     fteCount?: number;
+    isActive?: boolean;
   };
 
   const updates: Partial<typeof clientsTable.$inferInsert> = {};
@@ -158,6 +160,7 @@ router.patch("/clients/:clientId", async (req, res): Promise<void> => {
   if (typeof fteCount === "number" && fteCount >= 0.1 && fteCount <= 100) {
     updates.fteCount = fteCount;
   }
+  if (isActive !== undefined) updates.isActive = isActive;
 
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No fields to update" });
@@ -313,6 +316,95 @@ router.delete(
       );
 
     res.json({ message: "User removed from client" });
+  },
+);
+
+// ─── Client FTE history ───────────────────────────────────────────────────────
+
+function parseClientId(raw: string | string[]): number {
+  return parseInt(Array.isArray(raw) ? raw[0] : raw, 10);
+}
+
+router.get(
+  "/clients/:clientId/fte-history",
+  async (req, res): Promise<void> => {
+    const clientId = parseClientId(req.params.clientId);
+    if (isNaN(clientId)) { res.status(400).json({ error: "Invalid client ID" }); return; }
+
+    const rows = await db
+      .select()
+      .from(clientFteHistoryTable)
+      .where(eq(clientFteHistoryTable.clientId, clientId))
+      .orderBy(clientFteHistoryTable.effectiveFrom);
+
+    res.json(rows);
+  },
+);
+
+router.post(
+  "/clients/:clientId/fte-history",
+  async (req, res): Promise<void> => {
+    const clientId = parseClientId(req.params.clientId);
+    if (isNaN(clientId)) { res.status(400).json({ error: "Invalid client ID" }); return; }
+
+    const role = await getCurrentUserRole(req.session.userId!);
+    if (!["avp", "md"].includes(role)) {
+      res.status(403).json({ error: "Only AVPs and MDs can manage FTE history" });
+      return;
+    }
+
+    const { fteCount, effectiveFrom, effectiveTo } = req.body as {
+      fteCount?: number;
+      effectiveFrom?: string;
+      effectiveTo?: string | null;
+    };
+
+    if (typeof fteCount !== "number" || fteCount < 0.1 || fteCount > 100) {
+      res.status(400).json({ error: "fteCount must be between 0.1 and 100" });
+      return;
+    }
+    if (!effectiveFrom || !/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)) {
+      res.status(400).json({ error: "effectiveFrom (YYYY-MM-DD) is required" });
+      return;
+    }
+    if (effectiveTo && !/^\d{4}-\d{2}-\d{2}$/.test(effectiveTo)) {
+      res.status(400).json({ error: "effectiveTo must be YYYY-MM-DD if provided" });
+      return;
+    }
+    if (effectiveTo && effectiveTo < effectiveFrom) {
+      res.status(400).json({ error: "effectiveTo must be on or after effectiveFrom" });
+      return;
+    }
+
+    const [row] = await db
+      .insert(clientFteHistoryTable)
+      .values({ clientId, fteCount, effectiveFrom, effectiveTo: effectiveTo ?? null })
+      .returning();
+
+    res.status(201).json(row);
+  },
+);
+
+router.delete(
+  "/clients/:clientId/fte-history/:entryId",
+  async (req, res): Promise<void> => {
+    const clientId = parseClientId(req.params.clientId);
+    const entryId = parseInt(Array.isArray(req.params.entryId) ? req.params.entryId[0] : req.params.entryId, 10);
+    if (isNaN(clientId) || isNaN(entryId)) { res.status(400).json({ error: "Invalid IDs" }); return; }
+
+    const role = await getCurrentUserRole(req.session.userId!);
+    if (!["avp", "md"].includes(role)) {
+      res.status(403).json({ error: "Only AVPs and MDs can manage FTE history" });
+      return;
+    }
+
+    const [deleted] = await db
+      .delete(clientFteHistoryTable)
+      .where(and(eq(clientFteHistoryTable.id, entryId), eq(clientFteHistoryTable.clientId, clientId)))
+      .returning();
+
+    if (!deleted) { res.status(404).json({ error: "FTE history entry not found" }); return; }
+    res.json({ message: "FTE history entry deleted" });
   },
 );
 

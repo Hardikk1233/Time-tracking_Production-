@@ -16,4 +16,5 @@ export interface UserUpdate {
   reportingToId?: number | null;
   /** @minLength 6 */
   password?: string;
+  isActive?: boolean;
 }

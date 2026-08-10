@@ -21,6 +21,8 @@ import type {
 
 import type {
   Client,
+  ClientFteHistory,
+  ClientFteHistoryInput,
   ClientHours,
   ClientHoursTrendPoint,
   ClientInput,
@@ -1357,6 +1359,228 @@ export const useRemoveUserFromClient = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getRemoveUserFromClientMutationOptions(options));
+    }
+
+export const getListClientFteHistoryUrl = (clientId: number,) => {
+
+
+
+
+  return `/api/clients/${clientId}/fte-history`
+}
+
+/**
+ * @summary List FTE history for a client
+ */
+export const listClientFteHistory = async (clientId: number, options?: Parameters<typeof customFetch>[1]): Promise<ClientFteHistory[]> => {
+
+  return customFetch<ClientFteHistory[]>(getListClientFteHistoryUrl(clientId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListClientFteHistoryQueryKey = (clientId: number,) => {
+    return [
+    `/api/clients/${clientId}/fte-history`
+    ] as const;
+    }
+
+
+export const getListClientFteHistoryQueryOptions = <TData = Awaited<ReturnType<typeof listClientFteHistory>>, TError = ErrorType<unknown>>(clientId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listClientFteHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListClientFteHistoryQueryKey(clientId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listClientFteHistory>>> = ({ signal }) => listClientFteHistory(clientId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: clientId !== null && clientId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listClientFteHistory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListClientFteHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof listClientFteHistory>>>
+export type ListClientFteHistoryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List FTE history for a client
+ */
+
+export function useListClientFteHistory<TData = Awaited<ReturnType<typeof listClientFteHistory>>, TError = ErrorType<unknown>>(
+ clientId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listClientFteHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListClientFteHistoryQueryOptions(clientId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAddClientFteHistoryUrl = (clientId: number,) => {
+
+
+
+
+  return `/api/clients/${clientId}/fte-history`
+}
+
+/**
+ * @summary Add an FTE history entry for a client
+ */
+export const addClientFteHistory = async (clientId: number,
+    clientFteHistoryInput: ClientFteHistoryInput, options?: Parameters<typeof customFetch>[1]): Promise<ClientFteHistory> => {
+
+  return customFetch<ClientFteHistory>(getAddClientFteHistoryUrl(clientId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(clientFteHistoryInput)
+  }
+);}
+
+
+
+
+
+export const getAddClientFteHistoryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addClientFteHistory>>, TError,{clientId: number;data: BodyType<ClientFteHistoryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof addClientFteHistory>>, TError,{clientId: number;data: BodyType<ClientFteHistoryInput>}, TContext> => {
+
+const mutationKey = ['addClientFteHistory'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addClientFteHistory>>, {clientId: number;data: BodyType<ClientFteHistoryInput>}> = (props) => {
+          const {clientId,data} = props ?? {};
+
+          return  addClientFteHistory(clientId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddClientFteHistoryMutationResult = NonNullable<Awaited<ReturnType<typeof addClientFteHistory>>>
+    export type AddClientFteHistoryMutationBody = BodyType<ClientFteHistoryInput>
+    export type AddClientFteHistoryMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Add an FTE history entry for a client
+ */
+export const useAddClientFteHistory = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addClientFteHistory>>, TError,{clientId: number;data: BodyType<ClientFteHistoryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof addClientFteHistory>>,
+        TError,
+        {clientId: number;data: BodyType<ClientFteHistoryInput>},
+        TContext
+      > => {
+      return useMutation(getAddClientFteHistoryMutationOptions(options));
+    }
+
+export const getDeleteClientFteHistoryUrl = (clientId: number,
+    entryId: number,) => {
+
+
+
+
+  return `/api/clients/${clientId}/fte-history/${entryId}`
+}
+
+/**
+ * @summary Delete an FTE history entry
+ */
+export const deleteClientFteHistory = async (clientId: number,
+    entryId: number, options?: Parameters<typeof customFetch>[1]): Promise<MessageResponse> => {
+
+  return customFetch<MessageResponse>(getDeleteClientFteHistoryUrl(clientId,entryId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteClientFteHistoryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteClientFteHistory>>, TError,{clientId: number;entryId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteClientFteHistory>>, TError,{clientId: number;entryId: number}, TContext> => {
+
+const mutationKey = ['deleteClientFteHistory'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteClientFteHistory>>, {clientId: number;entryId: number}> = (props) => {
+          const {clientId,entryId} = props ?? {};
+
+          return  deleteClientFteHistory(clientId,entryId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteClientFteHistoryMutationResult = NonNullable<Awaited<ReturnType<typeof deleteClientFteHistory>>>
+
+    export type DeleteClientFteHistoryMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete an FTE history entry
+ */
+export const useDeleteClientFteHistory = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteClientFteHistory>>, TError,{clientId: number;entryId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteClientFteHistory>>,
+        TError,
+        {clientId: number;entryId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteClientFteHistoryMutationOptions(options));
     }
 
 export const getListProjectsUrl = (params?: ListProjectsParams,) => {

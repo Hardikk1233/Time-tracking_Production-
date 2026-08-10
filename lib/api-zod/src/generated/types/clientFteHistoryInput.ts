@@ -6,15 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface ClientUpdate {
-  /** @minLength 1 */
-  name?: string;
-  /** @nullable */
-  description?: string | null;
+export interface ClientFteHistoryInput {
   /**
      * @minimum 0.1
      * @maximum 100
      */
-  fteCount?: number;
-  isActive?: boolean;
+  fteCount: number;
+  effectiveFrom: Date;
+  /** @nullable */
+  effectiveTo?: Date | null;
 }

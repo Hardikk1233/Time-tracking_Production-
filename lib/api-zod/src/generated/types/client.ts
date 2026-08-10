@@ -17,5 +17,6 @@ export interface Client {
      * @maximum 100
      */
   fteCount: number;
+  isActive?: boolean;
   createdAt: Date;
 }

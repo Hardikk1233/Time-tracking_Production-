@@ -3,6 +3,7 @@ import { useAuth } from '@/lib/auth';
 import {
   useListProjects,
   useCreateProject,
+  useUpdateProject,
   useDeleteProject,
   useListClients,
   useListTasks,
@@ -25,7 +26,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, Trash2, FolderKanban, ChevronRight, Check } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Plus, Trash2, FolderKanban, ChevronRight, Check, PowerOff, Power } from 'lucide-react';
 
 const projectSchema = z.object({
   clientId: z.coerce.number().min(1, 'Client is required'),
@@ -43,16 +45,14 @@ export default function Projects() {
   
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [clientFilter, setClientFilter] = useState<string>('all');
+  const [showInactive, setShowInactive] = useState(false);
   
-  const queryParams = { 
-    ...(clientFilter !== 'all' ? { clientId: Number(clientFilter) } : {}) 
-  };
-  
+  const queryParams = { ...(clientFilter !== 'all' ? { clientId: Number(clientFilter) } : {}) };
   const { data: projects, isLoading } = useListProjects(queryParams);
   const { data: clients } = useListClients();
   const deleteMutation = useDeleteProject();
+  const updateMutation = useUpdateProject();
 
-  // Associates and above can create and delete projects
   const canManageProjects = ['associate', 'avp', 'md'].includes(user?.role || '');
 
   const handleDelete = (id: number) => {
@@ -61,10 +61,32 @@ export default function Projects() {
         onSuccess: () => {
           toast({ title: 'Project deleted' });
           queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+        },
+        onError: (err: any) => {
+          toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to delete.' });
         }
       });
     }
   };
+
+  const handleToggleActive = (id: number, currentlyActive: boolean) => {
+    updateMutation.mutate(
+      { projectId: id, data: { isActive: !currentlyActive } as any },
+      {
+        onSuccess: () => {
+          toast({ title: currentlyActive ? 'Project set to inactive' : 'Project reactivated' });
+          queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+        },
+        onError: (err: any) => {
+          toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to update.' });
+        }
+      }
+    );
+  };
+
+  const allProjects = projects || [];
+  const inactiveCount = allProjects.filter(p => p.isActive === false).length;
+  const displayed = allProjects.filter(p => showInactive || p.isActive !== false);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -74,9 +96,9 @@ export default function Projects() {
           <p className="text-muted-foreground font-mono text-sm mt-1">Client engagements and initiatives</p>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <Select value={clientFilter} onValueChange={setClientFilter}>
-            <SelectTrigger className="w-[200px] bg-card">
+            <SelectTrigger className="w-[180px] bg-card">
               <SelectValue placeholder="All Clients" />
             </SelectTrigger>
             <SelectContent>
@@ -86,6 +108,13 @@ export default function Projects() {
               ))}
             </SelectContent>
           </Select>
+
+          {canManageProjects && inactiveCount > 0 && (
+            <Button variant="outline" size="sm" onClick={() => setShowInactive(v => !v)} className="text-xs gap-1.5">
+              {showInactive ? <Power className="w-3.5 h-3.5" /> : <PowerOff className="w-3.5 h-3.5" />}
+              {showInactive ? 'Hide' : 'Show'} Inactive ({inactiveCount})
+            </Button>
+          )}
 
           {canManageProjects && (
             <CreateProjectDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} clients={clients || []} />
@@ -104,43 +133,66 @@ export default function Projects() {
               </CardContent>
             </Card>
           ))
-        ) : projects && projects.length > 0 ? (
-          projects.map(project => (
-            <Card key={project.id} className="shadow-sm border-border hover:border-primary/50 transition-colors group flex flex-col">
-              <CardContent className="p-6 flex flex-col h-full">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="p-2 bg-primary/10 rounded-md text-primary">
-                    <FolderKanban className="w-5 h-5" />
+        ) : displayed.length > 0 ? (
+          displayed.map(project => {
+            const isInactive = project.isActive === false;
+            return (
+              <Card key={project.id} className={`shadow-sm border-border hover:border-primary/50 transition-colors group flex flex-col ${isInactive ? 'opacity-60' : ''}`}>
+                <CardContent className="p-6 flex flex-col h-full">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className={`p-2 rounded-md ${isInactive ? 'bg-muted text-muted-foreground' : 'bg-primary/10 text-primary'}`}>
+                      <FolderKanban className="w-5 h-5" />
+                    </div>
+                    {canManageProjects && (
+                      <div className="flex gap-1 -mr-2 -mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title={isInactive ? 'Reactivate project' : 'Set inactive'}
+                          className={`h-8 w-8 ${isInactive ? 'text-emerald-600 hover:bg-emerald-50' : 'text-amber-500 hover:bg-amber-50'}`}
+                          onClick={(e) => { e.preventDefault(); handleToggleActive(project.id, !isInactive); }}
+                          disabled={updateMutation.isPending}
+                        >
+                          {isInactive ? <Power className="w-4 h-4" /> : <PowerOff className="w-4 h-4" />}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          onClick={(e) => { e.preventDefault(); handleDelete(project.id); }}
+                          disabled={deleteMutation.isPending}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
-                  {canManageProjects && (
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 -mr-2 -mt-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={(e) => { e.preventDefault(); handleDelete(project.id); }}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  )}
-                </div>
-                <div className="text-xs font-mono text-primary mb-1">{project.clientName}</div>
-                <h3 className="font-bold text-lg leading-tight text-foreground mb-2 line-clamp-1">{project.name}</h3>
-                <p className="text-sm text-muted-foreground line-clamp-2 mb-4 flex-1">
-                  {project.description || 'No description provided.'}
-                </p>
-                <div className="flex items-center justify-between mt-auto pt-4 border-t border-border/50">
-                  <span className="text-xs font-mono text-muted-foreground">
-                    Added {format(new Date(project.createdAt), 'MMM dd, yyyy')}
-                  </span>
-                  <Link href={`/projects/${project.id}`}>
-                    <Button variant="ghost" size="sm" className="h-8 text-primary hover:bg-primary/10 font-medium">
-                      Details <ChevronRight className="w-4 h-4 ml-1" />
-                    </Button>
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
-          ))
+                  <div className="text-xs font-mono text-primary mb-1">{project.clientName}</div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="font-bold text-lg leading-tight text-foreground line-clamp-1">{project.name}</h3>
+                    {isInactive && (
+                      <Badge variant="outline" className="text-[10px] font-mono text-amber-600 border-amber-300 bg-amber-50 shrink-0">
+                        INACTIVE
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground line-clamp-2 mb-4 flex-1">
+                    {project.description || 'No description provided.'}
+                  </p>
+                  <div className="flex items-center justify-between mt-auto pt-4 border-t border-border/50">
+                    <span className="text-xs font-mono text-muted-foreground">
+                      Added {format(new Date(project.createdAt), 'MMM dd, yyyy')}
+                    </span>
+                    <Link href={`/projects/${project.id}`}>
+                      <Button variant="ghost" size="sm" className="h-8 text-primary hover:bg-primary/10 font-medium">
+                        Details <ChevronRight className="w-4 h-4 ml-1" />
+                      </Button>
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })
         ) : (
           <div className="col-span-full py-12 text-center text-muted-foreground font-mono text-sm border border-dashed border-border rounded-lg">
             NO PROJECTS FOUND
@@ -151,41 +203,25 @@ export default function Projects() {
   );
 }
 
-function MultiSelectList({
-  items,
-  selectedIds,
-  onToggle,
-  emptyLabel,
-  renderLabel,
-}: {
-  items: { id: number; label: string }[];
+function MultiSelectList({ items, selectedIds, onToggle, emptyLabel, renderLabel }: {
+  items: { id: number }[];
   selectedIds: number[];
   onToggle: (id: number) => void;
   emptyLabel: string;
-  renderLabel?: (label: string) => React.ReactNode;
+  renderLabel: (item: any) => React.ReactNode;
 }) {
-  if (items.length === 0) {
-    return <p className="text-xs text-muted-foreground italic">{emptyLabel}</p>;
-  }
+  if (items.length === 0) return <p className="text-xs text-muted-foreground italic">{emptyLabel}</p>;
   return (
     <div className="grid grid-cols-1 gap-1 max-h-36 overflow-y-auto rounded-md border border-input bg-background p-2">
-      {items.map((item) => {
+      {items.map((item: any) => {
         const selected = selectedIds.includes(item.id);
         return (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => onToggle(item.id)}
-            className={`flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors text-left ${
-              selected ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted text-foreground'
-            }`}
-          >
-            <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
-              selected ? 'bg-primary border-primary' : 'border-input'
-            }`}>
-              {selected && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+          <button key={item.id} type="button" onClick={() => onToggle(item.id)}
+            className={`flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors text-left ${selected ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted'}`}>
+            <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-primary border-primary' : 'border-input'}`}>
+              {selected && <Check className="w-2.5 h-2.5 text-white" />}
             </div>
-            <span>{renderLabel ? renderLabel(item.label) : item.label}</span>
+            {renderLabel(item)}
           </button>
         );
       })}
@@ -193,29 +229,24 @@ function MultiSelectList({
   );
 }
 
-function CreateProjectDialog({ open, onOpenChange, clients }: { open: boolean, onOpenChange: (open: boolean) => void, clients: any[] }) {
+function CreateProjectDialog({ open, onOpenChange, clients }: { open: boolean; onOpenChange: (open: boolean) => void; clients: any[] }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const createMutation = useCreateProject();
-
-  const { data: allTasks } = useListTasks();
-  const { data: allUsers } = useListUsers();
+  const { data: tasks } = useListTasks();
+  const { data: users } = useListUsers();
 
   const form = useForm<ProjectForm>({
     resolver: zodResolver(projectSchema),
-    defaultValues: { clientId: undefined, name: '', description: '', taskIds: [], userIds: [] },
+    defaultValues: { name: '', description: '', taskIds: [], userIds: [] },
   });
 
-  const selectedTaskIds: number[] = form.watch('taskIds') ?? [];
-  const selectedUserIds: number[] = form.watch('userIds') ?? [];
+  const selectedTaskIds = form.watch('taskIds') ?? [];
+  const selectedUserIds = form.watch('userIds') ?? [];
 
-  const toggleTask = (id: number) => {
-    const current = form.getValues('taskIds') ?? [];
-    form.setValue('taskIds', current.includes(id) ? current.filter((x) => x !== id) : [...current, id]);
-  };
-  const toggleUser = (id: number) => {
-    const current = form.getValues('userIds') ?? [];
-    form.setValue('userIds', current.includes(id) ? current.filter((x) => x !== id) : [...current, id]);
+  const toggle = (field: 'taskIds' | 'userIds', id: number) => {
+    const cur = form.getValues(field) ?? [];
+    form.setValue(field, cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id]);
   };
 
   const onSubmit = (data: ProjectForm) => {
@@ -223,7 +254,7 @@ function CreateProjectDialog({ open, onOpenChange, clients }: { open: boolean, o
       onSuccess: () => {
         toast({ title: 'Project created' });
         queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
-        form.reset({ clientId: undefined, name: '', description: '', taskIds: [], userIds: [] });
+        form.reset({ name: '', description: '', taskIds: [], userIds: [] });
         onOpenChange(false);
       },
       onError: (err: any) => {
@@ -232,104 +263,71 @@ function CreateProjectDialog({ open, onOpenChange, clients }: { open: boolean, o
     });
   };
 
+  const activeClients = clients.filter(c => c.isActive !== false);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button className="shadow-md font-semibold tracking-tight">
-          <Plus className="w-4 h-4 mr-2" />
-          New Project
+          <Plus className="w-4 h-4 mr-2" />New Project
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Project</DialogTitle>
-          <DialogDescription>Create a new project under a client.</DialogDescription>
+          <DialogDescription>Set up a new engagement for a client.</DialogDescription>
         </DialogHeader>
-        
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4 max-h-[70vh] overflow-y-auto pr-1">
-            <FormField
-              control={form.control}
-              name="clientId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Client</FormLabel>
-                  <Select onValueChange={(val) => field.onChange(Number(val))} value={field.value?.toString()}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a client" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {clients.map(c => (
-                        <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Project Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Phase 1 Implementation" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Description <span className="text-muted-foreground font-normal">(Optional)</span></FormLabel>
-                  <FormControl>
-                    <Input placeholder="Scope of work" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
+            <FormField control={form.control} name="clientId" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Client</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value?.toString()}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    {activeClients.map(c => <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )} />
+            <FormField control={form.control} name="name" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Project Name</FormLabel>
+                <FormControl><Input placeholder="Q3 Advisory" {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+            <FormField control={form.control} name="description" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Description <span className="text-muted-foreground font-normal">(Optional)</span></FormLabel>
+                <FormControl><Input placeholder="Brief scope" {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
             <div className="space-y-2">
-              <Label>Tasks <span className="text-muted-foreground font-normal">(Optional — tasks the team can log time against)</span></Label>
+              <Label>Enabled Tasks <span className="text-muted-foreground font-normal">(Optional)</span></Label>
               <MultiSelectList
-                items={(allTasks || []).map(t => ({ id: t.id, label: t.name }))}
+                items={tasks || []}
                 selectedIds={selectedTaskIds}
-                onToggle={toggleTask}
-                emptyLabel="No tasks in the catalog yet."
+                onToggle={(id) => toggle('taskIds', id)}
+                emptyLabel="No tasks available."
+                renderLabel={(t) => <span>{t.name}</span>}
               />
-              {selectedTaskIds.length > 0 && (
-                <p className="text-xs text-primary mt-1 font-mono">{selectedTaskIds.length} selected</p>
-              )}
             </div>
-
             <div className="space-y-2">
-              <Label>Users <span className="text-muted-foreground font-normal">(Optional — who can access this project)</span></Label>
+              <Label>Team Members <span className="text-muted-foreground font-normal">(Optional)</span></Label>
               <MultiSelectList
-                items={(allUsers || []).map(u => ({ id: u.id, label: `${u.name} (${u.role})` }))}
+                items={(users || []).filter(u => u.isActive !== false)}
                 selectedIds={selectedUserIds}
-                onToggle={toggleUser}
-                emptyLabel="No users found."
+                onToggle={(id) => toggle('userIds', id)}
+                emptyLabel="No users available."
+                renderLabel={(u) => <span>{u.name} <span className="text-muted-foreground text-xs">({u.role})</span></span>}
               />
-              {selectedUserIds.length > 0 && (
-                <p className="text-xs text-primary mt-1 font-mono">{selectedUserIds.length} selected</p>
-              )}
             </div>
-
             <div className="pt-4 flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending ? 'Saving...' : 'Create'}
-              </Button>
+              <Button type="submit" disabled={createMutation.isPending}>{createMutation.isPending ? 'Creating...' : 'Create Project'}</Button>
             </div>
           </form>
         </Form>

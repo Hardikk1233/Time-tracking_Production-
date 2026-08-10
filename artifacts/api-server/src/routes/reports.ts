@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, gte, lte, sql, inArray } from "drizzle-orm";
+import { eq, and, gte, lte, sql, inArray, isNull, or } from "drizzle-orm";
 import { format, subMonths, startOfMonth, endOfMonth, eachMonthOfInterval } from "date-fns";
 import {
   db,
@@ -10,6 +10,7 @@ import {
   publicHolidaysTable,
   leavesTable,
   clientUsersTable,
+  clientFteHistoryTable,
   tasksTable,
 } from "@workspace/db";
 
@@ -117,8 +118,74 @@ async function getBillablePerClient(
   return new Map(rows.map((r) => [r.clientId, Number(r.billable)]));
 }
 
-function buildPeriodStats(billable: number, fteCount: number, workingDays: number) {
-  const contracted = fteCount * workingDays * 8;
+type FteHistoryEntry = { fteCount: number; effectiveFrom: string; effectiveTo: string | null };
+
+/** Return the FTE count that applied on a given representative date (YYYY-MM-DD). Falls back to defaultFte. */
+function getApplicableFte(repDate: string, history: FteHistoryEntry[], defaultFte: number): number {
+  for (const h of history) {
+    if (h.effectiveFrom <= repDate && (h.effectiveTo === null || h.effectiveTo >= repDate)) {
+      return h.fteCount;
+    }
+  }
+  return defaultFte;
+}
+
+/** Compute contracted hours for a date window using per-month FTE from history. */
+function calcContractedHours(
+  start: string,
+  end: string,
+  holidaySet: Set<string>,
+  history: FteHistoryEntry[],
+  defaultFte: number,
+): number {
+  const months = eachMonthOfInterval({ start: new Date(start + "T12:00:00"), end: new Date(end + "T12:00:00") });
+  let total = 0;
+  for (const monthDate of months) {
+    const mStart = format(startOfMonth(monthDate), "yyyy-MM-dd");
+    const mEnd   = format(endOfMonth(monthDate), "yyyy-MM-dd");
+    const wStart = mStart < start ? start : mStart;
+    const wEnd   = mEnd > end   ? end   : mEnd;
+    // Use the 15th as a stable representative date for FTE lookup
+    const repDate = format(monthDate, "yyyy-MM") + "-15";
+    const fte = getApplicableFte(repDate, history, defaultFte);
+    total += fte * countWorkingDays(wStart, wEnd, holidaySet) * 8;
+  }
+  return total;
+}
+
+/** Fetch FTE history for a list of clients, loading only entries that overlap [overallStart, overallEnd]. */
+async function fetchFteHistoryForClients(
+  clientIds: number[],
+  overallStart: string,
+  overallEnd: string,
+): Promise<Map<number, FteHistoryEntry[]>> {
+  if (clientIds.length === 0) return new Map();
+  const rows = await db
+    .select({
+      clientId: clientFteHistoryTable.clientId,
+      fteCount: clientFteHistoryTable.fteCount,
+      effectiveFrom: clientFteHistoryTable.effectiveFrom,
+      effectiveTo: clientFteHistoryTable.effectiveTo,
+    })
+    .from(clientFteHistoryTable)
+    .where(
+      and(
+        inArray(clientFteHistoryTable.clientId, clientIds),
+        lte(clientFteHistoryTable.effectiveFrom, overallEnd),
+        or(isNull(clientFteHistoryTable.effectiveTo), gte(clientFteHistoryTable.effectiveTo, overallStart)),
+      ),
+    )
+    .orderBy(clientFteHistoryTable.clientId, clientFteHistoryTable.effectiveFrom);
+
+  const map = new Map<number, FteHistoryEntry[]>();
+  for (const r of rows) {
+    if (!map.has(r.clientId)) map.set(r.clientId, []);
+    map.get(r.clientId)!.push({ fteCount: r.fteCount, effectiveFrom: r.effectiveFrom, effectiveTo: r.effectiveTo });
+  }
+  return map;
+}
+
+function buildPeriodStats(billable: number, contracted: number) {
   return {
     billableHours: billable,
     contractedHours: contracted,
@@ -225,11 +292,8 @@ router.get("/client-report", async (req, res): Promise<void> => {
   const overallEnd   = [end, last3mEnd].sort().reverse()[0];
   const holidaySet = await fetchHolidaySet(overallStart, overallEnd);
 
-  // Working days per window
-  const wdSelected = countWorkingDays(start, end, holidaySet);
-  const wd3m  = countWorkingDays(last3mStart,  last3mEnd,  holidaySet);
-  const wd6m  = countWorkingDays(last6mStart,  last6mEnd,  holidaySet);
-  const wd12m = countWorkingDays(last12mStart, last12mEnd, holidaySet);
+  // Fetch FTE history for all visible clients (covering the widest possible window)
+  const fteHistoryMap = await fetchFteHistoryForClients(allClientIds, overallStart, overallEnd);
 
   // Billable hours per client per window (4 parallel queries)
   const [billableSelected, billable3m, billable6m, billable12m] = await Promise.all([
@@ -239,15 +303,22 @@ router.get("/client-report", async (req, res): Promise<void> => {
     getBillablePerClient(allClientIds, scopedUserIds, last12mStart, last12mEnd),
   ]);
 
-  const clientSummary = clientRows.map((c) => ({
-    clientId: c.id,
-    clientName: c.name,
-    fteCount: c.fteCount,
-    selectedRange: buildPeriodStats(billableSelected.get(c.id) ?? 0, c.fteCount, wdSelected),
-    last3m:  buildPeriodStats(billable3m.get(c.id)  ?? 0, c.fteCount, wd3m),
-    last6m:  buildPeriodStats(billable6m.get(c.id)  ?? 0, c.fteCount, wd6m),
-    last12m: buildPeriodStats(billable12m.get(c.id) ?? 0, c.fteCount, wd12m),
-  }));
+  const clientSummary = clientRows.map((c) => {
+    const history = fteHistoryMap.get(c.id) ?? [];
+    const cSelected = calcContractedHours(start,       end,        holidaySet, history, c.fteCount);
+    const c3m       = calcContractedHours(last3mStart, last3mEnd,  holidaySet, history, c.fteCount);
+    const c6m       = calcContractedHours(last6mStart, last6mEnd,  holidaySet, history, c.fteCount);
+    const c12m      = calcContractedHours(last12mStart, last12mEnd, holidaySet, history, c.fteCount);
+    return {
+      clientId: c.id,
+      clientName: c.name,
+      fteCount: c.fteCount,
+      selectedRange: buildPeriodStats(billableSelected.get(c.id) ?? 0, cSelected),
+      last3m:  buildPeriodStats(billable3m.get(c.id)  ?? 0, c3m),
+      last6m:  buildPeriodStats(billable6m.get(c.id)  ?? 0, c6m),
+      last12m: buildPeriodStats(billable12m.get(c.id) ?? 0, c12m),
+    };
+  });
 
   // Monthly chart — only when a specific client is requested
   let monthlySummary: object[] | null = null;
@@ -298,6 +369,7 @@ router.get("/client-report", async (req, res): Promise<void> => {
 
     // Always generate the full monthly skeleton so the chart shows contracted-hours
     // capacity even when billable hours are zero (no projects or no logged entries).
+    const focusHistory = fteHistoryMap.get(focusClientId) ?? [];
     const months = eachMonthOfInterval({ start: new Date(start + "T12:00:00"), end: new Date(end + "T12:00:00") });
     monthlySummary = months.map((monthDate) => {
       const monthStr = format(monthDate, "yyyy-MM");
@@ -306,8 +378,11 @@ router.get("/client-report", async (req, res): Promise<void> => {
       // Cap to the requested range
       const wStart = mStart < start ? start : mStart;
       const wEnd   = mEnd > end ? end : mEnd;
+      // Use per-month FTE from history (15th as representative date)
+      const repDate = monthStr + "-15";
+      const fte = getApplicableFte(repDate, focusHistory, focusClient.fteCount);
       const wd = countWorkingDays(wStart, wEnd, holidaySet);
-      const contracted = focusClient.fteCount * wd * 8;
+      const contracted = fte * wd * 8;
       const billable = billableByMonth.get(monthStr) ?? 0;
       return {
         month: monthStr,

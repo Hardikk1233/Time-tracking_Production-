@@ -8,19 +8,40 @@ import {
   useRemoveUserFromClient,
   useListUsers,
   useListProjects,
+  useListClientFteHistory,
+  useAddClientFteHistory,
+  useDeleteClientFteHistory,
   getListClientAssignmentsQueryKey,
+  getListClientFteHistoryQueryKey,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Building2, Users, FolderKanban, UserPlus, UserMinus, ChevronRight } from 'lucide-react';
+import {
+  ArrowLeft, Building2, Users, FolderKanban, UserPlus, UserMinus,
+  ChevronRight, TrendingUp, Plus, Trash2, Calendar,
+} from 'lucide-react';
 import { Link } from 'wouter';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
+
+// ─── FTE History form schema ──────────────────────────────────────────────────
+const fteSchema = z.object({
+  fteCount: z.coerce.number().min(0.1, 'Min 0.1').max(100, 'Max 100'),
+  effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD required'),
+  effectiveTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD required').optional().or(z.literal('')),
+});
+type FteForm = z.infer<typeof fteSchema>;
 
 export default function ClientDetail() {
   const [, params] = useRoute('/clients/:id');
@@ -31,14 +52,17 @@ export default function ClientDetail() {
 
   const clientId = parseInt(params?.id || '0', 10);
   const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const [fteDialogOpen, setFteDialogOpen] = useState(false);
 
   const { data: client, isLoading: isLoadingClient } = useGetClient(clientId);
   const { data: assignments, isLoading: isLoadingAssignments } = useListClientAssignments(clientId);
   const { data: allUsers } = useListUsers();
   const { data: projects, isLoading: isLoadingProjects } = useListProjects({ clientId });
+  const { data: fteHistory, isLoading: isLoadingFte } = useListClientFteHistory(clientId);
 
   const assignMutation = useAssignUserToClient();
   const removeMutation = useRemoveUserFromClient();
+  const deleteFteMutation = useDeleteClientFteHistory();
 
   const isManager = ['avp', 'md'].includes(user?.role || '');
 
@@ -73,6 +97,20 @@ export default function ClientDetail() {
     );
   };
 
+  const handleDeleteFte = (entryId: number) => {
+    if (!confirm('Delete this FTE period?')) return;
+    deleteFteMutation.mutate(
+      { clientId, entryId },
+      {
+        onSuccess: () => {
+          toast({ title: 'FTE period deleted' });
+          queryClient.invalidateQueries({ queryKey: getListClientFteHistoryQueryKey(clientId) });
+        },
+        onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to delete.' }),
+      }
+    );
+  };
+
   if (isLoadingClient) {
     return (
       <div className="space-y-6">
@@ -91,6 +129,11 @@ export default function ClientDetail() {
     );
   }
 
+  // Sort FTE history by effectiveFrom ascending
+  const sortedFteHistory = [...(fteHistory || [])].sort((a, b) =>
+    a.effectiveFrom < b.effectiveFrom ? -1 : 1
+  );
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Header */}
@@ -105,8 +148,15 @@ export default function ClientDetail() {
           <div className="p-3 bg-primary/10 rounded-lg text-primary">
             <Building2 className="w-6 h-6" />
           </div>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">{client.name}</h1>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-3xl font-bold tracking-tight text-foreground">{client.name}</h1>
+              {client.isActive === false && (
+                <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 font-mono text-xs">
+                  INACTIVE
+                </Badge>
+              )}
+            </div>
             <p className="text-muted-foreground font-mono text-sm mt-1">
               {client.description || 'No description provided.'}
             </p>
@@ -150,21 +200,13 @@ export default function ClientDetail() {
                     )}
                   </SelectContent>
                 </Select>
-                <Button
-                  size="sm"
-                  onClick={handleAssign}
-                  disabled={!selectedUserId || assignMutation.isPending}
-                  className="shrink-0"
-                >
+                <Button size="sm" onClick={handleAssign} disabled={!selectedUserId || assignMutation.isPending} className="shrink-0">
                   <UserPlus className="w-4 h-4" />
                 </Button>
               </div>
             )}
-
             {isLoadingAssignments ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
-              </div>
+              <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
             ) : assignments && assignments.length > 0 ? (
               <div className="space-y-2">
                 {assignments.map(u => (
@@ -180,11 +222,9 @@ export default function ClientDetail() {
                     </div>
                     {isManager && (
                       <Button
-                        variant="ghost"
-                        size="icon"
+                        variant="ghost" size="icon"
                         className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => handleRemove(u.id)}
-                        disabled={removeMutation.isPending}
+                        onClick={() => handleRemove(u.id)} disabled={removeMutation.isPending}
                       >
                         <UserMinus className="w-3.5 h-3.5" />
                       </Button>
@@ -207,9 +247,7 @@ export default function ClientDetail() {
               <CardTitle className="text-base font-bold flex items-center gap-2">
                 <FolderKanban className="w-4 h-4 text-primary" />
                 Projects
-                <Badge variant="secondary" className="font-mono text-[10px]">
-                  {projects?.length || 0}
-                </Badge>
+                <Badge variant="secondary" className="font-mono text-[10px]">{projects?.length || 0}</Badge>
               </CardTitle>
               {isManager && (
                 <Link href="/projects">
@@ -222,9 +260,7 @@ export default function ClientDetail() {
           </CardHeader>
           <CardContent className="pt-4">
             {isLoadingProjects ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
-              </div>
+              <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
             ) : projects && projects.length > 0 ? (
               <div className="space-y-2">
                 {projects.map(p => (
@@ -235,7 +271,14 @@ export default function ClientDetail() {
                           <FolderKanban className="w-4 h-4" />
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-foreground">{p.name}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-foreground">{p.name}</p>
+                            {p.isActive === false && (
+                              <Badge variant="outline" className="text-[10px] font-mono text-amber-600 border-amber-300 bg-amber-50">
+                                INACTIVE
+                              </Badge>
+                            )}
+                          </div>
                           <p className="text-xs text-muted-foreground font-mono">
                             Added {format(new Date(p.createdAt), 'MMM yyyy')}
                           </p>
@@ -254,6 +297,195 @@ export default function ClientDetail() {
           </CardContent>
         </Card>
       </div>
+
+      {/* FTE History */}
+      <Card className="shadow-sm border-border">
+        <CardHeader className="border-b border-border/50 bg-muted/20 pb-4">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base font-bold flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-primary" />
+              FTE History
+              <Badge variant="secondary" className="font-mono text-[10px]">{sortedFteHistory.length}</Badge>
+            </CardTitle>
+            {isManager && (
+              <AddFtePeriodDialog
+                open={fteDialogOpen}
+                onOpenChange={setFteDialogOpen}
+                clientId={clientId}
+              />
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="pt-4">
+          {/* Current FTE summary */}
+          <div className="mb-4 p-3 bg-primary/5 rounded-md border border-primary/10 flex items-center gap-3">
+            <div className="p-2 bg-primary/10 rounded text-primary">
+              <Users className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                Current FTE: <span className="text-primary font-mono">{client.fteCount}</span>
+              </p>
+              <p className="text-xs text-muted-foreground font-mono">
+                Baseline — {(client.fteCount * 160).toFixed(0)} h/mo capacity
+              </p>
+            </div>
+          </div>
+
+          {isLoadingFte ? (
+            <div className="space-y-3">{[1, 2].map(i => <Skeleton key={i} className="h-14 w-full" />)}</div>
+          ) : sortedFteHistory.length > 0 ? (
+            <div className="space-y-2">
+              {sortedFteHistory.map((entry, i) => {
+                const isOpen = entry.effectiveTo === null;
+                const isLatest = i === sortedFteHistory.length - 1;
+                return (
+                  <div
+                    key={entry.id}
+                    className={`flex items-center justify-between p-3 rounded-md border group ${
+                      isLatest && isOpen
+                        ? 'bg-emerald-50 border-emerald-200'
+                        : 'bg-muted/30 border-border'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-1.5 rounded bg-primary/10 text-primary">
+                        <Calendar className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-foreground font-mono">
+                            {entry.fteCount} FTE
+                          </span>
+                          {isLatest && isOpen && (
+                            <Badge className="text-[10px] bg-emerald-100 text-emerald-700 border-emerald-200 border font-mono">
+                              CURRENT
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground font-mono">
+                          {entry.effectiveFrom}
+                          {entry.effectiveTo ? ` → ${entry.effectiveTo}` : ' → present'}
+                          <span className="ml-2 opacity-60">
+                            ({(entry.fteCount * 160).toFixed(0)} h/mo)
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                    {isManager && (
+                      <Button
+                        variant="ghost" size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => handleDeleteFte(entry.id)}
+                        disabled={deleteFteMutation.isPending}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="py-8 text-center text-muted-foreground font-mono text-sm border border-dashed border-border rounded-md">
+              <p>NO FTE HISTORY RECORDED</p>
+              {isManager && (
+                <p className="text-xs mt-1 opacity-70">
+                  Add periods to track time-weighted FTE changes over time.
+                </p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
+  );
+}
+
+function AddFtePeriodDialog({ open, onOpenChange, clientId }: { open: boolean; onOpenChange: (v: boolean) => void; clientId: number }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const addMutation = useAddClientFteHistory();
+
+  const form = useForm<FteForm>({
+    resolver: zodResolver(fteSchema),
+    defaultValues: { fteCount: 1, effectiveFrom: '', effectiveTo: '' },
+  });
+
+  const onSubmit = (data: FteForm) => {
+    addMutation.mutate(
+      {
+        clientId,
+        data: {
+          fteCount: data.fteCount,
+          effectiveFrom: data.effectiveFrom,
+          effectiveTo: data.effectiveTo || null,
+        } as any,
+      },
+      {
+        onSuccess: () => {
+          toast({ title: 'FTE period added' });
+          queryClient.invalidateQueries({ queryKey: getListClientFteHistoryQueryKey(clientId) });
+          form.reset({ fteCount: 1, effectiveFrom: '', effectiveTo: '' });
+          onOpenChange(false);
+        },
+        onError: (err: any) => {
+          toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to add FTE period.' });
+        },
+      }
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5">
+          <Plus className="w-3.5 h-3.5" /> Add Period
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[400px]">
+        <DialogHeader>
+          <DialogTitle>Add FTE Period</DialogTitle>
+          <DialogDescription>
+            Record a time-bounded FTE count for this client. Leave "End date" empty for an open-ended current period.
+          </DialogDescription>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
+            <FormField control={form.control} name="fteCount" render={({ field }) => (
+              <FormItem>
+                <FormLabel>FTE Count</FormLabel>
+                <FormControl>
+                  <Input type="number" step="0.1" min="0.1" max="100" placeholder="1.5" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+            <div className="grid grid-cols-2 gap-4">
+              <FormField control={form.control} name="effectiveFrom" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Start date</FormLabel>
+                  <FormControl><Input type="date" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="effectiveTo" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>End date <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                  <FormControl><Input type="date" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            </div>
+            <div className="pt-2 flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+              <Button type="submit" disabled={addMutation.isPending}>
+                {addMutation.isPending ? 'Saving...' : 'Add Period'}
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
   );
 }

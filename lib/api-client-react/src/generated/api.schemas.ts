@@ -41,6 +41,7 @@ export interface User {
   reportingToId?: number | null;
   /** @nullable */
   reportingToName?: string | null;
+  isActive?: boolean;
   createdAt: string;
 }
 
@@ -84,6 +85,7 @@ export interface UserUpdate {
   reportingToId?: number | null;
   /** @minLength 6 */
   password?: string;
+  isActive?: boolean;
 }
 
 export interface Client {
@@ -97,7 +99,37 @@ export interface Client {
      * @maximum 100
      */
   fteCount: number;
+  isActive?: boolean;
   createdAt: string;
+}
+
+export interface ClientFteHistory {
+  id: number;
+  clientId: number;
+  /**
+     * @minimum 0.1
+     * @maximum 100
+     */
+  fteCount: number;
+  /** First day this FTE count applies (YYYY-MM-DD) */
+  effectiveFrom: string;
+  /**
+     * Last day this FTE count applies; null means open-ended (current)
+     * @nullable
+     */
+  effectiveTo?: string | null;
+  createdAt: string;
+}
+
+export interface ClientFteHistoryInput {
+  /**
+     * @minimum 0.1
+     * @maximum 100
+     */
+  fteCount: number;
+  effectiveFrom: string;
+  /** @nullable */
+  effectiveTo?: string | null;
 }
 
 export interface ClientInput {
@@ -123,6 +155,7 @@ export interface ClientUpdate {
      * @maximum 100
      */
   fteCount?: number;
+  isActive?: boolean;
 }
 
 export interface Project {
@@ -132,6 +165,7 @@ export interface Project {
   name: string;
   /** @nullable */
   description?: string | null;
+  isActive?: boolean;
   createdAt: string;
 }
 
@@ -151,6 +185,7 @@ export interface ProjectUpdate {
   name?: string;
   /** @nullable */
   description?: string | null;
+  isActive?: boolean;
 }
 
 export interface Task {

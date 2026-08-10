@@ -84,6 +84,7 @@ router.get("/projects", async (req, res): Promise<void> => {
       clientName: clientsTable.name,
       name: projectsTable.name,
       description: projectsTable.description,
+      isActive: projectsTable.isActive,
       createdAt: projectsTable.createdAt,
     })
     .from(projectsTable)
@@ -189,6 +190,7 @@ router.get("/projects/:projectId", async (req, res): Promise<void> => {
       clientName: clientsTable.name,
       name: projectsTable.name,
       description: projectsTable.description,
+      isActive: projectsTable.isActive,
       createdAt: projectsTable.createdAt,
     })
     .from(projectsTable)
@@ -221,14 +223,16 @@ router.patch("/projects/:projectId", async (req, res): Promise<void> => {
     return;
   }
 
-  const { name, description } = req.body as {
+  const { name, description, isActive } = req.body as {
     name?: string;
     description?: string | null;
+    isActive?: boolean;
   };
 
   const updates: Partial<typeof projectsTable.$inferInsert> = {};
   if (name) updates.name = name;
   if (description !== undefined) updates.description = description;
+  if (isActive !== undefined) updates.isActive = isActive;
 
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No fields to update" });
@@ -251,7 +255,7 @@ router.patch("/projects/:projectId", async (req, res): Promise<void> => {
     .from(clientsTable)
     .where(eq(clientsTable.id, project.clientId));
 
-  res.json({ ...project, clientName: client?.name ?? "" });
+  res.json({ ...project, clientName: client?.name ?? "", isActive: project.isActive });
 });
 
 router.delete("/projects/:projectId", async (req, res): Promise<void> => {

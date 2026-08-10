@@ -1,5 +1,6 @@
 export * from "./users";
 export * from "./clients";
+export * from "./clientFteHistory";
 export * from "./projects";
 export * from "./assignments";
 export * from "./tasks";

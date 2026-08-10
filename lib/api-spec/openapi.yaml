@@ -337,6 +337,62 @@ paths:
               schema:
                 $ref: "#/components/schemas/MessageResponse"
 
+  /clients/{clientId}/fte-history:
+    get:
+      operationId: listClientFteHistory
+      tags: [clients]
+      summary: List FTE history for a client
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      responses:
+        "200":
+          description: FTE history entries ordered by effectiveFrom
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClientFteHistory"
+    post:
+      operationId: addClientFteHistory
+      tags: [clients]
+      summary: Add an FTE history entry for a client
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientFteHistoryInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientFteHistory"
+
+  /clients/{clientId}/fte-history/{entryId}:
+    delete:
+      operationId: deleteClientFteHistory
+      tags: [clients]
+      summary: Delete an FTE history entry
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - name: entryId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
   # ─── Projects ───────────────────────────────────────────────────────────
   /projects:
     get:
@@ -1271,6 +1327,9 @@ components:
           type: ["integer", "null"]
         reportingToName:
           type: ["string", "null"]
+        isActive:
+          type: boolean
+          default: true
         createdAt:
           type: string
           format: date-time
@@ -1311,6 +1370,8 @@ components:
         password:
           type: string
           minLength: 6
+        isActive:
+          type: boolean
 
     # ─── Clients ─────────────────────────────────────────────────────────
     Client:
@@ -1328,9 +1389,51 @@ components:
           minimum: 0.1
           maximum: 100
           description: "Number of full-time equivalents; 1 FTE = 8h/day, 40h/week, 160h/month"
+        isActive:
+          type: boolean
+          default: true
         createdAt:
           type: string
           format: date-time
+
+    ClientFteHistory:
+      type: object
+      required: [id, clientId, fteCount, effectiveFrom, createdAt]
+      properties:
+        id:
+          type: integer
+        clientId:
+          type: integer
+        fteCount:
+          type: number
+          minimum: 0.1
+          maximum: 100
+        effectiveFrom:
+          type: string
+          format: date
+          description: "First day this FTE count applies (YYYY-MM-DD)"
+        effectiveTo:
+          type: ["string", "null"]
+          format: date
+          description: "Last day this FTE count applies; null means open-ended (current)"
+        createdAt:
+          type: string
+          format: date-time
+
+    ClientFteHistoryInput:
+      type: object
+      required: [fteCount, effectiveFrom]
+      properties:
+        fteCount:
+          type: number
+          minimum: 0.1
+          maximum: 100
+        effectiveFrom:
+          type: string
+          format: date
+        effectiveTo:
+          type: ["string", "null"]
+          format: date
 
     ClientInput:
       type: object
@@ -1364,6 +1467,8 @@ components:
           type: number
           minimum: 0.1
           maximum: 100
+        isActive:
+          type: boolean
 
     # ─── Projects ─────────────────────────────────────────────────────────
     Project:
@@ -1380,6 +1485,9 @@ components:
           type: string
         description:
           type: ["string", "null"]
+        isActive:
+          type: boolean
+          default: true
         createdAt:
           type: string
           format: date-time
@@ -1414,6 +1522,8 @@ components:
           minLength: 1
         description:
           type: ["string", "null"]
+        isActive:
+          type: boolean
 
     # ─── Tasks (global catalog) ──────────────────────────────────────────
     Task:

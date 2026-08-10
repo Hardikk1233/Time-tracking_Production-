@@ -13,5 +13,6 @@ export interface Project {
   name: string;
   /** @nullable */
   description?: string | null;
+  isActive?: boolean;
   createdAt: Date;
 }

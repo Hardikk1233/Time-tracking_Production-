@@ -602,7 +602,7 @@ function LogTimeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {projects?.map(p => (
+                    {projects?.filter(p => p.isActive !== false).map(p => (
                       <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
                     ))}
                   </SelectContent>
