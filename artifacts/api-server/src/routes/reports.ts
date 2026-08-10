@@ -261,8 +261,12 @@ router.get("/client-report", async (req, res): Promise<void> => {
     const focusClient = clientRows.find((c) => c.id === focusClientId);
     if (!focusClient) { res.json({ clientSummary, monthlySummary: [] }); return; }
 
+    // Fetch billable hours by month for this client (via project join)
     const clientProjects = await db.select({ id: projectsTable.id }).from(projectsTable).where(eq(projectsTable.clientId, focusClientId));
     const projectIds = clientProjects.map((p) => p.id);
+
+    // Build month→billableHours map (stays empty if client has no projects or no entries)
+    const billableByMonth = new Map<string, number>();
 
     if (projectIds.length > 0) {
       const entryConds: Parameters<typeof and>[0][] = [
@@ -289,30 +293,29 @@ router.get("/client-report", async (req, res): Promise<void> => {
         .groupBy(monthExpr)
         .orderBy(monthExpr);
 
-      // Build a map of month → billableHours, then fill in all months in the range
-      const billableByMonth = new Map(monthlyRows.map((r) => [r.month, Number(r.billableHours)]));
-
-      const months = eachMonthOfInterval({ start: new Date(start), end: new Date(end) });
-      monthlySummary = months.map((monthDate) => {
-        const monthStr = format(monthDate, "yyyy-MM");
-        const mStart = format(startOfMonth(monthDate), "yyyy-MM-dd");
-        const mEnd   = format(endOfMonth(monthDate), "yyyy-MM-dd");
-        // Cap to the requested range
-        const wStart = mStart < start ? start : mStart;
-        const wEnd   = mEnd > end ? end : mEnd;
-        const wd = countWorkingDays(wStart, wEnd, holidaySet);
-        const contracted = focusClient.fteCount * wd * 8;
-        const billable = billableByMonth.get(monthStr) ?? 0;
-        return {
-          month: monthStr,
-          billableHours: billable,
-          contractedHours: contracted,
-          utilization: contracted > 0 ? Math.round((billable / contracted) * 1000) / 10 : 0,
-        };
-      });
-    } else {
-      monthlySummary = [];
+      for (const r of monthlyRows) billableByMonth.set(r.month, Number(r.billableHours));
     }
+
+    // Always generate the full monthly skeleton so the chart shows contracted-hours
+    // capacity even when billable hours are zero (no projects or no logged entries).
+    const months = eachMonthOfInterval({ start: new Date(start + "T12:00:00"), end: new Date(end + "T12:00:00") });
+    monthlySummary = months.map((monthDate) => {
+      const monthStr = format(monthDate, "yyyy-MM");
+      const mStart = format(startOfMonth(monthDate), "yyyy-MM-dd");
+      const mEnd   = format(endOfMonth(monthDate), "yyyy-MM-dd");
+      // Cap to the requested range
+      const wStart = mStart < start ? start : mStart;
+      const wEnd   = mEnd > end ? end : mEnd;
+      const wd = countWorkingDays(wStart, wEnd, holidaySet);
+      const contracted = focusClient.fteCount * wd * 8;
+      const billable = billableByMonth.get(monthStr) ?? 0;
+      return {
+        month: monthStr,
+        billableHours: billable,
+        contractedHours: contracted,
+        utilization: contracted > 0 ? Math.round((billable / contracted) * 1000) / 10 : 0,
+      };
+    });
   }
 
   res.json({ clientSummary, monthlySummary });

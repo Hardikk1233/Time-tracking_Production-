@@ -588,7 +588,7 @@ export default function Reports() {
               </CardHeader>
               <CardContent>
                 {chartData.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">No hours logged for this client in the selected period.</p>
+                  <p className="text-sm text-muted-foreground text-center py-8">No data available — the selected date range spans no full months.</p>
                 ) : (
                   <ResponsiveContainer width="100%" height={280}>
                     <ComposedChart data={chartData} margin={{ top: 4, right: 40, left: 0, bottom: 4 }}>
