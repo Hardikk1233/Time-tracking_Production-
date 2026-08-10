@@ -1,85 +1,61 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { format, startOfMonth } from 'date-fns';
 import { useAuth } from '@/lib/auth';
-import { useLocation } from 'wouter';
 import {
-  useGetUtilizationReport,
-  useGetEfficiencyReport,
-  useGetClientHoursReport,
   useGetReportFilterOptions,
+  useGetClientReport,
+  useGetTeamReport,
+  useGetMyReport,
 } from '@workspace/api-client-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
   BarChart2,
   Download,
-  FileText,
-  ChevronUp,
   ChevronDown,
-  ChevronsUpDown,
-  Filter,
+  Users,
+  Building2,
+  User,
   RefreshCw,
 } from 'lucide-react';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from 'recharts';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type ReportType = 'utilization' | 'efficiency' | 'client-hours';
+type Section = 'client' | 'team' | 'my';
 
-type SortDir = 'asc' | 'desc' | null;
-interface SortState {
-  key: string;
-  dir: SortDir;
-}
+// ─── MultiSelect ─────────────────────────────────────────────────────────────
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function todayStr() {
-  return format(new Date(), 'yyyy-MM-dd');
+interface SelectOption {
+  id: number;
+  name: string;
 }
-function monthStartStr() {
-  return format(startOfMonth(new Date()), 'yyyy-MM-dd');
-}
-
-function pct(value: number) {
-  return `${value.toFixed(1)}%`;
-}
-function hrs(value: number) {
-  return value % 1 === 0 ? `${value}h` : `${value.toFixed(1)}h`;
-}
-function roleBadgeColor(role: string) {
-  return role === 'md'
-    ? 'bg-amber-100 text-amber-800 border-amber-200'
-    : role === 'avp'
-    ? 'bg-purple-100 text-purple-800 border-purple-200'
-    : role === 'associate'
-    ? 'bg-blue-100 text-blue-800 border-blue-200'
-    : 'bg-slate-100 text-slate-700 border-slate-200';
-}
-function utilizationColor(u: number) {
-  if (u >= 80) return 'text-emerald-600 font-semibold';
-  if (u >= 60) return 'text-amber-600 font-semibold';
-  return 'text-red-500 font-semibold';
-}
-
-// ─── Multi-select dropdown ────────────────────────────────────────────────────
 
 function MultiSelect({
   label,
   options,
-  value,
+  selected,
   onChange,
 }: {
   label: string;
-  options: { id: number; name: string }[];
-  value: number[];
+  options: SelectOption[];
+  selected: number[];
   onChange: (ids: number[]) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = React.useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     function handler(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
@@ -87,822 +63,666 @@ function MultiSelect({
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const toggle = (id: number) => {
-    onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id]);
-  };
+  const toggle = (id: number) =>
+    onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
 
-  const selectedCount = value.length;
+  const label_ =
+    selected.length === 0
+      ? `All ${label}`
+      : selected.length === 1
+      ? options.find((o) => o.id === selected[0])?.name ?? '1 selected'
+      : `${selected.length} selected`;
 
   return (
-    <div className="relative" ref={ref}>
+    <div ref={ref} className="relative">
       <button
         type="button"
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-1.5 text-sm shadow-sm hover:bg-accent transition-colors"
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-2 h-9 px-3 rounded-md border border-input bg-background text-sm w-full min-w-[160px] justify-between hover:bg-accent transition-colors"
       >
-        <span className="truncate text-left">
-          {selectedCount === 0 ? `All ${label}` : `${selectedCount} ${label} selected`}
-        </span>
-        <ChevronDown className="w-3 h-3 shrink-0 text-muted-foreground" />
+        <span className="truncate text-left">{label_}</span>
+        <ChevronDown className="w-3.5 h-3.5 opacity-50 shrink-0" />
       </button>
       {open && (
-        <div className="absolute z-50 mt-1 w-full min-w-[180px] rounded-md border border-border bg-popover shadow-lg max-h-52 overflow-y-auto">
-          {options.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-muted-foreground">No options</div>
-          ) : (
-            <>
-              {selectedCount > 0 && (
-                <button
-                  type="button"
-                  className="w-full text-left px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent border-b border-border"
-                  onClick={() => onChange([])}
-                >
-                  Clear selection
-                </button>
-              )}
-              {options.map((opt) => (
-                <label
-                  key={opt.id}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-accent"
-                >
-                  <input
-                    type="checkbox"
-                    checked={value.includes(opt.id)}
-                    onChange={() => toggle(opt.id)}
-                    className="h-3.5 w-3.5 accent-primary"
-                  />
-                  <span className="truncate">{opt.name}</span>
-                </label>
-              ))}
-            </>
+        <div className="absolute z-50 mt-1 w-full min-w-[200px] rounded-md border bg-popover shadow-md py-1 max-h-56 overflow-y-auto">
+          {options.length === 0 && (
+            <p className="px-3 py-2 text-sm text-muted-foreground">No options</p>
           )}
+          {options.map((o) => (
+            <label
+              key={o.id}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                checked={selected.includes(o.id)}
+                onChange={() => toggle(o.id)}
+                className="rounded"
+              />
+              <span className="truncate">{o.name}</span>
+            </label>
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-// ─── Sortable column header ───────────────────────────────────────────────────
+// ─── SingleSelect ─────────────────────────────────────────────────────────────
 
-function SortHeader({
+function SingleSelect({
   label,
-  sortKey,
-  sort,
-  onSort,
-  className = '',
+  options,
+  value,
+  onChange,
 }: {
   label: string;
-  sortKey: string;
-  sort: SortState;
-  onSort: (key: string) => void;
-  className?: string;
+  options: SelectOption[];
+  value: number | null;
+  onChange: (id: number | null) => void;
 }) {
-  const active = sort.key === sortKey;
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const displayLabel = value ? options.find((o) => o.id === value)?.name ?? label : label;
+
   return (
-    <th
-      className={`px-4 py-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground ${className}`}
-      onClick={() => onSort(sortKey)}
-    >
-      <span className="inline-flex items-center gap-1">
-        {label}
-        {active ? (
-          sort.dir === 'asc' ? (
-            <ChevronUp className="w-3 h-3" />
-          ) : (
-            <ChevronDown className="w-3 h-3" />
-          )
-        ) : (
-          <ChevronsUpDown className="w-3 h-3 opacity-40" />
-        )}
-      </span>
-    </th>
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-2 h-9 px-3 rounded-md border border-input bg-background text-sm w-full min-w-[200px] justify-between hover:bg-accent transition-colors"
+      >
+        <span className={`truncate text-left ${!value ? 'text-muted-foreground' : ''}`}>
+          {displayLabel}
+        </span>
+        <ChevronDown className="w-3.5 h-3.5 opacity-50 shrink-0" />
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full min-w-[200px] rounded-md border bg-popover shadow-md py-1 max-h-56 overflow-y-auto">
+          <button
+            className="w-full text-left px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent"
+            onClick={() => { onChange(null); setOpen(false); }}
+          >
+            — {label}
+          </button>
+          {options.map((o) => (
+            <button
+              key={o.id}
+              className={`w-full text-left px-3 py-1.5 text-sm hover:bg-accent ${value === o.id ? 'font-medium text-primary' : ''}`}
+              onClick={() => { onChange(o.id); setOpen(false); }}
+            >
+              {o.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function fmt(n: number) {
+  return n.toFixed(1);
+}
+
+function roleLabel(role: string) {
+  const map: Record<string, string> = { analyst: 'Analyst', associate: 'Associate', avp: 'AVP', md: 'MD' };
+  return map[role] ?? role;
+}
+
+// ─── Grouped table for Team / Client section entries ─────────────────────────
+
+interface FlatRow {
+  clientId: number;
+  clientName: string;
+  projectId: number;
+  projectName: string;
+  taskId: number;
+  taskName: string;
+  totalHours: number;
+  billableHours: number;
+  nonBillableHours: number;
+}
+
+function GroupedTable({ rows }: { rows: FlatRow[] }) {
+  if (rows.length === 0) {
+    return <p className="text-sm text-muted-foreground py-6 text-center">No data for this selection.</p>;
+  }
+
+  // Compute totals
+  const total = rows.reduce(
+    (acc, r) => ({
+      totalHours: acc.totalHours + r.totalHours,
+      billableHours: acc.billableHours + r.billableHours,
+      nonBillableHours: acc.nonBillableHours + r.nonBillableHours,
+    }),
+    { totalHours: 0, billableHours: 0, nonBillableHours: 0 },
+  );
+
+  // Track which client/project spans to show headers
+  let lastClientId: number | null = null;
+  let lastProjectId: number | null = null;
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b bg-muted/50">
+            <th className="text-left px-4 py-2.5 font-medium text-muted-foreground w-1/4">Client</th>
+            <th className="text-left px-4 py-2.5 font-medium text-muted-foreground w-1/4">Project</th>
+            <th className="text-left px-4 py-2.5 font-medium text-muted-foreground w-1/4">Task</th>
+            <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Total</th>
+            <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Billable</th>
+            <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Non-Billable</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => {
+            const showClient = row.clientId !== lastClientId;
+            const showProject = showClient || row.projectId !== lastProjectId;
+            lastClientId = row.clientId;
+            lastProjectId = row.projectId;
+            return (
+              <tr key={`${row.projectId}-${row.taskId}-${i}`} className="border-b hover:bg-muted/30 transition-colors">
+                <td className="px-4 py-2.5">
+                  {showClient ? (
+                    <span className="font-medium text-foreground">{row.clientName}</span>
+                  ) : (
+                    <span className="text-muted-foreground/30">↳</span>
+                  )}
+                </td>
+                <td className="px-4 py-2.5">
+                  {showProject ? (
+                    <span className="text-foreground">{row.projectName}</span>
+                  ) : (
+                    <span className="text-muted-foreground/30">↳</span>
+                  )}
+                </td>
+                <td className="px-4 py-2.5 text-muted-foreground">{row.taskName}</td>
+                <td className="px-4 py-2.5 text-right tabular-nums">{fmt(row.totalHours)}h</td>
+                <td className="px-4 py-2.5 text-right tabular-nums text-emerald-600">{fmt(row.billableHours)}h</td>
+                <td className="px-4 py-2.5 text-right tabular-nums text-amber-600">{fmt(row.nonBillableHours)}h</td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot>
+          <tr className="bg-muted/50 font-semibold border-t-2">
+            <td colSpan={3} className="px-4 py-2.5 text-foreground">Total</td>
+            <td className="px-4 py-2.5 text-right tabular-nums">{fmt(total.totalHours)}h</td>
+            <td className="px-4 py-2.5 text-right tabular-nums text-emerald-600">{fmt(total.billableHours)}h</td>
+            <td className="px-4 py-2.5 text-right tabular-nums text-amber-600">{fmt(total.nonBillableHours)}h</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
   );
 }
 
 // ─── Export helpers ───────────────────────────────────────────────────────────
 
-async function exportExcel(
-  headers: string[],
-  rows: (string | number)[][],
-  filename: string,
-) {
-  const XLSX = await import('xlsx');
-  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Report');
-  XLSX.writeFile(wb, `${filename}.xlsx`);
+async function exportExcel(filename: string, sheetName: string, headers: string[], rows: (string | number)[][]) {
+  const { utils, writeFile } = await import('xlsx');
+  const ws = utils.aoa_to_sheet([headers, ...rows]);
+  const wb = utils.book_new();
+  utils.book_append_sheet(wb, ws, sheetName);
+  writeFile(wb, `${filename}.xlsx`);
 }
 
-async function exportPdf(
-  title: string,
-  filterSummary: string,
-  generatedBy: string,
-  headers: string[],
-  rows: (string | number)[][],
-  filename: string,
-) {
-  const { default: jsPDF } = await import('jspdf');
-  const { default: autoTable } = await import('jspdf-autotable');
-
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
-  const margin = 40;
-  let y = margin;
-
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.text(title, margin, y);
-  y += 22;
-
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(120);
-  doc.text(filterSummary, margin, y);
-  y += 14;
-  doc.text(`Generated by ${generatedBy} on ${format(new Date(), 'MMMM d, yyyy HH:mm')}`, margin, y);
-  doc.setTextColor(0);
-  y += 18;
-
-  autoTable(doc, {
-    startY: y,
-    head: [headers],
-    body: rows,
-    styles: { fontSize: 8, cellPadding: 4 },
-    headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold' },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
-    margin: { left: margin, right: margin },
-  });
-
-  doc.save(`${filename}.pdf`);
-}
-
-// ─── Reports page ─────────────────────────────────────────────────────────────
+// ─── Main Reports Component ───────────────────────────────────────────────────
 
 export default function Reports() {
   const { user } = useAuth();
-  const [, setLocation] = useLocation();
 
-  // Gate access
-  React.useEffect(() => {
-    if (user && !['avp', 'md'].includes(user.role)) {
-      setLocation('/dashboard');
-    }
-  }, [user, setLocation]);
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
 
-  const [reportType, setReportType] = useState<ReportType>('utilization');
-  const [startDate, setStartDate] = useState(monthStartStr());
-  const [endDate, setEndDate] = useState(todayStr());
-  const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
-  const [selectedClientIds, setSelectedClientIds] = useState<number[]>([]);
-  const [selectedProjectIds, setSelectedProjectIds] = useState<number[]>([]);
-  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
-  const [sort, setSort] = useState<SortState>({ key: '', dir: null });
+  // Section tabs
+  const [section, setSection] = useState<Section>('client');
 
-  // Applied params (only updated on Run Report click)
-  const [appliedParams, setAppliedParams] = useState<{
-    startDate: string;
-    endDate: string;
-    userIds: string | undefined;
-    clientIds: string | undefined;
-    projectIds: string | undefined;
-    roles: string | undefined;
-  }>({
-    startDate: monthStartStr(),
-    endDate: todayStr(),
-    userIds: undefined,
-    clientIds: undefined,
-    projectIds: undefined,
-    roles: undefined,
-  });
-  const [hasRun, setHasRun] = useState(false);
+  // Shared date range
+  const [startDate, setStartDate] = useState(monthStart);
+  const [endDate, setEndDate] = useState(today);
 
-  const safeEnd = endDate < startDate ? startDate : endDate;
+  // Client Reports filters
+  const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
+  const [appliedClientParams, setAppliedClientParams] = useState<{
+    clientId: number; start: string; end: string;
+  } | null>(null);
 
-  // Scoped filter options (users/clients/projects restricted to current user's visibility)
-  const { data: filterOptions } = useGetReportFilterOptions({
-    query: { enabled: !!user && ['avp', 'md'].includes(user.role) } as any,
-  });
+  // Team Reports filters
+  const [teamUserIds, setTeamUserIds] = useState<number[]>([]);
+  const [teamClientIds, setTeamClientIds] = useState<number[]>([]);
+  const [appliedTeamParams, setAppliedTeamParams] = useState<{
+    userIds: string | undefined; clientIds: string | undefined; start: string; end: string;
+  } | null>(null);
 
-  const visibleUsers = filterOptions?.users ?? [];
+  // My Reports filters
+  const [appliedMyParams, setAppliedMyParams] = useState<{
+    start: string; end: string;
+  } | null>(null);
+
+  // Filter options (scoped to current user's access)
+  const { data: filterOptions } = useGetReportFilterOptions();
+  const allUsers = filterOptions?.users ?? [];
   const allClients = filterOptions?.clients ?? [];
-  const allProjects = filterOptions?.projects ?? [];
 
-  const roleOptions = user?.role === 'md'
-    ? ['analyst', 'associate', 'avp']
-    : ['analyst', 'associate'];
+  // ── Client Report query ────────────────────────────────────────────────────
+  const { data: clientReportData, isFetching: clientFetching } = useGetClientReport(
+    {
+      clientId: appliedClientParams?.clientId ?? 0,
+      startDate: appliedClientParams?.start,
+      endDate: appliedClientParams?.end,
+    },
+    { query: { enabled: !!appliedClientParams } as any },
+  );
 
-  // Queries — enabled only after first Run Report
-  const commonParams = {
-    startDate: appliedParams.startDate,
-    endDate: appliedParams.endDate,
-    ...(appliedParams.userIds ? { userIds: appliedParams.userIds } : {}),
-    ...(appliedParams.clientIds ? { clientIds: appliedParams.clientIds } : {}),
-    ...(appliedParams.projectIds ? { projectIds: appliedParams.projectIds } : {}),
-    ...(appliedParams.roles ? { roles: appliedParams.roles } : {}),
-  };
+  // ── Team Report query ──────────────────────────────────────────────────────
+  const { data: teamReportData, isFetching: teamFetching } = useGetTeamReport(
+    {
+      userIds: appliedTeamParams?.userIds,
+      clientIds: appliedTeamParams?.clientIds,
+      startDate: appliedTeamParams?.start,
+      endDate: appliedTeamParams?.end,
+    },
+    { query: { enabled: !!appliedTeamParams } as any },
+  );
 
-  const { data: utilizationData, isFetching: utilFetching, refetch: refetchUtil } =
-    useGetUtilizationReport(commonParams as any, {
-      query: { enabled: hasRun && reportType === 'utilization' } as any,
-    });
+  // ── My Report query ────────────────────────────────────────────────────────
+  const { data: myReportData, isFetching: myFetching } = useGetMyReport(
+    {
+      startDate: appliedMyParams?.start,
+      endDate: appliedMyParams?.end,
+    },
+    { query: { enabled: !!appliedMyParams } as any },
+  );
 
-  const { data: efficiencyData, isFetching: effFetching, refetch: refetchEff } =
-    useGetEfficiencyReport(commonParams as any, {
-      query: { enabled: hasRun && reportType === 'efficiency' } as any,
-    });
+  // ── Run handlers ───────────────────────────────────────────────────────────
 
-  const { data: clientHoursData, isFetching: clientFetching, refetch: refetchClient } =
-    useGetClientHoursReport(
-      {
-        startDate: appliedParams.startDate,
-        endDate: appliedParams.endDate,
-        ...(appliedParams.clientIds ? { clientIds: appliedParams.clientIds } : {}),
-        ...(appliedParams.projectIds ? { projectIds: appliedParams.projectIds } : {}),
-        ...(appliedParams.userIds ? { userIds: appliedParams.userIds } : {}),
-      } as any,
-      {
-        query: { enabled: hasRun && reportType === 'client-hours' } as any,
-      },
-    );
+  function runClientReport() {
+    if (!selectedClientId) return;
+    setAppliedClientParams({ clientId: selectedClientId, start: startDate, end: endDate });
+  }
 
-  const isFetching = utilFetching || effFetching || clientFetching;
-
-  const handleRunReport = useCallback(() => {
-    const params = {
-      startDate,
-      endDate: safeEnd,
-      userIds: selectedUserIds.length > 0 ? selectedUserIds.join(',') : undefined,
-      clientIds: selectedClientIds.length > 0 ? selectedClientIds.join(',') : undefined,
-      projectIds: selectedProjectIds.length > 0 ? selectedProjectIds.join(',') : undefined,
-      roles: selectedRoles.length > 0 ? selectedRoles.join(',') : undefined,
-    };
-    setAppliedParams(params);
-    setHasRun(true);
-  }, [startDate, safeEnd, selectedUserIds, selectedClientIds, selectedProjectIds, selectedRoles]);
-
-  // Re-run when report type changes if already run
-  React.useEffect(() => {
-    if (hasRun) {
-      if (reportType === 'utilization') refetchUtil();
-      else if (reportType === 'efficiency') refetchEff();
-      else refetchClient();
-    }
-  }, [reportType]);
-
-  // ── Sorting ──────────────────────────────────────────────────────────────
-  const handleSort = (key: string) => {
-    setSort((prev) => ({
-      key,
-      dir: prev.key === key ? (prev.dir === 'asc' ? 'desc' : prev.dir === 'desc' ? null : 'asc') : 'asc',
-    }));
-  };
-
-  function sortRows<T extends Record<string, any>>(rows: T[]): T[] {
-    if (!sort.dir || !sort.key) return rows;
-    return [...rows].sort((a, b) => {
-      const av = a[sort.key];
-      const bv = b[sort.key];
-      const cmp = typeof av === 'string' ? av.localeCompare(bv) : (av ?? 0) - (bv ?? 0);
-      return sort.dir === 'asc' ? cmp : -cmp;
+  function runTeamReport() {
+    setAppliedTeamParams({
+      userIds: teamUserIds.length > 0 ? teamUserIds.join(',') : undefined,
+      clientIds: teamClientIds.length > 0 ? teamClientIds.join(',') : undefined,
+      start: startDate,
+      end: endDate,
     });
   }
 
-  const sortedUtil = useMemo(() => sortRows(utilizationData ?? []), [utilizationData, sort]);
-  const sortedEff = useMemo(() => sortRows(efficiencyData ?? []), [efficiencyData, sort]);
-  const sortedClient = useMemo(() => sortRows(clientHoursData ?? []), [clientHoursData, sort]);
+  function runMyReport() {
+    setAppliedMyParams({ start: startDate, end: endDate });
+  }
 
-  // ── Filter summary ────────────────────────────────────────────────────────
-  const filterSummary = useMemo(() => {
-    const parts: string[] = [`Period: ${appliedParams.startDate} → ${appliedParams.endDate}`];
-    if (appliedParams.roles) parts.push(`Roles: ${appliedParams.roles}`);
-    if (appliedParams.userIds) {
-      const names = appliedParams.userIds
-        .split(',')
-        .map((id) => visibleUsers.find((u) => u.id === Number(id))?.name ?? id)
-        .join(', ');
-      parts.push(`Users: ${names}`);
+  // ── Client report chart data ───────────────────────────────────────────────
+  const chartData = useMemo(
+    () =>
+      (clientReportData?.monthlySummary ?? []).map((m) => ({
+        month: m.month,
+        'Total Hours': Number(m.totalHours.toFixed(1)),
+        'Billable Hours': Number(m.billableHours.toFixed(1)),
+        'Non-Billable': Number(m.nonBillableHours.toFixed(1)),
+      })),
+    [clientReportData],
+  );
+
+  // ── Section tab config ─────────────────────────────────────────────────────
+  const tabs: { id: Section; label: string; icon: React.ReactNode }[] = [
+    { id: 'client', label: 'Client Reports', icon: <Building2 className="w-4 h-4" /> },
+    { id: 'team', label: 'Team Reports', icon: <Users className="w-4 h-4" /> },
+    { id: 'my', label: 'My Reports', icon: <User className="w-4 h-4" /> },
+  ];
+
+  // ── Export ─────────────────────────────────────────────────────────────────
+
+  async function handleExport() {
+    if (section === 'client' && clientReportData) {
+      const client = allClients.find((c) => c.id === appliedClientParams?.clientId);
+      const name = client?.name ?? 'Client';
+      await exportExcel(`${name} Report`, 'Member Breakdown', ['Name', 'Role', 'Total', 'Billable', 'Non-Billable'],
+        clientReportData.memberBreakdown.map((r) => [r.userName, roleLabel(r.role), r.totalHours, r.billableHours, r.nonBillableHours]));
+    } else if (section === 'team' && teamReportData) {
+      await exportExcel('Team Report', 'Hours by Project & Task', ['Client', 'Project', 'Task', 'Total', 'Billable', 'Non-Billable'],
+        teamReportData.map((r) => [r.clientName, r.projectName, r.taskName, r.totalHours, r.billableHours, r.nonBillableHours]));
+    } else if (section === 'my' && myReportData) {
+      await exportExcel('My Report', 'My Hours', ['Client', 'Project', 'Task', 'Total', 'Billable', 'Non-Billable'],
+        myReportData.entries.map((r) => [r.clientName, r.projectName, r.taskName, r.totalHours, r.billableHours, r.nonBillableHours]));
     }
-    if (appliedParams.clientIds) {
-      const names = appliedParams.clientIds
-        .split(',')
-        .map((id) => allClients.find((c) => c.id === Number(id))?.name ?? id)
-        .join(', ');
-      parts.push(`Clients: ${names}`);
-    }
-    if (appliedParams.projectIds) {
-      const names = appliedParams.projectIds
-        .split(',')
-        .map((id) => allProjects.find((p) => p.id === Number(id))?.name ?? id)
-        .join(', ');
-      parts.push(`Projects: ${names}`);
-    }
-    return parts.join(' | ');
-  }, [appliedParams, visibleUsers, allClients, allProjects]);
+  }
 
-  // ── Export handlers ───────────────────────────────────────────────────────
-  const reportTitle =
-    reportType === 'utilization'
-      ? 'Utilization Report'
-      : reportType === 'efficiency'
-      ? 'Billable Efficiency Report'
-      : 'Client / Project Hours Report';
+  const hasExportData =
+    (section === 'client' && !!clientReportData) ||
+    (section === 'team' && !!teamReportData) ||
+    (section === 'my' && !!myReportData);
 
-  const filename = `${reportTitle.replace(/\s+/g, '-').toLowerCase()}_${appliedParams.startDate}_${appliedParams.endDate}`;
+  if (!user) return null;
 
-  const handleExcelExport = async () => {
-    if (reportType === 'utilization' && sortedUtil.length > 0) {
-      await exportExcel(
-        ['Name', 'Role', 'Working Days', 'Leave Days', 'Available Days', 'Hours Logged', 'Billable Hours', 'Target Hours', 'Utilization %'],
-        sortedUtil.map((r) => [r.userName, r.role, r.workingDays, r.leaveDays, r.availableDays, r.hoursLogged, r.billableHours, r.targetHours, r.utilization]),
-        filename,
-      );
-    } else if (reportType === 'efficiency' && sortedEff.length > 0) {
-      await exportExcel(
-        ['Name', 'Role', 'Total Hours', 'Billable Hours', 'Non-Billable Hours', 'Approved Hours', 'Billable %'],
-        sortedEff.map((r) => [r.userName, r.role, r.totalHours, r.billableHours, r.nonBillableHours, r.approvedHours, r.billablePct]),
-        filename,
-      );
-    } else if (reportType === 'client-hours' && sortedClient.length > 0) {
-      await exportExcel(
-        ['Client', 'Project', 'Total Hours', 'Billable Hours', 'Non-Billable Hours', '# Contributors'],
-        sortedClient.map((r) => [r.clientName, r.projectName, r.totalHours, r.billableHours, r.nonBillableHours, r.contributorCount]),
-        filename,
-      );
-    }
-  };
+  // ── Date range filter shared across tabs ───────────────────────────────────
 
-  const handlePdfExport = async () => {
-    const generatedBy = user?.name ?? 'Unknown';
-    if (reportType === 'utilization' && sortedUtil.length > 0) {
-      await exportPdf(
-        reportTitle, filterSummary, generatedBy,
-        ['Name', 'Role', 'Working Days', 'Leave Days', 'Available Days', 'Hours Logged', 'Billable Hrs', 'Target Hrs', 'Utilization %'],
-        sortedUtil.map((r) => [r.userName, r.role, r.workingDays, r.leaveDays, r.availableDays, hrs(r.hoursLogged), hrs(r.billableHours), hrs(r.targetHours), pct(r.utilization)]),
-        filename,
-      );
-    } else if (reportType === 'efficiency' && sortedEff.length > 0) {
-      await exportPdf(
-        reportTitle, filterSummary, generatedBy,
-        ['Name', 'Role', 'Total Hours', 'Billable Hrs', 'Non-Billable Hrs', 'Approved Hrs', 'Billable %'],
-        sortedEff.map((r) => [r.userName, r.role, hrs(r.totalHours), hrs(r.billableHours), hrs(r.nonBillableHours), hrs(r.approvedHours), pct(r.billablePct)]),
-        filename,
-      );
-    } else if (reportType === 'client-hours' && sortedClient.length > 0) {
-      await exportPdf(
-        reportTitle, filterSummary, generatedBy,
-        ['Client', 'Project', 'Total Hours', 'Billable Hrs', 'Non-Billable Hrs', '# Contributors'],
-        sortedClient.map((r) => [r.clientName, r.projectName, hrs(r.totalHours), hrs(r.billableHours), hrs(r.nonBillableHours), r.contributorCount]),
-        filename,
-      );
-    }
-  };
-
-  // ── Summaries ─────────────────────────────────────────────────────────────
-  const utilSummary = useMemo(() => {
-    if (!sortedUtil.length) return null;
-    return {
-      hoursLogged: sortedUtil.reduce((s, r) => s + r.hoursLogged, 0),
-      billableHours: sortedUtil.reduce((s, r) => s + r.billableHours, 0),
-      targetHours: sortedUtil.reduce((s, r) => s + r.targetHours, 0),
-      avgUtil: sortedUtil.reduce((s, r) => s + r.utilization, 0) / sortedUtil.length,
-    };
-  }, [sortedUtil]);
-
-  const effSummary = useMemo(() => {
-    if (!sortedEff.length) return null;
-    return {
-      totalHours: sortedEff.reduce((s, r) => s + r.totalHours, 0),
-      billableHours: sortedEff.reduce((s, r) => s + r.billableHours, 0),
-      nonBillableHours: sortedEff.reduce((s, r) => s + r.nonBillableHours, 0),
-      approvedHours: sortedEff.reduce((s, r) => s + r.approvedHours, 0),
-      avgBillablePct: sortedEff.reduce((s, r) => s + r.billablePct, 0) / sortedEff.length,
-    };
-  }, [sortedEff]);
-
-  const clientSummary = useMemo(() => {
-    if (!sortedClient.length) return null;
-    return {
-      totalHours: sortedClient.reduce((s, r) => s + r.totalHours, 0),
-      billableHours: sortedClient.reduce((s, r) => s + r.billableHours, 0),
-      nonBillableHours: sortedClient.reduce((s, r) => s + r.nonBillableHours, 0),
-    };
-  }, [sortedClient]);
-
-  const hasData =
-    (reportType === 'utilization' && (sortedUtil?.length ?? 0) > 0) ||
-    (reportType === 'efficiency' && (sortedEff?.length ?? 0) > 0) ||
-    (reportType === 'client-hours' && (sortedClient?.length ?? 0) > 0);
-
-  if (!user || !['avp', 'md'].includes(user.role)) return null;
+  const DateFilters = () => (
+    <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-2">
+        <label className="text-xs text-muted-foreground whitespace-nowrap">From</label>
+        <input
+          type="date"
+          value={startDate}
+          max={endDate}
+          onChange={(e) => setStartDate(e.target.value)}
+          className="h-9 px-3 rounded-md border border-input bg-background text-sm"
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        <label className="text-xs text-muted-foreground whitespace-nowrap">To</label>
+        <input
+          type="date"
+          value={endDate}
+          min={startDate}
+          max={today}
+          onChange={(e) => setEndDate(e.target.value)}
+          className="h-9 px-3 rounded-md border border-input bg-background text-sm"
+        />
+      </div>
+    </div>
+  );
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
-            <BarChart2 className="w-7 h-7 text-primary" />
-            Reports
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Generate and export workforce analytics
-          </p>
-        </div>
-        {hasData && (
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleExcelExport} className="gap-2">
-              <Download className="w-3.5 h-3.5" />
-              Export Excel
-            </Button>
-            <Button variant="outline" size="sm" onClick={handlePdfExport} className="gap-2">
-              <FileText className="w-3.5 h-3.5" />
-              Export PDF
-            </Button>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-primary/10">
+            <BarChart2 className="w-5 h-5 text-primary" />
           </div>
+          <div>
+            <h1 className="text-xl font-semibold">Reports</h1>
+            <p className="text-sm text-muted-foreground">Analyse hours by client, team, and individual</p>
+          </div>
+        </div>
+        {hasExportData && (
+          <Button variant="outline" size="sm" onClick={handleExport} className="gap-2">
+            <Download className="w-4 h-4" />
+            Export Excel
+          </Button>
         )}
       </div>
 
-      {/* Report Type Tabs */}
+      {/* Section tabs */}
       <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
-        {([
-          { id: 'utilization', label: 'Utilization' },
-          { id: 'efficiency', label: 'Billable Efficiency' },
-          { id: 'client-hours', label: 'Client / Project Hours' },
-        ] as { id: ReportType; label: string }[]).map((tab) => (
+        {tabs.map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setReportType(tab.id)}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              reportType === tab.id
-                ? 'bg-background text-foreground shadow-sm'
+            onClick={() => setSection(tab.id)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+              section === tab.id
+                ? 'bg-background shadow-sm text-foreground'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
+            {tab.icon}
             {tab.label}
           </button>
         ))}
       </div>
 
-      {/* Filter Panel */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <Filter className="w-4 h-4" />
-            Filters
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {/* Date range */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Start Date
-              </label>
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="h-8 text-sm font-mono"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                End Date
-              </label>
-              <Input
-                type="date"
-                value={safeEnd}
-                min={startDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="h-8 text-sm font-mono"
-              />
-            </div>
-
-            {/* Role filter (not for client-hours report) */}
-            {reportType !== 'client-hours' && (
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Role
-                </label>
-                <div className="flex gap-2 flex-wrap pt-0.5">
-                  {roleOptions.map((r) => (
-                    <label key={r} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedRoles.includes(r)}
-                        onChange={() =>
-                          setSelectedRoles((prev) =>
-                            prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r],
-                          )
-                        }
-                        className="h-3.5 w-3.5 accent-primary"
-                      />
-                      <span className="capitalize">{r}</span>
-                    </label>
-                  ))}
+      {/* ── CLIENT REPORTS ─────────────────────────────────────────────────── */}
+      {section === 'client' && (
+        <div className="space-y-5">
+          {/* Filters */}
+          <Card>
+            <CardContent className="pt-5">
+              <div className="flex items-end gap-3 flex-wrap">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Client</label>
+                  <SingleSelect
+                    label="Select a client"
+                    options={allClients}
+                    value={selectedClientId}
+                    onChange={setSelectedClientId}
+                  />
                 </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Date Range</label>
+                  <DateFilters />
+                </div>
+                <Button
+                  onClick={runClientReport}
+                  disabled={!selectedClientId || clientFetching}
+                  className="gap-2 self-end"
+                >
+                  {clientFetching ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+                  Run Report
+                </Button>
               </div>
-            )}
-
-            {/* Users */}
-            {reportType !== 'client-hours' && (
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Users
-                </label>
-                <MultiSelect
-                  label="users"
-                  options={visibleUsers.map((u) => ({ id: u.id, name: u.name }))}
-                  value={selectedUserIds}
-                  onChange={setSelectedUserIds}
-                />
-              </div>
-            )}
-
-            {/* Clients */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Clients
-              </label>
-              <MultiSelect
-                label="clients"
-                options={(allClients ?? []).map((c) => ({ id: c.id, name: c.name }))}
-                value={selectedClientIds}
-                onChange={setSelectedClientIds}
-              />
-            </div>
-
-            {/* Projects */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Projects
-              </label>
-              <MultiSelect
-                label="projects"
-                options={(allProjects ?? []).map((p) => ({ id: p.id, name: p.name }))}
-                value={selectedProjectIds}
-                onChange={setSelectedProjectIds}
-              />
-            </div>
-
-            {/* Users for client-hours */}
-            {reportType === 'client-hours' && (
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Limit to Users
-                </label>
-                <MultiSelect
-                  label="users"
-                  options={visibleUsers.map((u) => ({ id: u.id, name: u.name }))}
-                  value={selectedUserIds}
-                  onChange={setSelectedUserIds}
-                />
-              </div>
-            )}
-          </div>
-
-          <div className="mt-4 flex justify-end">
-            <Button onClick={handleRunReport} disabled={isFetching} className="gap-2 font-semibold">
-              {isFetching ? (
-                <RefreshCw className="w-4 h-4 animate-spin" />
-              ) : (
-                <BarChart2 className="w-4 h-4" />
+              {!selectedClientId && (
+                <p className="text-xs text-amber-600 mt-2">Select a client to generate the report.</p>
               )}
-              Run Report
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
 
-      {/* Results */}
-      {hasRun && (
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base font-semibold">{reportTitle}</CardTitle>
-              <span className="text-xs text-muted-foreground font-mono">{filterSummary}</span>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            {isFetching ? (
-              <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                Generating report…
-              </div>
-            ) : !hasData ? (
-              <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
-                <BarChart2 className="w-8 h-8 opacity-30" />
-                <p className="text-sm">No data for the selected filters.</p>
-              </div>
-            ) : reportType === 'utilization' ? (
-              <UtilizationTable rows={sortedUtil} sort={sort} onSort={handleSort} summary={utilSummary} />
-            ) : reportType === 'efficiency' ? (
-              <EfficiencyTable rows={sortedEff} sort={sort} onSort={handleSort} summary={effSummary} />
-            ) : (
-              <ClientHoursTable rows={sortedClient} sort={sort} onSort={handleSort} summary={clientSummary} />
-            )}
-          </CardContent>
-        </Card>
-      )}
+          {/* Results */}
+          {clientReportData && (
+            <>
+              {/* Monthly chart */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Monthly Summary</CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    {allClients.find((c) => c.id === appliedClientParams?.clientId)?.name} ·{' '}
+                    {appliedClientParams?.start} to {appliedClientParams?.end}
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  {chartData.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-8">
+                      No hours logged for this client in the selected period.
+                    </p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={260}>
+                      <BarChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                        <XAxis dataKey="month" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
+                        <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={false} unit="h" />
+                        <Tooltip
+                          formatter={(v: number) => [`${v}h`]}
+                          contentStyle={{ borderRadius: 8, fontSize: 12 }}
+                        />
+                        <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
+                        <Bar dataKey="Total Hours" fill="hsl(var(--muted-foreground)/0.35)" radius={[3, 3, 0, 0]} />
+                        <Bar dataKey="Billable Hours" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+                        <Bar dataKey="Non-Billable" fill="hsl(var(--primary)/0.25)" radius={[3, 3, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
 
-      {!hasRun && (
-        <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
-          <BarChart2 className="w-12 h-12 opacity-20" />
-          <p className="text-sm">Set your filters and click <strong>Run Report</strong> to generate results.</p>
+              {/* Member breakdown table */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Hours by Team Member</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {clientReportData.memberBreakdown.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-8">
+                      No hours logged for this client in the selected period.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b bg-muted/50">
+                            <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Name</th>
+                            <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Role</th>
+                            <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Total</th>
+                            <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Billable</th>
+                            <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Non-Billable</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {clientReportData.memberBreakdown.map((m) => (
+                            <tr key={m.userId} className="border-b hover:bg-muted/30 transition-colors">
+                              <td className="px-4 py-2.5 font-medium">{m.userName}</td>
+                              <td className="px-4 py-2.5">
+                                <Badge variant="outline" className="text-xs">{roleLabel(m.role)}</Badge>
+                              </td>
+                              <td className="px-4 py-2.5 text-right tabular-nums">{fmt(m.totalHours)}h</td>
+                              <td className="px-4 py-2.5 text-right tabular-nums text-emerald-600">{fmt(m.billableHours)}h</td>
+                              <td className="px-4 py-2.5 text-right tabular-nums text-amber-600">{fmt(m.nonBillableHours)}h</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          {(() => {
+                            const totals = clientReportData.memberBreakdown.reduce(
+                              (a, r) => ({ t: a.t + r.totalHours, b: a.b + r.billableHours, n: a.n + r.nonBillableHours }),
+                              { t: 0, b: 0, n: 0 },
+                            );
+                            return (
+                              <tr className="bg-muted/50 font-semibold border-t-2">
+                                <td colSpan={2} className="px-4 py-2.5">Total</td>
+                                <td className="px-4 py-2.5 text-right tabular-nums">{fmt(totals.t)}h</td>
+                                <td className="px-4 py-2.5 text-right tabular-nums text-emerald-600">{fmt(totals.b)}h</td>
+                                <td className="px-4 py-2.5 text-right tabular-nums text-amber-600">{fmt(totals.n)}h</td>
+                              </tr>
+                            );
+                          })()}
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          )}
         </div>
       )}
-    </div>
-  );
-}
 
-// ─── Utilization Table ────────────────────────────────────────────────────────
+      {/* ── TEAM REPORTS ───────────────────────────────────────────────────── */}
+      {section === 'team' && (
+        <div className="space-y-5">
+          <Card>
+            <CardContent className="pt-5">
+              <div className="flex items-end gap-3 flex-wrap">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Team Members</label>
+                  <MultiSelect
+                    label="team members"
+                    options={allUsers.map((u) => ({ id: u.id, name: u.name }))}
+                    selected={teamUserIds}
+                    onChange={setTeamUserIds}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Clients</label>
+                  <MultiSelect
+                    label="clients"
+                    options={allClients}
+                    selected={teamClientIds}
+                    onChange={setTeamClientIds}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Date Range</label>
+                  <DateFilters />
+                </div>
+                <Button onClick={runTeamReport} disabled={teamFetching} className="gap-2 self-end">
+                  {teamFetching ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+                  Run Report
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Leaving filters empty shows all team members and clients within your access scope.
+              </p>
+            </CardContent>
+          </Card>
 
-function UtilizationTable({
-  rows,
-  sort,
-  onSort,
-  summary,
-}: {
-  rows: any[];
-  sort: SortState;
-  onSort: (k: string) => void;
-  summary: any;
-}) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/50 border-b border-border">
-          <tr>
-            <SortHeader label="Name" sortKey="userName" sort={sort} onSort={onSort} className="pl-6" />
-            <SortHeader label="Role" sortKey="role" sort={sort} onSort={onSort} />
-            <SortHeader label="Working Days" sortKey="workingDays" sort={sort} onSort={onSort} />
-            <SortHeader label="Leave Days" sortKey="leaveDays" sort={sort} onSort={onSort} />
-            <SortHeader label="Available Days" sortKey="availableDays" sort={sort} onSort={onSort} />
-            <SortHeader label="Hours Logged" sortKey="hoursLogged" sort={sort} onSort={onSort} />
-            <SortHeader label="Billable Hrs" sortKey="billableHours" sort={sort} onSort={onSort} />
-            <SortHeader label="Target Hrs" sortKey="targetHours" sort={sort} onSort={onSort} />
-            <SortHeader label="Utilization" sortKey="utilization" sort={sort} onSort={onSort} />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.userId} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-              <td className="px-4 py-2.5 pl-6 font-medium">{r.userName}</td>
-              <td className="px-4 py-2.5">
-                <span className={`text-xs px-2 py-0.5 rounded-full border font-medium capitalize ${roleBadgeColor(r.role)}`}>
-                  {r.role}
-                </span>
-              </td>
-              <td className="px-4 py-2.5 text-muted-foreground">{r.workingDays}</td>
-              <td className="px-4 py-2.5 text-muted-foreground">{r.leaveDays}</td>
-              <td className="px-4 py-2.5">{r.availableDays}</td>
-              <td className="px-4 py-2.5">{hrs(r.hoursLogged)}</td>
-              <td className="px-4 py-2.5">{hrs(r.billableHours)}</td>
-              <td className="px-4 py-2.5 text-muted-foreground">{hrs(r.targetHours)}</td>
-              <td className={`px-4 py-2.5 ${utilizationColor(r.utilization)}`}>{pct(r.utilization)}</td>
-            </tr>
-          ))}
-        </tbody>
-        {summary && (
-          <tfoot>
-            <tr className="bg-muted/60 font-semibold border-t-2 border-border">
-              <td className="px-4 py-2.5 pl-6 text-xs uppercase tracking-wide text-muted-foreground">
-                Totals / Avg
-              </td>
-              <td className="px-4 py-2.5" />
-              <td className="px-4 py-2.5" />
-              <td className="px-4 py-2.5" />
-              <td className="px-4 py-2.5" />
-              <td className="px-4 py-2.5">{hrs(summary.hoursLogged)}</td>
-              <td className="px-4 py-2.5">{hrs(summary.billableHours)}</td>
-              <td className="px-4 py-2.5">{hrs(summary.targetHours)}</td>
-              <td className={`px-4 py-2.5 ${utilizationColor(summary.avgUtil)}`}>{pct(summary.avgUtil)}</td>
-            </tr>
-          </tfoot>
-        )}
-      </table>
-    </div>
-  );
-}
+          {appliedTeamParams && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Hours by Project &amp; Task</CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  {appliedTeamParams.start} to {appliedTeamParams.end}
+                  {teamFetching && <span className="ml-2 text-primary animate-pulse">Refreshing…</span>}
+                </p>
+              </CardHeader>
+              <CardContent className="p-0">
+                <GroupedTable rows={teamReportData ?? []} />
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
-// ─── Efficiency Table ─────────────────────────────────────────────────────────
+      {/* ── MY REPORTS ─────────────────────────────────────────────────────── */}
+      {section === 'my' && (
+        <div className="space-y-5">
+          <Card>
+            <CardContent className="pt-5">
+              <div className="flex items-end gap-3 flex-wrap">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Date Range</label>
+                  <DateFilters />
+                </div>
+                <Button onClick={runMyReport} disabled={myFetching} className="gap-2 self-end">
+                  {myFetching ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+                  Run Report
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
-function EfficiencyTable({
-  rows,
-  sort,
-  onSort,
-  summary,
-}: {
-  rows: any[];
-  sort: SortState;
-  onSort: (k: string) => void;
-  summary: any;
-}) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/50 border-b border-border">
-          <tr>
-            <SortHeader label="Name" sortKey="userName" sort={sort} onSort={onSort} className="pl-6" />
-            <SortHeader label="Role" sortKey="role" sort={sort} onSort={onSort} />
-            <SortHeader label="Total Hours" sortKey="totalHours" sort={sort} onSort={onSort} />
-            <SortHeader label="Billable Hrs" sortKey="billableHours" sort={sort} onSort={onSort} />
-            <SortHeader label="Non-Billable Hrs" sortKey="nonBillableHours" sort={sort} onSort={onSort} />
-            <SortHeader label="Approved Hrs" sortKey="approvedHours" sort={sort} onSort={onSort} />
-            <SortHeader label="Billable %" sortKey="billablePct" sort={sort} onSort={onSort} />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.userId} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-              <td className="px-4 py-2.5 pl-6 font-medium">{r.userName}</td>
-              <td className="px-4 py-2.5">
-                <span className={`text-xs px-2 py-0.5 rounded-full border font-medium capitalize ${roleBadgeColor(r.role)}`}>
-                  {r.role}
-                </span>
-              </td>
-              <td className="px-4 py-2.5">{hrs(r.totalHours)}</td>
-              <td className="px-4 py-2.5 text-emerald-600">{hrs(r.billableHours)}</td>
-              <td className="px-4 py-2.5 text-muted-foreground">{hrs(r.nonBillableHours)}</td>
-              <td className="px-4 py-2.5">{hrs(r.approvedHours)}</td>
-              <td className={`px-4 py-2.5 ${utilizationColor(r.billablePct)}`}>{pct(r.billablePct)}</td>
-            </tr>
-          ))}
-        </tbody>
-        {summary && (
-          <tfoot>
-            <tr className="bg-muted/60 font-semibold border-t-2 border-border">
-              <td className="px-4 py-2.5 pl-6 text-xs uppercase tracking-wide text-muted-foreground">
-                Totals / Avg
-              </td>
-              <td className="px-4 py-2.5" />
-              <td className="px-4 py-2.5">{hrs(summary.totalHours)}</td>
-              <td className="px-4 py-2.5 text-emerald-600">{hrs(summary.billableHours)}</td>
-              <td className="px-4 py-2.5 text-muted-foreground">{hrs(summary.nonBillableHours)}</td>
-              <td className="px-4 py-2.5">{hrs(summary.approvedHours)}</td>
-              <td className={`px-4 py-2.5 ${utilizationColor(summary.avgBillablePct)}`}>{pct(summary.avgBillablePct)}</td>
-            </tr>
-          </tfoot>
-        )}
-      </table>
-    </div>
-  );
-}
+          {appliedMyParams && (
+            <>
+              {/* Summary stat cards */}
+              {myReportData?.summary && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Total Hours', value: `${fmt(myReportData.summary.totalHours)}h`, sub: `${myReportData.summary.availableDays} available days` },
+                    { label: 'Billable Hours', value: `${fmt(myReportData.summary.billableHours)}h`, sub: `of ${fmt(myReportData.summary.targetHours)}h target`, color: 'text-emerald-600' },
+                    { label: 'Utilization', value: `${myReportData.summary.utilization}%`, sub: 'billable / target', color: myReportData.summary.utilization >= 80 ? 'text-emerald-600' : 'text-amber-600' },
+                    { label: 'Efficiency', value: `${myReportData.summary.efficiency}%`, sub: 'billable / total', color: myReportData.summary.efficiency >= 80 ? 'text-emerald-600' : 'text-amber-600' },
+                  ].map((s) => (
+                    <Card key={s.label}>
+                      <CardContent className="pt-4 pb-4">
+                        <p className="text-xs text-muted-foreground">{s.label}</p>
+                        <p className={`text-2xl font-bold mt-1 ${s.color ?? ''}`}>{s.value}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{s.sub}</p>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
 
-// ─── Client Hours Table ───────────────────────────────────────────────────────
-
-function ClientHoursTable({
-  rows,
-  sort,
-  onSort,
-  summary,
-}: {
-  rows: any[];
-  sort: SortState;
-  onSort: (k: string) => void;
-  summary: any;
-}) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/50 border-b border-border">
-          <tr>
-            <SortHeader label="Client" sortKey="clientName" sort={sort} onSort={onSort} className="pl-6" />
-            <SortHeader label="Project" sortKey="projectName" sort={sort} onSort={onSort} />
-            <SortHeader label="Total Hours" sortKey="totalHours" sort={sort} onSort={onSort} />
-            <SortHeader label="Billable Hrs" sortKey="billableHours" sort={sort} onSort={onSort} />
-            <SortHeader label="Non-Billable Hrs" sortKey="nonBillableHours" sort={sort} onSort={onSort} />
-            <SortHeader label="Contributors" sortKey="contributorCount" sort={sort} onSort={onSort} />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={`${r.clientId}-${r.projectId}-${i}`} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-              <td className="px-4 py-2.5 pl-6 font-medium">{r.clientName}</td>
-              <td className="px-4 py-2.5 text-muted-foreground">{r.projectName}</td>
-              <td className="px-4 py-2.5">{hrs(r.totalHours)}</td>
-              <td className="px-4 py-2.5 text-emerald-600">{hrs(r.billableHours)}</td>
-              <td className="px-4 py-2.5 text-muted-foreground">{hrs(r.nonBillableHours)}</td>
-              <td className="px-4 py-2.5">
-                <Badge variant="secondary">{r.contributorCount}</Badge>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-        {summary && (
-          <tfoot>
-            <tr className="bg-muted/60 font-semibold border-t-2 border-border">
-              <td className="px-4 py-2.5 pl-6 text-xs uppercase tracking-wide text-muted-foreground">
-                Totals
-              </td>
-              <td className="px-4 py-2.5" />
-              <td className="px-4 py-2.5">{hrs(summary.totalHours)}</td>
-              <td className="px-4 py-2.5 text-emerald-600">{hrs(summary.billableHours)}</td>
-              <td className="px-4 py-2.5 text-muted-foreground">{hrs(summary.nonBillableHours)}</td>
-              <td className="px-4 py-2.5" />
-            </tr>
-          </tfoot>
-        )}
-      </table>
+              {/* Detail table */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">My Hours by Project &amp; Task</CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    {appliedMyParams.start} to {appliedMyParams.end}
+                    {myFetching && <span className="ml-2 text-primary animate-pulse">Refreshing…</span>}
+                  </p>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <GroupedTable rows={myReportData?.entries ?? []} />
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

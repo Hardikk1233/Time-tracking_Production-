@@ -374,68 +374,79 @@ export interface ReportFilterOptions {
   projects: ReportFilterProject[];
 }
 
-export type UtilizationReportRowRole = typeof UtilizationReportRowRole[keyof typeof UtilizationReportRowRole];
-
-
-export const UtilizationReportRowRole = {
-  analyst: 'analyst',
-  associate: 'associate',
-  avp: 'avp',
-  md: 'md',
-} as const;
-
-export interface UtilizationReportRow {
-  userId: number;
-  userName: string;
-  role: UtilizationReportRowRole;
-  /** Calendar working days (Mon-Fri minus public holidays) */
-  workingDays: number;
-  /** Leave days taken within the period */
-  leaveDays: number;
-  /** workingDays minus leaveDays */
-  availableDays: number;
-  /** Total hours logged in the period */
-  hoursLogged: number;
-  /** Billable hours logged in the period */
-  billableHours: number;
-  /** availableDays × 8 */
-  targetHours: number;
-  /** billableHours / targetHours × 100 */
-  utilization: number;
-}
-
-export type EfficiencyReportRowRole = typeof EfficiencyReportRowRole[keyof typeof EfficiencyReportRowRole];
-
-
-export const EfficiencyReportRowRole = {
-  analyst: 'analyst',
-  associate: 'associate',
-  avp: 'avp',
-  md: 'md',
-} as const;
-
-export interface EfficiencyReportRow {
-  userId: number;
-  userName: string;
-  role: EfficiencyReportRowRole;
+export interface MonthlyHoursSummary {
+  /** YYYY-MM */
+  month: string;
   totalHours: number;
   billableHours: number;
   nonBillableHours: number;
-  approvedHours: number;
-  /** billableHours / totalHours × 100 */
-  billablePct: number;
 }
 
-export interface ClientHoursReportRow {
+export type MemberHoursBreakdownRole = typeof MemberHoursBreakdownRole[keyof typeof MemberHoursBreakdownRole];
+
+
+export const MemberHoursBreakdownRole = {
+  analyst: 'analyst',
+  associate: 'associate',
+  avp: 'avp',
+  md: 'md',
+} as const;
+
+export interface MemberHoursBreakdown {
+  userId: number;
+  userName: string;
+  role: MemberHoursBreakdownRole;
+  totalHours: number;
+  billableHours: number;
+  nonBillableHours: number;
+}
+
+export interface ClientReport {
+  monthlySummary: MonthlyHoursSummary[];
+  memberBreakdown: MemberHoursBreakdown[];
+}
+
+export interface TeamReportRow {
   clientId: number;
   clientName: string;
   projectId: number;
   projectName: string;
+  taskId: number;
+  taskName: string;
   totalHours: number;
   billableHours: number;
   nonBillableHours: number;
-  /** Number of distinct contributors */
-  contributorCount: number;
+}
+
+export interface MyReportRow {
+  clientId: number;
+  clientName: string;
+  projectId: number;
+  projectName: string;
+  taskId: number;
+  taskName: string;
+  totalHours: number;
+  billableHours: number;
+  nonBillableHours: number;
+}
+
+export interface MyReportSummary {
+  workingDays: number;
+  leaveDays: number;
+  availableDays: number;
+  targetHours: number;
+  totalHours: number;
+  billableHours: number;
+  nonBillableHours: number;
+  /** billableHours / targetHours × 100 */
+  utilization: number;
+  /** billableHours / totalHours × 100 */
+  efficiency: number;
+}
+
+export interface MyReport {
+  entries: MyReportRow[];
+  summary: MyReportSummary;
 }
 
 export interface Leave {
@@ -549,28 +560,13 @@ endDate?: string;
 userId?: number;
 };
 
-export type GetUtilizationReportParams = {
+export type GetClientReportParams = {
+clientId: number;
 startDate?: string;
 endDate?: string;
-/**
- * Comma-separated user IDs
- */
-userIds?: string;
-/**
- * Comma-separated client IDs
- */
-clientIds?: string;
-/**
- * Comma-separated project IDs
- */
-projectIds?: string;
-/**
- * Comma-separated roles (analyst,associate,avp)
- */
-roles?: string;
 };
 
-export type GetEfficiencyReportParams = {
+export type GetTeamReportParams = {
 startDate?: string;
 endDate?: string;
 /**
@@ -581,30 +577,10 @@ userIds?: string;
  * Comma-separated client IDs
  */
 clientIds?: string;
-/**
- * Comma-separated project IDs
- */
-projectIds?: string;
-/**
- * Comma-separated roles (analyst,associate,avp)
- */
-roles?: string;
 };
 
-export type GetClientHoursReportParams = {
+export type GetMyReportParams = {
 startDate?: string;
 endDate?: string;
-/**
- * Comma-separated client IDs
- */
-clientIds?: string;
-/**
- * Comma-separated project IDs
- */
-projectIds?: string;
-/**
- * Comma-separated user IDs
- */
-userIds?: string;
 };
 

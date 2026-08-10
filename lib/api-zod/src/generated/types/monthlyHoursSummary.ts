@@ -6,14 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface ClientHoursReportRow {
-  clientId: number;
-  clientName: string;
-  projectId: number;
-  projectName: string;
+export interface MonthlyHoursSummary {
+  /** YYYY-MM */
+  month: string;
   totalHours: number;
   billableHours: number;
   nonBillableHours: number;
-  /** Number of distinct contributors */
-  contributorCount: number;
 }

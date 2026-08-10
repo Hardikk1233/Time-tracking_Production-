@@ -22,21 +22,20 @@ import type {
 import type {
   Client,
   ClientHours,
-  ClientHoursReportRow,
   ClientHoursTrendPoint,
   ClientInput,
+  ClientReport,
   ClientUpdate,
   DashboardSummary,
-  EfficiencyReportRow,
   ErrorResponse,
   GetClientHoursParams,
-  GetClientHoursReportParams,
   GetClientHoursTrendParams,
+  GetClientReportParams,
   GetDashboardSummaryParams,
-  GetEfficiencyReportParams,
+  GetMyReportParams,
   GetRecentActivityParams,
+  GetTeamReportParams,
   GetTeamUtilizationParams,
-  GetUtilizationReportParams,
   HealthStatus,
   Leave,
   LeaveBulkInput,
@@ -50,6 +49,7 @@ import type {
   LoginInput,
   MemberUtilization,
   MessageResponse,
+  MyReport,
   Project,
   ProjectInput,
   ProjectUpdate,
@@ -61,14 +61,14 @@ import type {
   TaskAssignmentInput,
   TaskInput,
   TaskUpdate,
+  TeamReportRow,
   TimeEntry,
   TimeEntryInput,
   TimeEntryUpdate,
   User,
   UserAssignmentInput,
   UserInput,
-  UserUpdate,
-  UtilizationReportRow
+  UserUpdate
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -4164,7 +4164,7 @@ export const getGetReportFilterOptionsUrl = () => {
 }
 
 /**
- * @summary Scoped filter options for the current user (AVP/MD only)
+ * @summary Scoped filter options for the current user
  */
 export const getReportFilterOptions = async ( options?: Parameters<typeof customFetch>[1]): Promise<ReportFilterOptions> => {
 
@@ -4188,7 +4188,7 @@ export const getGetReportFilterOptionsQueryKey = () => {
     }
 
 
-export const getGetReportFilterOptionsQueryOptions = <TData = Awaited<ReturnType<typeof getReportFilterOptions>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReportFilterOptions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetReportFilterOptionsQueryOptions = <TData = Awaited<ReturnType<typeof getReportFilterOptions>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReportFilterOptions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -4207,14 +4207,14 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type GetReportFilterOptionsQueryResult = NonNullable<Awaited<ReturnType<typeof getReportFilterOptions>>>
-export type GetReportFilterOptionsQueryError = ErrorType<void>
+export type GetReportFilterOptionsQueryError = ErrorType<unknown>
 
 
 /**
- * @summary Scoped filter options for the current user (AVP/MD only)
+ * @summary Scoped filter options for the current user
  */
 
-export function useGetReportFilterOptions<TData = Awaited<ReturnType<typeof getReportFilterOptions>>, TError = ErrorType<void>>(
+export function useGetReportFilterOptions<TData = Awaited<ReturnType<typeof getReportFilterOptions>>, TError = ErrorType<unknown>>(
   options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReportFilterOptions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
@@ -4232,7 +4232,7 @@ export function useGetReportFilterOptions<TData = Awaited<ReturnType<typeof getR
 
 
 
-export const getGetUtilizationReportUrl = (params?: GetUtilizationReportParams,) => {
+export const getGetClientReportUrl = (params: GetClientReportParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
@@ -4244,15 +4244,15 @@ export const getGetUtilizationReportUrl = (params?: GetUtilizationReportParams,)
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/api/reports/utilization?${stringifiedParams}` : `/api/reports/utilization`
+  return stringifiedParams.length > 0 ? `/api/reports/client-report?${stringifiedParams}` : `/api/reports/client-report`
 }
 
 /**
- * @summary Per-user utilization report (AVP/MD only)
+ * @summary Monthly hours summary + per-member breakdown for a client
  */
-export const getUtilizationReport = async (params?: GetUtilizationReportParams, options?: Parameters<typeof customFetch>[1]): Promise<UtilizationReportRow[]> => {
+export const getClientReport = async (params: GetClientReportParams, options?: Parameters<typeof customFetch>[1]): Promise<ClientReport> => {
 
-  return customFetch<UtilizationReportRow[]>(getGetUtilizationReportUrl(params),
+  return customFetch<ClientReport>(getGetClientReportUrl(params),
   {
     ...options,
     method: 'GET'
@@ -4265,45 +4265,45 @@ export const getUtilizationReport = async (params?: GetUtilizationReportParams, 
 
 
 
-export const getGetUtilizationReportQueryKey = (params?: GetUtilizationReportParams,) => {
+export const getGetClientReportQueryKey = (params?: GetClientReportParams,) => {
     return [
-    `/api/reports/utilization`, ...(params ? [params] : [])
+    `/api/reports/client-report`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetUtilizationReportQueryOptions = <TData = Awaited<ReturnType<typeof getUtilizationReport>>, TError = ErrorType<void>>(params?: GetUtilizationReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUtilizationReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetClientReportQueryOptions = <TData = Awaited<ReturnType<typeof getClientReport>>, TError = ErrorType<unknown>>(params: GetClientReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClientReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetUtilizationReportQueryKey(params);
+  const queryKey =  queryOptions?.queryKey ?? getGetClientReportQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getUtilizationReport>>> = ({ signal }) => getUtilizationReport(params, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClientReport>>> = ({ signal }) => getClientReport(params, { signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getUtilizationReport>>, TError, TData> & { queryKey: QueryKey }
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClientReport>>, TError, TData> & { queryKey: QueryKey }
 }
 
-export type GetUtilizationReportQueryResult = NonNullable<Awaited<ReturnType<typeof getUtilizationReport>>>
-export type GetUtilizationReportQueryError = ErrorType<void>
+export type GetClientReportQueryResult = NonNullable<Awaited<ReturnType<typeof getClientReport>>>
+export type GetClientReportQueryError = ErrorType<unknown>
 
 
 /**
- * @summary Per-user utilization report (AVP/MD only)
+ * @summary Monthly hours summary + per-member breakdown for a client
  */
 
-export function useGetUtilizationReport<TData = Awaited<ReturnType<typeof getUtilizationReport>>, TError = ErrorType<void>>(
- params?: GetUtilizationReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUtilizationReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export function useGetClientReport<TData = Awaited<ReturnType<typeof getClientReport>>, TError = ErrorType<unknown>>(
+ params: GetClientReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClientReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetUtilizationReportQueryOptions(params,options)
+  const queryOptions = getGetClientReportQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -4316,7 +4316,7 @@ export function useGetUtilizationReport<TData = Awaited<ReturnType<typeof getUti
 
 
 
-export const getGetEfficiencyReportUrl = (params?: GetEfficiencyReportParams,) => {
+export const getGetTeamReportUrl = (params?: GetTeamReportParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
@@ -4328,15 +4328,15 @@ export const getGetEfficiencyReportUrl = (params?: GetEfficiencyReportParams,) =
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/api/reports/efficiency?${stringifiedParams}` : `/api/reports/efficiency`
+  return stringifiedParams.length > 0 ? `/api/reports/team-report?${stringifiedParams}` : `/api/reports/team-report`
 }
 
 /**
- * @summary Per-user billable efficiency report (AVP/MD only)
+ * @summary Hours by Project and Task for selected users and clients
  */
-export const getEfficiencyReport = async (params?: GetEfficiencyReportParams, options?: Parameters<typeof customFetch>[1]): Promise<EfficiencyReportRow[]> => {
+export const getTeamReport = async (params?: GetTeamReportParams, options?: Parameters<typeof customFetch>[1]): Promise<TeamReportRow[]> => {
 
-  return customFetch<EfficiencyReportRow[]>(getGetEfficiencyReportUrl(params),
+  return customFetch<TeamReportRow[]>(getGetTeamReportUrl(params),
   {
     ...options,
     method: 'GET'
@@ -4349,45 +4349,45 @@ export const getEfficiencyReport = async (params?: GetEfficiencyReportParams, op
 
 
 
-export const getGetEfficiencyReportQueryKey = (params?: GetEfficiencyReportParams,) => {
+export const getGetTeamReportQueryKey = (params?: GetTeamReportParams,) => {
     return [
-    `/api/reports/efficiency`, ...(params ? [params] : [])
+    `/api/reports/team-report`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetEfficiencyReportQueryOptions = <TData = Awaited<ReturnType<typeof getEfficiencyReport>>, TError = ErrorType<void>>(params?: GetEfficiencyReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEfficiencyReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetTeamReportQueryOptions = <TData = Awaited<ReturnType<typeof getTeamReport>>, TError = ErrorType<unknown>>(params?: GetTeamReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTeamReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetEfficiencyReportQueryKey(params);
+  const queryKey =  queryOptions?.queryKey ?? getGetTeamReportQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getEfficiencyReport>>> = ({ signal }) => getEfficiencyReport(params, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTeamReport>>> = ({ signal }) => getTeamReport(params, { signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getEfficiencyReport>>, TError, TData> & { queryKey: QueryKey }
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTeamReport>>, TError, TData> & { queryKey: QueryKey }
 }
 
-export type GetEfficiencyReportQueryResult = NonNullable<Awaited<ReturnType<typeof getEfficiencyReport>>>
-export type GetEfficiencyReportQueryError = ErrorType<void>
+export type GetTeamReportQueryResult = NonNullable<Awaited<ReturnType<typeof getTeamReport>>>
+export type GetTeamReportQueryError = ErrorType<unknown>
 
 
 /**
- * @summary Per-user billable efficiency report (AVP/MD only)
+ * @summary Hours by Project and Task for selected users and clients
  */
 
-export function useGetEfficiencyReport<TData = Awaited<ReturnType<typeof getEfficiencyReport>>, TError = ErrorType<void>>(
- params?: GetEfficiencyReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEfficiencyReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export function useGetTeamReport<TData = Awaited<ReturnType<typeof getTeamReport>>, TError = ErrorType<unknown>>(
+ params?: GetTeamReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTeamReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetEfficiencyReportQueryOptions(params,options)
+  const queryOptions = getGetTeamReportQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -4400,7 +4400,7 @@ export function useGetEfficiencyReport<TData = Awaited<ReturnType<typeof getEffi
 
 
 
-export const getGetClientHoursReportUrl = (params?: GetClientHoursReportParams,) => {
+export const getGetMyReportUrl = (params?: GetMyReportParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
@@ -4412,15 +4412,15 @@ export const getGetClientHoursReportUrl = (params?: GetClientHoursReportParams,)
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/api/reports/client-hours?${stringifiedParams}` : `/api/reports/client-hours`
+  return stringifiedParams.length > 0 ? `/api/reports/my-report?${stringifiedParams}` : `/api/reports/my-report`
 }
 
 /**
- * @summary Hours by client and project report (AVP/MD only)
+ * @summary Current user's hours by Project and Task with utilization summary
  */
-export const getClientHoursReport = async (params?: GetClientHoursReportParams, options?: Parameters<typeof customFetch>[1]): Promise<ClientHoursReportRow[]> => {
+export const getMyReport = async (params?: GetMyReportParams, options?: Parameters<typeof customFetch>[1]): Promise<MyReport> => {
 
-  return customFetch<ClientHoursReportRow[]>(getGetClientHoursReportUrl(params),
+  return customFetch<MyReport>(getGetMyReportUrl(params),
   {
     ...options,
     method: 'GET'
@@ -4433,45 +4433,45 @@ export const getClientHoursReport = async (params?: GetClientHoursReportParams, 
 
 
 
-export const getGetClientHoursReportQueryKey = (params?: GetClientHoursReportParams,) => {
+export const getGetMyReportQueryKey = (params?: GetMyReportParams,) => {
     return [
-    `/api/reports/client-hours`, ...(params ? [params] : [])
+    `/api/reports/my-report`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetClientHoursReportQueryOptions = <TData = Awaited<ReturnType<typeof getClientHoursReport>>, TError = ErrorType<void>>(params?: GetClientHoursReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClientHoursReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetMyReportQueryOptions = <TData = Awaited<ReturnType<typeof getMyReport>>, TError = ErrorType<unknown>>(params?: GetMyReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetClientHoursReportQueryKey(params);
+  const queryKey =  queryOptions?.queryKey ?? getGetMyReportQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClientHoursReport>>> = ({ signal }) => getClientHoursReport(params, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyReport>>> = ({ signal }) => getMyReport(params, { signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClientHoursReport>>, TError, TData> & { queryKey: QueryKey }
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMyReport>>, TError, TData> & { queryKey: QueryKey }
 }
 
-export type GetClientHoursReportQueryResult = NonNullable<Awaited<ReturnType<typeof getClientHoursReport>>>
-export type GetClientHoursReportQueryError = ErrorType<void>
+export type GetMyReportQueryResult = NonNullable<Awaited<ReturnType<typeof getMyReport>>>
+export type GetMyReportQueryError = ErrorType<unknown>
 
 
 /**
- * @summary Hours by client and project report (AVP/MD only)
+ * @summary Current user's hours by Project and Task with utilization summary
  */
 
-export function useGetClientHoursReport<TData = Awaited<ReturnType<typeof getClientHoursReport>>, TError = ErrorType<void>>(
- params?: GetClientHoursReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClientHoursReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export function useGetMyReport<TData = Awaited<ReturnType<typeof getMyReport>>, TError = ErrorType<unknown>>(
+ params?: GetMyReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetClientHoursReportQueryOptions(params,options)
+  const queryOptions = getGetMyReportQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

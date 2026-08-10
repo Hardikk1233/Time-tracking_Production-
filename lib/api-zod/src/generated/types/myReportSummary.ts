@@ -5,16 +5,17 @@
  * Time Tracking API
  * OpenAPI spec version: 0.1.0
  */
-import type { EfficiencyReportRowRole } from './efficiencyReportRowRole';
 
-export interface EfficiencyReportRow {
-  userId: number;
-  userName: string;
-  role: EfficiencyReportRowRole;
+export interface MyReportSummary {
+  workingDays: number;
+  leaveDays: number;
+  availableDays: number;
+  targetHours: number;
   totalHours: number;
   billableHours: number;
   nonBillableHours: number;
-  approvedHours: number;
+  /** billableHours / targetHours × 100 */
+  utilization: number;
   /** billableHours / totalHours × 100 */
-  billablePct: number;
+  efficiency: number;
 }

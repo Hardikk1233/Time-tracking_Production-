@@ -6,19 +6,15 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type GetClientHoursReportParams = {
+export type GetTeamReportParams = {
 startDate?: Date;
 endDate?: Date;
-/**
- * Comma-separated client IDs
- */
-clientIds?: string;
-/**
- * Comma-separated project IDs
- */
-projectIds?: string;
 /**
  * Comma-separated user IDs
  */
 userIds?: string;
+/**
+ * Comma-separated client IDs
+ */
+clientIds?: string;
 };

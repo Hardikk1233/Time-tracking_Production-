@@ -1084,12 +1084,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/MessageResponse"
 
-  # ─── Reports (AVP and MD only) ───────────────────────────────────────────
+  # ─── Reports (all authenticated roles; scope enforced server-side) ───────────
   /reports/filter-options:
     get:
       operationId: getReportFilterOptions
       tags: [reports]
-      summary: Scoped filter options for the current user (AVP/MD only)
+      summary: Scoped filter options for the current user
       responses:
         "200":
           description: Scoped users, clients, and projects
@@ -1097,14 +1097,41 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReportFilterOptions"
-        "403":
-          description: Forbidden
 
-  /reports/utilization:
+  /reports/client-report:
     get:
-      operationId: getUtilizationReport
+      operationId: getClientReport
       tags: [reports]
-      summary: Per-user utilization report (AVP/MD only)
+      summary: Monthly hours summary + per-member breakdown for a client
+      parameters:
+        - name: clientId
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Client report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientReport"
+
+  /reports/team-report:
+    get:
+      operationId: getTeamReport
+      tags: [reports]
+      summary: Hours by Project and Task for selected users and clients
       parameters:
         - name: startDate
           in: query
@@ -1126,33 +1153,21 @@ paths:
           schema:
             type: string
             description: Comma-separated client IDs
-        - name: projectIds
-          in: query
-          schema:
-            type: string
-            description: Comma-separated project IDs
-        - name: roles
-          in: query
-          schema:
-            type: string
-            description: Comma-separated roles (analyst,associate,avp)
       responses:
         "200":
-          description: Utilization report rows
+          description: Team report rows
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/UtilizationReportRow"
-        "403":
-          description: Forbidden
+                  $ref: "#/components/schemas/TeamReportRow"
 
-  /reports/efficiency:
+  /reports/my-report:
     get:
-      operationId: getEfficiencyReport
+      operationId: getMyReport
       tags: [reports]
-      summary: Per-user billable efficiency report (AVP/MD only)
+      summary: Current user's hours by Project and Task with utilization summary
       parameters:
         - name: startDate
           in: query
@@ -1164,80 +1179,13 @@ paths:
           schema:
             type: string
             format: date
-        - name: userIds
-          in: query
-          schema:
-            type: string
-            description: Comma-separated user IDs
-        - name: clientIds
-          in: query
-          schema:
-            type: string
-            description: Comma-separated client IDs
-        - name: projectIds
-          in: query
-          schema:
-            type: string
-            description: Comma-separated project IDs
-        - name: roles
-          in: query
-          schema:
-            type: string
-            description: Comma-separated roles (analyst,associate,avp)
       responses:
         "200":
-          description: Efficiency report rows
+          description: Personal report with summary
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/EfficiencyReportRow"
-        "403":
-          description: Forbidden
-
-  /reports/client-hours:
-    get:
-      operationId: getClientHoursReport
-      tags: [reports]
-      summary: Hours by client and project report (AVP/MD only)
-      parameters:
-        - name: startDate
-          in: query
-          schema:
-            type: string
-            format: date
-        - name: endDate
-          in: query
-          schema:
-            type: string
-            format: date
-        - name: clientIds
-          in: query
-          schema:
-            type: string
-            description: Comma-separated client IDs
-        - name: projectIds
-          in: query
-          schema:
-            type: string
-            description: Comma-separated project IDs
-        - name: userIds
-          in: query
-          schema:
-            type: string
-            description: Comma-separated user IDs
-      responses:
-        "200":
-          description: Client hours report rows
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/ClientHoursReportRow"
-        "403":
-          description: Forbidden
+                $ref: "#/components/schemas/MyReport"
 
 components:
   parameters:
@@ -1784,42 +1732,23 @@ components:
           items:
             $ref: "#/components/schemas/ReportFilterProject"
 
-    UtilizationReportRow:
+    MonthlyHoursSummary:
       type: object
-      required: [userId, userName, role, workingDays, leaveDays, availableDays, hoursLogged, billableHours, targetHours, utilization]
+      required: [month, totalHours, billableHours, nonBillableHours]
       properties:
-        userId:
-          type: integer
-        userName:
+        month:
           type: string
-        role:
-          type: string
-          enum: [analyst, associate, avp, md]
-        workingDays:
-          type: integer
-          description: "Calendar working days (Mon-Fri minus public holidays)"
-        leaveDays:
-          type: integer
-          description: "Leave days taken within the period"
-        availableDays:
-          type: integer
-          description: "workingDays minus leaveDays"
-        hoursLogged:
+          description: "YYYY-MM"
+        totalHours:
           type: number
-          description: "Total hours logged in the period"
         billableHours:
           type: number
-          description: "Billable hours logged in the period"
-        targetHours:
+        nonBillableHours:
           type: number
-          description: "availableDays × 8"
-        utilization:
-          type: number
-          description: "billableHours / targetHours × 100"
 
-    EfficiencyReportRow:
+    MemberHoursBreakdown:
       type: object
-      required: [userId, userName, role, totalHours, billableHours, nonBillableHours, approvedHours, billablePct]
+      required: [userId, userName, role, totalHours, billableHours, nonBillableHours]
       properties:
         userId:
           type: integer
@@ -1834,15 +1763,23 @@ components:
           type: number
         nonBillableHours:
           type: number
-        approvedHours:
-          type: number
-        billablePct:
-          type: number
-          description: "billableHours / totalHours × 100"
 
-    ClientHoursReportRow:
+    ClientReport:
       type: object
-      required: [clientId, clientName, projectId, projectName, totalHours, billableHours, nonBillableHours, contributorCount]
+      required: [monthlySummary, memberBreakdown]
+      properties:
+        monthlySummary:
+          type: array
+          items:
+            $ref: "#/components/schemas/MonthlyHoursSummary"
+        memberBreakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemberHoursBreakdown"
+
+    TeamReportRow:
+      type: object
+      required: [clientId, clientName, projectId, projectName, taskId, taskName, totalHours, billableHours, nonBillableHours]
       properties:
         clientId:
           type: integer
@@ -1852,15 +1789,75 @@ components:
           type: integer
         projectName:
           type: string
+        taskId:
+          type: integer
+        taskName:
+          type: string
         totalHours:
           type: number
         billableHours:
           type: number
         nonBillableHours:
           type: number
-        contributorCount:
+
+    MyReportRow:
+      type: object
+      required: [clientId, clientName, projectId, projectName, taskId, taskName, totalHours, billableHours, nonBillableHours]
+      properties:
+        clientId:
           type: integer
-          description: "Number of distinct contributors"
+        clientName:
+          type: string
+        projectId:
+          type: integer
+        projectName:
+          type: string
+        taskId:
+          type: integer
+        taskName:
+          type: string
+        totalHours:
+          type: number
+        billableHours:
+          type: number
+        nonBillableHours:
+          type: number
+
+    MyReportSummary:
+      type: object
+      required: [workingDays, leaveDays, availableDays, targetHours, totalHours, billableHours, nonBillableHours, utilization, efficiency]
+      properties:
+        workingDays:
+          type: integer
+        leaveDays:
+          type: integer
+        availableDays:
+          type: integer
+        targetHours:
+          type: number
+        totalHours:
+          type: number
+        billableHours:
+          type: number
+        nonBillableHours:
+          type: number
+        utilization:
+          type: number
+          description: "billableHours / targetHours × 100"
+        efficiency:
+          type: number
+          description: "billableHours / totalHours × 100"
+
+    MyReport:
+      type: object
+      required: [entries, summary]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/MyReportRow"
+        summary:
+          $ref: "#/components/schemas/MyReportSummary"
 
     # ─── Leaves ───────────────────────────────────────────────────────────
     Leave:

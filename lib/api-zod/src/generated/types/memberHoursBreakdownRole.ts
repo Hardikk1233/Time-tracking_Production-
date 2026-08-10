@@ -6,10 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type EfficiencyReportRowRole = typeof EfficiencyReportRowRole[keyof typeof EfficiencyReportRowRole];
+export type MemberHoursBreakdownRole = typeof MemberHoursBreakdownRole[keyof typeof MemberHoursBreakdownRole];
 
 
-export const EfficiencyReportRowRole = {
+export const MemberHoursBreakdownRole = {
   analyst: 'analyst',
   associate: 'associate',
   avp: 'avp',

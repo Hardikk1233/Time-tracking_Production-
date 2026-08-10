@@ -1128,7 +1128,7 @@ export const DeleteLeaveResponse = zod.object({
 
 
 /**
- * @summary Scoped filter options for the current user (AVP/MD only)
+ * @summary Scoped filter options for the current user
  */
 export const GetReportFilterOptionsResponse = zod.object({
   "users": zod.array(zod.object({
@@ -1149,78 +1149,87 @@ export const GetReportFilterOptionsResponse = zod.object({
 
 
 /**
- * @summary Per-user utilization report (AVP/MD only)
+ * @summary Monthly hours summary + per-member breakdown for a client
  */
-export const GetUtilizationReportQueryParams = zod.object({
+export const GetClientReportQueryParams = zod.object({
+  "clientId": zod.coerce.number().int(),
   "startDate": zod.date().optional(),
-  "endDate": zod.date().optional(),
-  "userIds": zod.coerce.string().optional(),
-  "clientIds": zod.coerce.string().optional(),
-  "projectIds": zod.coerce.string().optional(),
-  "roles": zod.coerce.string().optional()
+  "endDate": zod.date().optional()
 })
 
-export const GetUtilizationReportResponseItem = zod.object({
-  "userId": zod.int(),
-  "userName": zod.string(),
-  "role": zod.enum(['analyst', 'associate', 'avp', 'md']),
-  "workingDays": zod.int().describe('Calendar working days (Mon-Fri minus public holidays)'),
-  "leaveDays": zod.int().describe('Leave days taken within the period'),
-  "availableDays": zod.int().describe('workingDays minus leaveDays'),
-  "hoursLogged": zod.number().describe('Total hours logged in the period'),
-  "billableHours": zod.number().describe('Billable hours logged in the period'),
-  "targetHours": zod.number().describe('availableDays × 8'),
-  "utilization": zod.number().describe('billableHours \/ targetHours × 100')
-})
-export const GetUtilizationReportResponse = zod.array(GetUtilizationReportResponseItem)
-
-
-/**
- * @summary Per-user billable efficiency report (AVP/MD only)
- */
-export const GetEfficiencyReportQueryParams = zod.object({
-  "startDate": zod.date().optional(),
-  "endDate": zod.date().optional(),
-  "userIds": zod.coerce.string().optional(),
-  "clientIds": zod.coerce.string().optional(),
-  "projectIds": zod.coerce.string().optional(),
-  "roles": zod.coerce.string().optional()
-})
-
-export const GetEfficiencyReportResponseItem = zod.object({
+export const GetClientReportResponse = zod.object({
+  "monthlySummary": zod.array(zod.object({
+  "month": zod.string().describe('YYYY-MM'),
+  "totalHours": zod.number(),
+  "billableHours": zod.number(),
+  "nonBillableHours": zod.number()
+})),
+  "memberBreakdown": zod.array(zod.object({
   "userId": zod.int(),
   "userName": zod.string(),
   "role": zod.enum(['analyst', 'associate', 'avp', 'md']),
   "totalHours": zod.number(),
   "billableHours": zod.number(),
-  "nonBillableHours": zod.number(),
-  "approvedHours": zod.number(),
-  "billablePct": zod.number().describe('billableHours \/ totalHours × 100')
+  "nonBillableHours": zod.number()
+}))
 })
-export const GetEfficiencyReportResponse = zod.array(GetEfficiencyReportResponseItem)
 
 
 /**
- * @summary Hours by client and project report (AVP/MD only)
+ * @summary Hours by Project and Task for selected users and clients
  */
-export const GetClientHoursReportQueryParams = zod.object({
+export const GetTeamReportQueryParams = zod.object({
   "startDate": zod.date().optional(),
   "endDate": zod.date().optional(),
-  "clientIds": zod.coerce.string().optional(),
-  "projectIds": zod.coerce.string().optional(),
-  "userIds": zod.coerce.string().optional()
+  "userIds": zod.coerce.string().optional(),
+  "clientIds": zod.coerce.string().optional()
 })
 
-export const GetClientHoursReportResponseItem = zod.object({
+export const GetTeamReportResponseItem = zod.object({
   "clientId": zod.int(),
   "clientName": zod.string(),
   "projectId": zod.int(),
   "projectName": zod.string(),
+  "taskId": zod.int(),
+  "taskName": zod.string(),
+  "totalHours": zod.number(),
+  "billableHours": zod.number(),
+  "nonBillableHours": zod.number()
+})
+export const GetTeamReportResponse = zod.array(GetTeamReportResponseItem)
+
+
+/**
+ * @summary Current user's hours by Project and Task with utilization summary
+ */
+export const GetMyReportQueryParams = zod.object({
+  "startDate": zod.date().optional(),
+  "endDate": zod.date().optional()
+})
+
+export const GetMyReportResponse = zod.object({
+  "entries": zod.array(zod.object({
+  "clientId": zod.int(),
+  "clientName": zod.string(),
+  "projectId": zod.int(),
+  "projectName": zod.string(),
+  "taskId": zod.int(),
+  "taskName": zod.string(),
+  "totalHours": zod.number(),
+  "billableHours": zod.number(),
+  "nonBillableHours": zod.number()
+})),
+  "summary": zod.object({
+  "workingDays": zod.int(),
+  "leaveDays": zod.int(),
+  "availableDays": zod.int(),
+  "targetHours": zod.number(),
   "totalHours": zod.number(),
   "billableHours": zod.number(),
   "nonBillableHours": zod.number(),
-  "contributorCount": zod.int().describe('Number of distinct contributors')
+  "utilization": zod.number().describe('billableHours \/ targetHours × 100'),
+  "efficiency": zod.number().describe('billableHours \/ totalHours × 100')
 })
-export const GetClientHoursReportResponse = zod.array(GetClientHoursReportResponseItem)
+})
 
 

@@ -62,7 +62,7 @@ export function Sidebar() {
       { name: 'Approvals', path: '/approvals', icon: CheckSquare },
       { name: 'Projects', path: '/projects', icon: FolderKanban },
     ] : []),
-    ...(isAvpOrAbove ? [
+    ...(true ? [
       { name: 'Clients', path: '/clients', icon: Briefcase },
       { name: 'Tasks', path: '/tasks', icon: CheckSquare },
       { name: 'Team', path: '/team', icon: Users },
