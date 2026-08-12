@@ -230,8 +230,8 @@ router.get("/dashboard/client-hours-trend", async (req, res): Promise<void> => {
   const rows = await db
     .select({
       periodStart: periodExpr,
-      billableHours: sql<number>`COALESCE(SUM(COALESCE(${timeEntriesTable.billableHours}, 0)), 0)`,
-      nonBillableHours: sql<number>`COALESCE(SUM(${timeEntriesTable.hours} - COALESCE(${timeEntriesTable.billableHours}, 0)), 0)`,
+      billableHours: sql<number>`COALESCE(SUM(COALESCE(${timeEntriesTable.billableHours}, ${timeEntriesTable.hours})), 0)`,
+      nonBillableHours: sql<number>`COALESCE(SUM(${timeEntriesTable.hours} - COALESCE(${timeEntriesTable.billableHours}, ${timeEntriesTable.hours})), 0)`,
       totalHours: sql<number>`COALESCE(SUM(${timeEntriesTable.hours}), 0)`,
     })
     .from(timeEntriesTable)
@@ -282,7 +282,11 @@ router.get("/dashboard/client-hours-trend", async (req, res): Promise<void> => {
       const weekNum = getISOWeek(periodDate);
       const yr = periodDate.getFullYear();
       period = `${yr}-W${String(weekNum).padStart(2, "0")}`;
-      label = `W${weekNum} ${format(periodDate, "MMM")}`;
+      // Show date range: "Aug 4–10" or "Jul 28–Aug 3" when the week crosses months
+      const sameMonth = periodStart.getMonth() === periodEnd.getMonth();
+      label = sameMonth
+        ? `${format(periodStart, "MMM d")}–${format(periodEnd, "d")}`
+        : `${format(periodStart, "MMM d")}–${format(periodEnd, "MMM d")}`;
     } else {
       period = format(periodDate, "yyyy-MM");
       label = format(periodDate, "MMM yy");
