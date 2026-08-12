@@ -75,7 +75,8 @@ export default function Approvals() {
     );
   }
 
-  const pendingEntries = entries?.filter(e => e.userId !== user?.id) || [];
+  // Associates and above can approve any pending entry, including their own
+  const pendingEntries = entries?.filter(e => e.status === 'pending') || [];
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">

@@ -238,32 +238,33 @@ router.patch("/time-entries/:entryId", async (req, res): Promise<void> => {
   }
 
   const currentUserId = req.session.userId!;
-  const [entry] = await db
-    .select()
-    .from(timeEntriesTable)
-    .where(eq(timeEntriesTable.id, entryId));
+  const [[entry], [cu]] = await Promise.all([
+    db.select().from(timeEntriesTable).where(eq(timeEntriesTable.id, entryId)),
+    db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, currentUserId)),
+  ]);
 
   if (!entry) {
     res.status(404).json({ error: "Time entry not found" });
     return;
   }
 
-  // Only the owner can edit their own entry's hours/date/description
-  if (entry.userId !== currentUserId) {
-    const [cu] = await db
-      .select({ role: usersTable.role })
-      .from(usersTable)
-      .where(eq(usersTable.id, currentUserId));
-    if (!["associate", "avp", "md"].includes(cu?.role ?? "")) {
+  const role = cu?.role ?? "";
+  const isAvpOrAbove = ["avp", "md"].includes(role);
+  const isAssociateOrAbove = ["associate", "avp", "md"].includes(role);
+  const isOwner = entry.userId === currentUserId;
+
+  // AVP/MD: can edit any entry at any status.
+  // Associate: can edit any pending entry.
+  // Analyst/other: can only edit own pending entries.
+  if (!isAvpOrAbove) {
+    if (entry.status !== "pending") {
+      res.status(400).json({ error: "Only pending entries can be edited" });
+      return;
+    }
+    if (!isOwner && !isAssociateOrAbove) {
       res.status(403).json({ error: "Cannot edit another user's entry" });
       return;
     }
-  }
-
-  // Only pending entries can be edited
-  if (entry.status !== "pending") {
-    res.status(400).json({ error: "Only pending entries can be edited" });
-    return;
   }
 
   const { hours, date, description, projectId, taskId } = req.body as {

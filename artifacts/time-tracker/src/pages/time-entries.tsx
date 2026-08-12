@@ -144,11 +144,12 @@ export default function TimeEntries() {
   const rejectMutation = useRejectTimeEntry();
 
   const isAssociateOrAbove = ['associate', 'avp', 'md'].includes(user?.role ?? '');
+  const isAvpOrAbove = ['avp', 'md'].includes(user?.role ?? '');
 
-  // Entries that can be approved/rejected by this user (pending, not own)
+  // Associates and above can approve any pending entry, including their own
   const approvableEntries = useMemo(
-    () => (entries ?? []).filter(e => e.status === 'pending' && e.userId !== user?.id),
-    [entries, user?.id],
+    () => (entries ?? []).filter(e => e.status === 'pending' && isAssociateOrAbove),
+    [entries, isAssociateOrAbove],
   );
 
   const approvableIds = useMemo(() => new Set(approvableEntries.map(e => e.id)), [approvableEntries]);
@@ -302,8 +303,11 @@ export default function TimeEntries() {
                 ))
               ) : entries && entries.length > 0 ? (
                 entries.map((entry: TimeEntry) => {
-                  const canApprove = isAssociateOrAbove && entry.status === 'pending' && entry.userId !== user?.id;
-                  const canEdit = entry.status === 'pending' && (entry.userId === user?.id || isAssociateOrAbove);
+                  // Associates+ can approve any pending entry (including own)
+                  const canApprove = isAssociateOrAbove && entry.status === 'pending';
+                  // AVP/MD: edit anything at any status; Associate: any pending; Analyst: own pending only
+                  const canEdit = isAvpOrAbove
+                    || (entry.status === 'pending' && (entry.userId === user?.id || isAssociateOrAbove));
                   const isChecked = selectedIds.has(entry.id);
                   return (
                     <tr key={entry.id} className={cn('hover:bg-muted/10 transition-colors', isChecked && 'bg-emerald-50/40')}>
@@ -829,6 +833,8 @@ function EditTimeEntryDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { user } = useAuth();
+  const isAvpOrAbove = ['avp', 'md'].includes(user?.role ?? '');
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const updateMutation = useUpdateTimeEntry();
@@ -902,7 +908,8 @@ function EditTimeEntryDialog({
             Edit Time Entry
           </DialogTitle>
           <DialogDescription>
-            Update the details for this pending time entry.
+            Update the details for this time entry.
+            {!isAvpOrAbove && ' Only pending entries can be edited.'}
           </DialogDescription>
         </DialogHeader>
 
