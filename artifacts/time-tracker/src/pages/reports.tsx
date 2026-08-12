@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { format, startOfMonth } from 'date-fns';
+import { format, startOfMonth, parseISO } from 'date-fns';
 import { useAuth } from '@/lib/auth';
 import {
   useGetReportFilterOptions,
@@ -447,7 +447,8 @@ export default function Reports() {
   );
 
   const clientSummary = clientReportData?.clientSummary ?? [];
-  const rangeLabel = `${appliedClientParams.start} – ${appliedClientParams.end}`;
+  const fmtDate = (iso: string) => format(parseISO(iso), 'MMM, dd');
+  const rangeLabel = `${fmtDate(appliedClientParams.start)} – ${fmtDate(appliedClientParams.end)}`;
 
   function applyClientDates() {
     setAppliedClientParams({ start: startDate, end: endDate });
@@ -584,11 +585,16 @@ export default function Reports() {
                     {allClients.find((c) => c.id === chartClientId)?.name ?? 'Client'} — Monthly Trend
                   </CardTitle>
                 </div>
-                <p className="text-xs text-muted-foreground">{appliedClientParams.start} to {appliedClientParams.end}</p>
+                <p className="text-xs text-muted-foreground">{fmtDate(appliedClientParams.start)} to {fmtDate(appliedClientParams.end)}</p>
               </CardHeader>
               <CardContent>
-                {chartData.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">No data available — the selected date range spans no full months.</p>
+                {clientFetching ? (
+                  <div className="flex items-center justify-center py-12 gap-2 text-sm text-muted-foreground">
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Loading monthly data…
+                  </div>
+                ) : chartData.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">No data available — the selected date range spans no complete months.</p>
                 ) : (
                   <ResponsiveContainer width="100%" height={280}>
                     <ComposedChart data={chartData} margin={{ top: 4, right: 40, left: 0, bottom: 4 }}>
