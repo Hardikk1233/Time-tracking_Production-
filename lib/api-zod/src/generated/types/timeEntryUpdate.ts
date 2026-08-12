@@ -7,6 +7,8 @@
  */
 
 export interface TimeEntryUpdate {
+  projectId?: number;
+  taskId?: number;
   /**
      * @minimum 0.25
      * @maximum 24

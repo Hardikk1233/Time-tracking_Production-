@@ -100,11 +100,12 @@ async function buildEntryRows(conditions?: ReturnType<typeof eq>[]) {
 
   return rows.map((r) => ({
     ...r,
+    // null = not explicitly split → treat all hours as billable
     billableHours: r.billableHours ?? null,
     nonBillableHours:
       r.billableHours !== null && r.billableHours !== undefined
         ? r.hours - r.billableHours
-        : null,
+        : 0,
     approvedByName: null as string | null,
   }));
 }
@@ -259,16 +260,45 @@ router.patch("/time-entries/:entryId", async (req, res): Promise<void> => {
     }
   }
 
-  const { hours, date, description } = req.body as {
+  // Only pending entries can be edited
+  if (entry.status !== "pending") {
+    res.status(400).json({ error: "Only pending entries can be edited" });
+    return;
+  }
+
+  const { hours, date, description, projectId, taskId } = req.body as {
     hours?: number;
     date?: string;
     description?: string | null;
+    projectId?: number;
+    taskId?: number;
   };
+
+  // Validate project-task link if either is changing
+  const newProjectId = projectId ?? entry.projectId;
+  const newTaskId = taskId ?? entry.taskId;
+  if ((projectId !== undefined || taskId !== undefined) && newProjectId && newTaskId) {
+    const [link] = await db
+      .select()
+      .from(projectTasksTable)
+      .where(
+        and(
+          eq(projectTasksTable.projectId, newProjectId),
+          eq(projectTasksTable.taskId, newTaskId),
+        ),
+      );
+    if (!link) {
+      res.status(400).json({ error: "This task is not enabled for the selected project" });
+      return;
+    }
+  }
 
   const updates: Partial<typeof timeEntriesTable.$inferInsert> = {};
   if (hours !== undefined) updates.hours = hours;
   if (date) updates.date = date;
   if (description !== undefined) updates.description = description;
+  if (projectId !== undefined) updates.projectId = projectId;
+  if (taskId !== undefined) updates.taskId = taskId;
 
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No fields to update" });

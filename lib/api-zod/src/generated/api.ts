@@ -834,6 +834,8 @@ export const updateTimeEntryBodyHoursMax = 24;
 
 
 export const UpdateTimeEntryBody = zod.object({
+  "projectId": zod.int().optional(),
+  "taskId": zod.int().optional(),
   "hours": zod.number().min(updateTimeEntryBodyHoursMin).max(updateTimeEntryBodyHoursMax).optional(),
   "date": zod.coerce.date().optional(),
   "description": zod.string().nullish()

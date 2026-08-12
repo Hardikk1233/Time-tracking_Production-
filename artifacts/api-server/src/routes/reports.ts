@@ -109,7 +109,7 @@ async function getBillablePerClient(
     .select({
       clientId: projectsTable.clientId,
       // Use fully-qualified column so SELECT and GROUP BY match exactly
-      billable: sql<number>`COALESCE(SUM("time_entries"."billable_hours"), 0)`,
+      billable: sql<number>`SUM(COALESCE("time_entries"."billable_hours", "time_entries"."hours"))`,
     })
     .from(timeEntriesTable)
     .innerJoin(projectsTable, eq(projectsTable.id, timeEntriesTable.projectId))
@@ -357,7 +357,7 @@ router.get("/client-report", async (req, res): Promise<void> => {
       const monthlyRows = await db
         .select({
           month: monthExpr,
-          billableHours: sql<number>`COALESCE(SUM("time_entries"."billable_hours"), 0)`,
+          billableHours: sql<number>`SUM(COALESCE("time_entries"."billable_hours", "time_entries"."hours"))`,
         })
         .from(timeEntriesTable)
         .where(and(...entryConds))
@@ -444,7 +444,7 @@ router.get("/team-report", async (req, res): Promise<void> => {
       taskId:    tasksTable.id,
       taskName:  tasksTable.name,
       totalHours:   sql<number>`SUM(${timeEntriesTable.hours})`,
-      billableHours: sql<number>`SUM(COALESCE(${timeEntriesTable.billableHours}, 0))`,
+      billableHours: sql<number>`SUM(COALESCE(${timeEntriesTable.billableHours}, ${timeEntriesTable.hours}))`,
     })
     .from(timeEntriesTable)
     .innerJoin(usersTable,    eq(usersTable.id,    timeEntriesTable.userId))
@@ -493,7 +493,7 @@ router.get("/my-report", async (req, res): Promise<void> => {
         taskId:   tasksTable.id,
         taskName: tasksTable.name,
         totalHours:   sql<number>`SUM(${timeEntriesTable.hours})`,
-        billableHours: sql<number>`SUM(COALESCE(${timeEntriesTable.billableHours}, 0))`,
+        billableHours: sql<number>`SUM(COALESCE(${timeEntriesTable.billableHours}, ${timeEntriesTable.hours}))`,
       })
       .from(timeEntriesTable)
       .innerJoin(projectsTable, eq(projectsTable.id, timeEntriesTable.projectId))

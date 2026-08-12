@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/auth';
 import {
   useListTimeEntries,
   useCreateTimeEntry,
+  useUpdateTimeEntry,
   useApproveTimeEntry,
   useRejectTimeEntry,
   useSplitTimeEntry,
@@ -23,6 +24,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -34,7 +36,11 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Calendar } from '@/components/ui/calendar';
-import { Plus, Check, X, Filter, Scissors, CalendarOff, Trash2 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '@/components/ui/command';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Plus, Check, X, Filter, Scissors, CalendarOff, Trash2, Pencil, ChevronsUpDown, CheckSquare } from 'lucide-react';
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -52,11 +58,68 @@ const splitSchema = z.object({
   billableHours: z.coerce.number().min(0, 'Must be ≥ 0'),
 });
 
-const leaveSchema = z.object({
-  date: z.string().min(1, 'Date is required'),
-  note: z.string().optional(),
-});
-type LeaveForm = z.infer<typeof leaveSchema>;
+// ─── Project Combobox ─────────────────────────────────────────────────────────
+
+function ProjectCombobox({
+  projects,
+  value,
+  onChange,
+  disabled,
+  placeholder,
+  isLoading,
+}: {
+  projects: Array<{ id: number; name: string }> | undefined;
+  value: number;
+  onChange: (val: string) => void;
+  disabled?: boolean;
+  placeholder: string;
+  isLoading?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = projects?.find(p => p.id === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          disabled={disabled}
+          className="w-full justify-between font-normal h-10 px-3"
+        >
+          <span className="truncate text-sm">
+            {isLoading ? 'Loading...' : selected ? selected.name : <span className="text-muted-foreground">{placeholder}</span>}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search projects..." />
+          <CommandEmpty>No projects found.</CommandEmpty>
+          <CommandGroup>
+            <ScrollArea className="max-h-52">
+              {projects?.filter(p => (p as any).isActive !== false).map(p => (
+                <CommandItem
+                  key={p.id}
+                  value={p.name}
+                  onSelect={() => {
+                    onChange(String(p.id));
+                    setOpen(false);
+                  }}
+                >
+                  <Check className={cn('mr-2 h-4 w-4', value === p.id ? 'opacity-100' : 'opacity-0')} />
+                  {p.name}
+                </CommandItem>
+              ))}
+            </ScrollArea>
+          </CommandGroup>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
@@ -69,6 +132,10 @@ export default function TimeEntries() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLeaveDialogOpen, setIsLeaveDialogOpen] = useState(false);
   const [splitEntry, setSplitEntry] = useState<TimeEntry | null>(null);
+  const [editEntry, setEditEntry] = useState<TimeEntry | null>(null);
+
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const queryParams = statusFilter !== 'all' ? { status: statusFilter as 'pending' | 'approved' | 'rejected' } : {};
   const { data: entries, isLoading } = useListTimeEntries(queryParams);
@@ -78,11 +145,20 @@ export default function TimeEntries() {
 
   const isAssociateOrAbove = ['associate', 'avp', 'md'].includes(user?.role ?? '');
 
+  // Entries that can be approved/rejected by this user (pending, not own)
+  const approvableEntries = useMemo(
+    () => (entries ?? []).filter(e => e.status === 'pending' && e.userId !== user?.id),
+    [entries, user?.id],
+  );
+
+  const approvableIds = useMemo(() => new Set(approvableEntries.map(e => e.id)), [approvableEntries]);
+
   const handleApprove = (id: number) => {
     approveMutation.mutate({ entryId: id }, {
       onSuccess: () => {
         toast({ title: 'Entry approved' });
         queryClient.invalidateQueries({ queryKey: getListTimeEntriesQueryKey() });
+        setSelectedIds(prev => { const next = new Set(prev); next.delete(id); return next; });
       },
     });
   };
@@ -92,9 +168,63 @@ export default function TimeEntries() {
       onSuccess: () => {
         toast({ title: 'Entry rejected' });
         queryClient.invalidateQueries({ queryKey: getListTimeEntriesQueryKey() });
+        setSelectedIds(prev => { const next = new Set(prev); next.delete(id); return next; });
       },
     });
   };
+
+  // Bulk approve all selected
+  const handleBulkApprove = async () => {
+    const ids = [...selectedIds].filter(id => approvableIds.has(id));
+    if (ids.length === 0) return;
+    let approved = 0;
+    await Promise.all(
+      ids.map(id =>
+        new Promise<void>(resolve => {
+          approveMutation.mutate({ entryId: id }, {
+            onSuccess: () => { approved++; resolve(); },
+            onError: () => resolve(),
+          });
+        }),
+      ),
+    );
+    toast({ title: `${approved} entr${approved !== 1 ? 'ies' : 'y'} approved` });
+    queryClient.invalidateQueries({ queryKey: getListTimeEntriesQueryKey() });
+    setSelectedIds(new Set());
+  };
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const selectableIds = useMemo(
+    () => isAssociateOrAbove ? [...approvableIds] : [],
+    [isAssociateOrAbove, approvableIds],
+  );
+
+  const allSelected = selectableIds.length > 0 && selectableIds.every(id => selectedIds.has(id));
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        selectableIds.forEach(id => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        selectableIds.forEach(id => next.add(id));
+        return next;
+      });
+    }
+  };
+
+  const selectedApprovable = [...selectedIds].filter(id => approvableIds.has(id));
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -105,7 +235,20 @@ export default function TimeEntries() {
           <p className="text-muted-foreground font-mono text-sm mt-1">Activity logs and billing records</p>
         </div>
         <div className="flex items-center gap-3">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          {/* Bulk approve button */}
+          {selectedApprovable.length > 0 && isAssociateOrAbove && (
+            <Button
+              variant="outline"
+              className="border-emerald-500/40 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-500 font-semibold"
+              onClick={handleBulkApprove}
+              disabled={approveMutation.isPending}
+            >
+              <CheckSquare className="w-4 h-4 mr-2" />
+              Approve {selectedApprovable.length}
+            </Button>
+          )}
+
+          <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setSelectedIds(new Set()); }}>
             <SelectTrigger className="w-[140px] bg-card">
               <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
               <SelectValue placeholder="Filter" />
@@ -129,6 +272,16 @@ export default function TimeEntries() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30 text-left text-xs uppercase tracking-wider font-mono text-muted-foreground">
+                {isAssociateOrAbove && (
+                  <th className="px-4 py-4 w-10">
+                    <Checkbox
+                      checked={allSelected}
+                      onCheckedChange={toggleSelectAll}
+                      disabled={selectableIds.length === 0}
+                      aria-label="Select all"
+                    />
+                  </th>
+                )}
                 <th className="px-6 py-4 font-medium">Date</th>
                 <th className="px-6 py-4 font-medium">User</th>
                 <th className="px-6 py-4 font-medium">Client / Project / Task</th>
@@ -142,72 +295,100 @@ export default function TimeEntries() {
               {isLoading ? (
                 Array(5).fill(0).map((_, i) => (
                   <tr key={i}>
-                    {Array(7).fill(0).map((__, j) => (
+                    {Array(isAssociateOrAbove ? 8 : 7).fill(0).map((__, j) => (
                       <td key={j} className="px-6 py-4"><Skeleton className="h-4 w-full" /></td>
                     ))}
                   </tr>
                 ))
               ) : entries && entries.length > 0 ? (
-                entries.map((entry: TimeEntry) => (
-                  <tr key={entry.id} className="hover:bg-muted/10 transition-colors">
-                    <td className="px-6 py-4 font-mono text-xs text-muted-foreground whitespace-nowrap">
-                      {format(new Date(entry.date), 'MMM dd, yyyy')}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="font-medium">{entry.userName}</span>
-                        <span className="text-xs text-muted-foreground capitalize">{entry.userRole}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="font-medium text-sm">{entry.clientName}</span>
-                        <span className="text-xs text-muted-foreground">{entry.projectName} — {entry.taskName}</span>
-                        {entry.description && (
-                          <span className="text-xs text-muted-foreground/60 italic truncate max-w-[280px] mt-0.5">"{entry.description}"</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-right font-mono font-bold">{entry.hours.toFixed(2)}h</td>
-                    <td className="px-6 py-4 text-center">
-                      <BillableSplitDisplay entry={entry} />
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <StatusBadge status={entry.status} />
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-1">
-                        {isAssociateOrAbove && (
-                          <Button
-                            variant="ghost" size="icon"
-                            className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50 rounded-full"
-                            title="Split billable/non-billable"
-                            onClick={() => setSplitEntry(entry)}
-                          >
-                            <Scissors className="w-4 h-4" />
-                          </Button>
-                        )}
-                        {entry.status === 'pending' && isAssociateOrAbove && entry.userId !== user?.id && (
-                          <>
-                            <Button variant="ghost" size="icon"
-                              className="h-8 w-8 text-emerald-600 hover:bg-emerald-50 rounded-full"
-                              onClick={() => handleApprove(entry.id)}
-                              disabled={approveMutation.isPending || rejectMutation.isPending}
-                            ><Check className="w-4 h-4" /></Button>
-                            <Button variant="ghost" size="icon"
-                              className="h-8 w-8 text-destructive hover:bg-destructive/10 rounded-full"
-                              onClick={() => handleReject(entry.id)}
-                              disabled={approveMutation.isPending || rejectMutation.isPending}
-                            ><X className="w-4 h-4" /></Button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                entries.map((entry: TimeEntry) => {
+                  const canApprove = isAssociateOrAbove && entry.status === 'pending' && entry.userId !== user?.id;
+                  const canEdit = entry.status === 'pending' && (entry.userId === user?.id || isAssociateOrAbove);
+                  const isChecked = selectedIds.has(entry.id);
+                  return (
+                    <tr key={entry.id} className={cn('hover:bg-muted/10 transition-colors', isChecked && 'bg-emerald-50/40')}>
+                      {isAssociateOrAbove && (
+                        <td className="px-4 py-4">
+                          {canApprove ? (
+                            <Checkbox
+                              checked={isChecked}
+                              onCheckedChange={() => toggleSelect(entry.id)}
+                              aria-label={`Select entry ${entry.id}`}
+                            />
+                          ) : (
+                            <span className="block w-4" />
+                          )}
+                        </td>
+                      )}
+                      <td className="px-6 py-4 font-mono text-xs text-muted-foreground whitespace-nowrap">
+                        {format(new Date(entry.date), 'MMM dd, yyyy')}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col">
+                          <span className="font-medium">{entry.userName}</span>
+                          <span className="text-xs text-muted-foreground capitalize">{entry.userRole}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium text-sm">{entry.clientName}</span>
+                          <span className="text-xs text-muted-foreground">{entry.projectName} — {entry.taskName}</span>
+                          {entry.description && (
+                            <span className="text-xs text-muted-foreground/60 italic truncate max-w-[280px] mt-0.5">"{entry.description}"</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-right font-mono font-bold">{entry.hours.toFixed(2)}h</td>
+                      <td className="px-6 py-4 text-center">
+                        <BillableSplitDisplay entry={entry} />
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <StatusBadge status={entry.status} />
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center justify-end gap-1">
+                          {canEdit && (
+                            <Button
+                              variant="ghost" size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted rounded-full"
+                              title="Edit entry"
+                              onClick={() => setEditEntry(entry)}
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {isAssociateOrAbove && (
+                            <Button
+                              variant="ghost" size="icon"
+                              className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50 rounded-full"
+                              title="Split billable/non-billable"
+                              onClick={() => setSplitEntry(entry)}
+                            >
+                              <Scissors className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {canApprove && (
+                            <>
+                              <Button variant="ghost" size="icon"
+                                className="h-8 w-8 text-emerald-600 hover:bg-emerald-50 rounded-full"
+                                onClick={() => handleApprove(entry.id)}
+                                disabled={approveMutation.isPending || rejectMutation.isPending}
+                              ><Check className="w-4 h-4" /></Button>
+                              <Button variant="ghost" size="icon"
+                                className="h-8 w-8 text-destructive hover:bg-destructive/10 rounded-full"
+                                onClick={() => handleReject(entry.id)}
+                                disabled={approveMutation.isPending || rejectMutation.isPending}
+                              ><X className="w-4 h-4" /></Button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-muted-foreground font-mono text-sm">
+                  <td colSpan={isAssociateOrAbove ? 8 : 7} className="px-6 py-12 text-center text-muted-foreground font-mono text-sm">
                     NO ENTRIES FOUND
                   </td>
                 </tr>
@@ -225,6 +406,15 @@ export default function TimeEntries() {
           onOpenChange={(open) => { if (!open) setSplitEntry(null); }}
         />
       )}
+
+      {/* Edit dialog */}
+      {editEntry && (
+        <EditTimeEntryDialog
+          entry={editEntry}
+          open={!!editEntry}
+          onOpenChange={(open) => { if (!open) setEditEntry(null); }}
+        />
+      )}
     </div>
   );
 }
@@ -232,8 +422,13 @@ export default function TimeEntries() {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function BillableSplitDisplay({ entry }: { entry: TimeEntry }) {
+  // null billableHours = not explicitly split → all hours are billable by default
   if (entry.billableHours === null || entry.billableHours === undefined) {
-    return <span className="text-xs font-mono text-muted-foreground/50 italic">Not split</span>;
+    return (
+      <span className="text-xs font-mono font-semibold text-emerald-600">
+        {entry.hours.toFixed(2)}h B
+      </span>
+    );
   }
   const nonBillable = entry.hours - entry.billableHours;
   return (
@@ -270,7 +465,6 @@ function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
   const [selectedDates, setSelectedDates] = useState<Date[]>([]);
   const [note, setNote] = useState('');
 
-  // Fetch this month's already-logged leaves and public holidays for the calendar
   const now = new Date();
   const monthStart = format(new Date(now.getFullYear(), now.getMonth(), 1), 'yyyy-MM-dd');
   const monthEnd = format(new Date(now.getFullYear(), now.getMonth() + 1, 0), 'yyyy-MM-dd');
@@ -280,12 +474,10 @@ function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
     { query: { enabled: open && !!user?.id } as any }
   );
 
-  // Fetch public holidays so we can disable them on the calendar
   const { data: publicHolidays } = useListPublicHolidays(
     { query: { enabled: open } as any }
   );
 
-  // Dates already logged — disabled + struck-through amber on calendar
   const alreadyLoggedDates: Date[] = React.useMemo(() => {
     if (!myLeaves) return [];
     return myLeaves.map((l: any) => {
@@ -294,19 +486,12 @@ function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
     });
   }, [myLeaves]);
 
-  // Public holiday dates — disabled + distinct style on calendar
   const holidayDates: Date[] = React.useMemo(() => {
     if (!publicHolidays) return [];
     return publicHolidays.map((h: any) => {
       const [y, m, d] = h.date.split('-').map(Number);
       return new Date(y, m - 1, d);
     });
-  }, [publicHolidays]);
-
-  // Map holiday date string → name for tooltip-style display
-  const holidayNameByDate = React.useMemo(() => {
-    if (!publicHolidays) return {} as Record<string, string>;
-    return Object.fromEntries(publicHolidays.map((h: any) => [h.date, h.name]));
   }, [publicHolidays]);
 
   const handleSubmit = () => {
@@ -343,10 +528,7 @@ function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
   };
 
   const handleClose = (v: boolean) => {
-    if (!v) {
-      setSelectedDates([]);
-      setNote('');
-    }
+    if (!v) { setSelectedDates([]); setNote(''); }
     onOpenChange(v);
   };
 
@@ -370,21 +552,17 @@ function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
         </DialogHeader>
 
         <div className="space-y-4 pt-1">
-          {/* Calendar with multi-select */}
           <div className="flex justify-center rounded-lg border border-border bg-muted/20 p-2">
             <Calendar
               mode="multiple"
               selected={selectedDates}
               onSelect={(dates) => setSelectedDates(dates ?? [])}
               disabled={[
-                { dayOfWeek: [0, 6] },   // weekends
-                ...holidayDates,          // public holidays
-                ...alreadyLoggedDates,    // already-logged leave
+                { dayOfWeek: [0, 6] },
+                ...holidayDates,
+                ...alreadyLoggedDates,
               ]}
-              modifiers={{
-                holiday: holidayDates,
-                alreadyLogged: alreadyLoggedDates,
-              }}
+              modifiers={{ holiday: holidayDates, alreadyLogged: alreadyLoggedDates }}
               modifiersClassNames={{
                 holiday: '!text-red-500 opacity-60 line-through',
                 alreadyLogged: '!text-amber-500 opacity-60 line-through',
@@ -393,42 +571,33 @@ function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
             />
           </div>
 
-          {/* Selected date chips */}
           {selectedDates.length > 0 && (
             <div>
               <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-2">
                 Selected — {selectedDates.length} day{selectedDates.length !== 1 ? 's' : ''}
               </p>
               <div className="flex flex-wrap gap-1.5">
-                {[...selectedDates]
-                  .sort((a, b) => a.getTime() - b.getTime())
-                  .map(d => (
-                    <Badge
-                      key={d.toISOString()}
-                      variant="secondary"
-                      className="font-mono text-xs cursor-pointer hover:bg-destructive/10 hover:text-destructive transition-colors"
-                      onClick={() => setSelectedDates(prev => prev.filter(x => x.toISOString() !== d.toISOString()))}
-                    >
-                      {format(d, 'EEE MMM d')} ×
-                    </Badge>
-                  ))}
+                {[...selectedDates].sort((a, b) => a.getTime() - b.getTime()).map(d => (
+                  <Badge
+                    key={d.toISOString()}
+                    variant="secondary"
+                    className="font-mono text-xs cursor-pointer hover:bg-destructive/10 hover:text-destructive transition-colors"
+                    onClick={() => setSelectedDates(prev => prev.filter(x => x.toISOString() !== d.toISOString()))}
+                  >
+                    {format(d, 'EEE MMM d')} ×
+                  </Badge>
+                ))}
               </div>
             </div>
           )}
 
-          {/* Note */}
           <div>
             <label className="text-sm font-medium mb-1.5 block">
               Reason <span className="text-muted-foreground font-normal">(Optional)</span>
             </label>
-            <Input
-              placeholder="e.g. Sick leave, Personal, Family"
-              value={note}
-              onChange={e => setNote(e.target.value)}
-            />
+            <Input placeholder="e.g. Sick leave, Personal, Family" value={note} onChange={e => setNote(e.target.value)} />
           </div>
 
-          {/* Actions */}
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="outline" onClick={() => handleClose(false)}>Cancel</Button>
             <Button
@@ -436,21 +605,14 @@ function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
               className="bg-amber-500 hover:bg-amber-600 text-white"
               disabled={selectedDates.length === 0 || bulkMutation.isPending}
             >
-              {bulkMutation.isPending
-                ? 'Logging...'
-                : selectedDates.length === 0
-                  ? 'Select dates'
-                  : `Log ${selectedDates.length} day${selectedDates.length !== 1 ? 's' : ''}`}
+              {bulkMutation.isPending ? 'Logging...' : selectedDates.length === 0 ? 'Select dates' : `Log ${selectedDates.length} day${selectedDates.length !== 1 ? 's' : ''}`}
             </Button>
           </div>
         </div>
 
-        {/* Already-logged leaves for this month */}
         {myLeaves && myLeaves.length > 0 && (
           <div className="border-t border-border pt-4 mt-2">
-            <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-2">
-              Already logged this month
-            </p>
+            <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-2">Already logged this month</p>
             <div className="space-y-1 max-h-32 overflow-y-auto">
               {myLeaves.map((leave: any) => (
                 <div key={leave.id} className="flex items-center justify-between gap-2 rounded px-2 py-1.5 bg-muted/40 hover:bg-muted/60">
@@ -458,17 +620,10 @@ function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
                     <span className="text-sm font-medium font-mono shrink-0">
                       {format(new Date(leave.date + 'T00:00:00'), 'EEE, MMM dd')}
                     </span>
-                    {leave.note && (
-                      <span className="text-xs text-muted-foreground italic truncate">{leave.note}</span>
-                    )}
+                    {leave.note && <span className="text-xs text-muted-foreground italic truncate">{leave.note}</span>}
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
-                    onClick={() => handleDeleteLeave(leave.id)}
-                    disabled={deleteLeaveMutation.isPending}
-                  >
+                  <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
+                    onClick={() => handleDeleteLeave(leave.id)} disabled={deleteLeaveMutation.isPending}>
                     <Trash2 className="w-3 h-3" />
                   </Button>
                 </div>
@@ -490,14 +645,7 @@ function LogTimeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
 
   const form = useForm<TimeEntryForm>({
     resolver: zodResolver(timeEntrySchema),
-    defaultValues: {
-      clientId: 0,
-      projectId: 0,
-      taskId: 0,
-      hours: 1,
-      date: format(new Date(), 'yyyy-MM-dd'),
-      description: '',
-    },
+    defaultValues: { clientId: 0, projectId: 0, taskId: 0, hours: 1, date: format(new Date(), 'yyyy-MM-dd'), description: '' },
   });
 
   const selectedClientId = form.watch('clientId');
@@ -530,10 +678,7 @@ function LogTimeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
         onSuccess: () => {
           toast({ title: 'Time entry logged successfully' });
           queryClient.invalidateQueries({ queryKey: getListTimeEntriesQueryKey() });
-          form.reset({
-            clientId: 0, projectId: 0, taskId: 0,
-            hours: 1, date: format(new Date(), 'yyyy-MM-dd'), description: '',
-          });
+          form.reset({ clientId: 0, projectId: 0, taskId: 0, hours: 1, date: format(new Date(), 'yyyy-MM-dd'), description: '' });
           onOpenChange(false);
         },
         onError: (err: any) => {
@@ -544,9 +689,7 @@ function LogTimeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
   };
 
   const handleClose = (v: boolean) => {
-    if (!v) {
-      form.reset({ clientId: 0, projectId: 0, taskId: 0, hours: 1, date: format(new Date(), 'yyyy-MM-dd'), description: '' });
-    }
+    if (!v) form.reset({ clientId: 0, projectId: 0, taskId: 0, hours: 1, date: format(new Date(), 'yyyy-MM-dd'), description: '' });
     onOpenChange(v);
   };
 
@@ -566,6 +709,7 @@ function LogTimeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-2">
+            {/* Client */}
             <FormField control={form.control} name="clientId" render={({ field }) => (
               <FormItem>
                 <FormLabel>Client</FormLabel>
@@ -585,32 +729,29 @@ function LogTimeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
               </FormItem>
             )} />
 
+            {/* Project — combobox with search */}
             <FormField control={form.control} name="projectId" render={({ field }) => (
               <FormItem>
                 <FormLabel>Project</FormLabel>
-                <Select
-                  onValueChange={handleProjectChange}
-                  value={field.value > 0 ? String(field.value) : ''}
-                  disabled={!selectedClientId || selectedClientId === 0}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder={
-                        !selectedClientId || selectedClientId === 0 ? 'Select a client first' :
-                        isLoadingProjects ? 'Loading...' : 'Select a project'
-                      } />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {projects?.filter(p => p.isActive !== false).map(p => (
-                      <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <FormControl>
+                  <ProjectCombobox
+                    projects={projects}
+                    value={field.value}
+                    onChange={handleProjectChange}
+                    disabled={!selectedClientId || selectedClientId === 0}
+                    isLoading={isLoadingProjects}
+                    placeholder={
+                      !selectedClientId || selectedClientId === 0
+                        ? 'Select a client first'
+                        : 'Select a project'
+                    }
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )} />
 
+            {/* Task */}
             <FormField control={form.control} name="taskId" render={({ field }) => (
               <FormItem>
                 <FormLabel>Task</FormLabel>
@@ -677,6 +818,205 @@ function LogTimeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
   );
 }
 
+// ─── Edit Time Entry Dialog ───────────────────────────────────────────────────
+
+function EditTimeEntryDialog({
+  entry,
+  open,
+  onOpenChange,
+}: {
+  entry: TimeEntry;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const updateMutation = useUpdateTimeEntry();
+
+  const form = useForm<TimeEntryForm>({
+    resolver: zodResolver(timeEntrySchema),
+    defaultValues: {
+      clientId: entry.clientId ?? 0,
+      projectId: entry.projectId ?? 0,
+      taskId: entry.taskId ?? 0,
+      hours: entry.hours,
+      date: entry.date,
+      description: entry.description ?? '',
+    },
+  });
+
+  const selectedClientId = form.watch('clientId');
+  const selectedProjectId = form.watch('projectId');
+
+  const { data: clients, isLoading: isLoadingClients } = useListClients();
+  const { data: projects, isLoading: isLoadingProjects } = useListProjects(
+    selectedClientId > 0 ? { clientId: selectedClientId } : undefined,
+    { query: { enabled: selectedClientId > 0 } as any }
+  );
+  const { data: tasks, isLoading: isLoadingTasks } = useListTasks(
+    selectedProjectId > 0 ? { projectId: selectedProjectId } : undefined,
+    { query: { enabled: selectedProjectId > 0 } as any }
+  );
+
+  const handleClientChange = (val: string) => {
+    form.setValue('clientId', Number(val));
+    form.setValue('projectId', 0);
+    form.setValue('taskId', 0);
+  };
+  const handleProjectChange = (val: string) => {
+    form.setValue('projectId', Number(val));
+    form.setValue('taskId', 0);
+  };
+
+  const onSubmit = (data: TimeEntryForm) => {
+    updateMutation.mutate(
+      {
+        entryId: entry.id,
+        data: {
+          projectId: data.projectId !== entry.projectId ? data.projectId : undefined,
+          taskId: data.taskId !== entry.taskId ? data.taskId : undefined,
+          hours: data.hours,
+          date: data.date,
+          description: data.description || null,
+        },
+      },
+      {
+        onSuccess: () => {
+          toast({ title: 'Time entry updated' });
+          queryClient.invalidateQueries({ queryKey: getListTimeEntriesQueryKey() });
+          onOpenChange(false);
+        },
+        onError: (err: any) => {
+          toast({ variant: 'destructive', title: 'Failed to update', description: err?.error || 'An error occurred.' });
+        },
+      }
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[500px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Pencil className="w-4 h-4" />
+            Edit Time Entry
+          </DialogTitle>
+          <DialogDescription>
+            Update the details for this pending time entry.
+          </DialogDescription>
+        </DialogHeader>
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-2">
+            {/* Client */}
+            <FormField control={form.control} name="clientId" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Client</FormLabel>
+                <Select onValueChange={handleClientChange} value={field.value > 0 ? String(field.value) : ''}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder={isLoadingClients ? 'Loading...' : 'Select a client'} />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {clients?.map(c => (
+                      <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )} />
+
+            {/* Project — combobox with search */}
+            <FormField control={form.control} name="projectId" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Project</FormLabel>
+                <FormControl>
+                  <ProjectCombobox
+                    projects={projects}
+                    value={field.value}
+                    onChange={handleProjectChange}
+                    disabled={!selectedClientId || selectedClientId === 0}
+                    isLoading={isLoadingProjects}
+                    placeholder={
+                      !selectedClientId || selectedClientId === 0
+                        ? 'Select a client first'
+                        : 'Select a project'
+                    }
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+
+            {/* Task */}
+            <FormField control={form.control} name="taskId" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Task</FormLabel>
+                <Select
+                  onValueChange={(v) => form.setValue('taskId', Number(v))}
+                  value={field.value > 0 ? String(field.value) : ''}
+                  disabled={!selectedProjectId || selectedProjectId === 0}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder={
+                        !selectedProjectId || selectedProjectId === 0 ? 'Select a project first' :
+                        isLoadingTasks ? 'Loading...' : 'Select a task'
+                      } />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {tasks?.map(t => (
+                      <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )} />
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField control={form.control} name="date" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Date</FormLabel>
+                  <FormControl><Input type="date" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="hours" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Hours</FormLabel>
+                  <FormControl><Input type="number" step="0.25" min="0.25" max="24" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            </div>
+
+            <FormField control={form.control} name="description" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Description <span className="text-muted-foreground font-normal">(Optional)</span></FormLabel>
+                <FormControl>
+                  <Textarea placeholder="Briefly describe what you worked on..." rows={2} className="resize-none" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+
+            <div className="pt-2 flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+              <Button type="submit" disabled={updateMutation.isPending}>
+                {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Split Hours Dialog ───────────────────────────────────────────────────────
 
 function SplitHoursDialog({
@@ -730,6 +1070,7 @@ function SplitHoursDialog({
             <span className="font-bold text-foreground">{entry.userName}</span> logged{' '}
             <span className="font-mono font-bold">{entry.hours}h</span> on{' '}
             <span className="font-bold text-foreground">{entry.taskName}</span> ({entry.clientName}).
+            By default all hours are billable — set a lower billable amount to designate the remainder as non-billable.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
