@@ -6,5 +6,6 @@ export * from "./assignments";
 export * from "./tasks";
 export * from "./projectTasks";
 export * from "./timeEntries";
+export * from "./timeEntryEvents";
 export * from "./holidays";
 export * from "./leaves";

@@ -1,5 +1,5 @@
-import { Router, type IRouter } from "express";
-import { eq, and, inArray, or, isNull, gte, lte } from "drizzle-orm";
+import { Router, type IRouter, type Request, type Response } from "express";
+import { eq, and, inArray } from "drizzle-orm";
 import {
   db,
   clientsTable,
@@ -7,36 +7,63 @@ import {
   clientFteHistoryTable,
   usersTable,
 } from "@workspace/db";
+import { principal, requireRole, type Principal } from "../middlewares/auth";
+import { parseId } from "../lib/validation";
 
 const router: IRouter = Router();
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Scope ───────────────────────────────────────────────────────────────────
 
-async function getCurrentUserRole(userId: number) {
-  const [u] = await db
-    .select({ role: usersTable.role })
-    .from(usersTable)
-    .where(eq(usersTable.id, userId));
-  return u?.role ?? "analyst";
-}
+/**
+ * Clients this person is assigned to. `null` means unrestricted (MD).
+ *
+ * This is the *management* view — who owns the relationship — which is why it
+ * reads client assignments rather than reaching through projects the way the
+ * dashboard's data-visibility scope does.
+ */
+async function managedClientIds(me: Principal): Promise<number[] | null> {
+  if (me.role === "md") return null;
 
-async function getVisibleClientIds(userId: number, role: string): Promise<number[] | null> {
-  if (role === "md") return null; // no restriction
-
-  // AVP, Associate, Analyst — see only clients they are assigned to
   const rows = await db
     .select({ clientId: clientUsersTable.clientId })
     .from(clientUsersTable)
-    .where(eq(clientUsersTable.userId, userId));
+    .where(eq(clientUsersTable.userId, me.id));
 
   return rows.map((r) => r.clientId);
 }
 
-// ─── Routes ──────────────────────────────────────────────────────────────────
+/**
+ * Resolves the client id and confirms the caller is entitled to it, answering
+ * the request itself when they are not.
+ *
+ * The sub-resource routes below previously performed no check at all, so any
+ * signed-in person could read a client's staffing or its commercial FTE
+ * history; the write routes checked role but never scope, so an AVP could edit
+ * an account belonging to another AVP.
+ */
+async function resolveClient(
+  req: Request,
+  res: Response,
+): Promise<number | null> {
+  const clientId = parseId(req.params.clientId);
+  if (!clientId) {
+    res.status(400).json({ error: "Invalid client ID" });
+    return null;
+  }
+
+  const allowed = await managedClientIds(principal(req));
+  if (allowed !== null && !allowed.includes(clientId)) {
+    // 404 rather than 403 — existence is not something to disclose.
+    res.status(404).json({ error: "Client not found" });
+    return null;
+  }
+  return clientId;
+}
+
+// ─── Clients ─────────────────────────────────────────────────────────────────
 
 router.get("/clients", async (req, res): Promise<void> => {
-  const role = await getCurrentUserRole(req.session.userId!);
-  const visibleIds = await getVisibleClientIds(req.session.userId!, role);
+  const visibleIds = await managedClientIds(principal(req));
 
   type ClientRow = typeof clientsTable.$inferSelect;
   let clients: ClientRow[];
@@ -55,35 +82,32 @@ router.get("/clients", async (req, res): Promise<void> => {
   res.json(clients);
 });
 
-router.post("/clients", async (req, res): Promise<void> => {
-  const role = await getCurrentUserRole(req.session.userId!);
-  if (!["avp", "md"].includes(role)) {
-    res.status(403).json({ error: "Only AVPs and MDs can create clients" });
-    return;
-  }
-
+router.post("/clients", requireRole("avp"), async (req, res): Promise<void> => {
+  const me = principal(req);
   const { name, description, fteCount, associateIds } = req.body as {
     name?: string;
     description?: string;
     fteCount?: number;
     associateIds?: number[];
   };
-  if (!name) {
+
+  if (!name?.trim()) {
     res.status(400).json({ error: "name is required" });
     return;
   }
 
-  const fte = typeof fteCount === "number" && fteCount >= 0.1 && fteCount <= 100
-    ? fteCount
-    : 1;
+  const fte =
+    typeof fteCount === "number" && fteCount >= 0.1 && fteCount <= 100
+      ? fteCount
+      : 1;
 
   const [client] = await db
     .insert(clientsTable)
-    .values({ name, description: description ?? null, fteCount: fte })
+    .values({ name: name.trim(), description: description ?? null, fteCount: fte })
     .returning();
 
-  // Auto-assign the creating user so they can see the client
-  const assignees = new Set<number>([req.session.userId!]);
+  // The creator is assigned so the client stays visible to them.
+  const assignees = new Set<number>([me.id]);
   if (Array.isArray(associateIds)) {
     associateIds.forEach((id) => typeof id === "number" && assignees.add(id));
   }
@@ -97,24 +121,8 @@ router.post("/clients", async (req, res): Promise<void> => {
 });
 
 router.get("/clients/:clientId", async (req, res): Promise<void> => {
-  const clientId = parseInt(
-    Array.isArray(req.params.clientId)
-      ? req.params.clientId[0]
-      : req.params.clientId,
-    10,
-  );
-  if (isNaN(clientId)) {
-    res.status(400).json({ error: "Invalid client ID" });
-    return;
-  }
-
-  const role = await getCurrentUserRole(req.session.userId!);
-  const visibleIds = await getVisibleClientIds(req.session.userId!, role);
-
-  if (visibleIds !== null && !visibleIds.includes(clientId)) {
-    res.status(403).json({ error: "Access denied" });
-    return;
-  }
+  const clientId = await resolveClient(req, res);
+  if (!clientId) return;
 
   const [client] = await db
     .select()
@@ -129,145 +137,135 @@ router.get("/clients/:clientId", async (req, res): Promise<void> => {
   res.json(client);
 });
 
-router.patch("/clients/:clientId", async (req, res): Promise<void> => {
-  const clientId = parseInt(
-    Array.isArray(req.params.clientId)
-      ? req.params.clientId[0]
-      : req.params.clientId,
-    10,
-  );
-  if (isNaN(clientId)) {
-    res.status(400).json({ error: "Invalid client ID" });
-    return;
-  }
-
-  const role = await getCurrentUserRole(req.session.userId!);
-  if (!["avp", "md"].includes(role)) {
-    res.status(403).json({ error: "Only AVPs and MDs can edit clients" });
-    return;
-  }
-
-  const { name, description, fteCount, isActive } = req.body as {
-    name?: string;
-    description?: string | null;
-    fteCount?: number;
-    isActive?: boolean;
-  };
-
-  const updates: Partial<typeof clientsTable.$inferInsert> = {};
-  if (name) updates.name = name;
-  if (description !== undefined) updates.description = description;
-  if (typeof fteCount === "number" && fteCount >= 0.1 && fteCount <= 100) {
-    updates.fteCount = fteCount;
-  }
-  if (isActive !== undefined) updates.isActive = isActive;
-
-  if (Object.keys(updates).length === 0) {
-    res.status(400).json({ error: "No fields to update" });
-    return;
-  }
-
-  const [client] = await db
-    .update(clientsTable)
-    .set(updates)
-    .where(eq(clientsTable.id, clientId))
-    .returning();
-
-  if (!client) {
-    res.status(404).json({ error: "Client not found" });
-    return;
-  }
-
-  res.json(client);
-});
-
-router.delete("/clients/:clientId", async (req, res): Promise<void> => {
-  const clientId = parseInt(
-    Array.isArray(req.params.clientId)
-      ? req.params.clientId[0]
-      : req.params.clientId,
-    10,
-  );
-  if (isNaN(clientId)) {
-    res.status(400).json({ error: "Invalid client ID" });
-    return;
-  }
-
-  const role = await getCurrentUserRole(req.session.userId!);
-  if (!["avp", "md"].includes(role)) {
-    res.status(403).json({ error: "Only AVPs and MDs can delete clients" });
-    return;
-  }
-
-  const [client] = await db
-    .delete(clientsTable)
-    .where(eq(clientsTable.id, clientId))
-    .returning();
-
-  if (!client) {
-    res.status(404).json({ error: "Client not found" });
-    return;
-  }
-
-  res.json({ message: "Client deleted" });
-});
-
-// ─── Client assignments ───────────────────────────────────────────────────────
-
-router.get(
-  "/clients/:clientId/assignments",
+router.patch(
+  "/clients/:clientId",
+  requireRole("avp"),
   async (req, res): Promise<void> => {
-    const clientId = parseInt(
-      Array.isArray(req.params.clientId)
-        ? req.params.clientId[0]
-        : req.params.clientId,
-      10,
-    );
-    if (isNaN(clientId)) {
-      res.status(400).json({ error: "Invalid client ID" });
+    const clientId = await resolveClient(req, res);
+    if (!clientId) return;
+
+    const { name, description, fteCount, isActive } = req.body as {
+      name?: string;
+      description?: string | null;
+      fteCount?: number;
+      isActive?: boolean;
+    };
+
+    const updates: Partial<typeof clientsTable.$inferInsert> = {};
+    if (name !== undefined) {
+      if (!name.trim()) {
+        res.status(400).json({ error: "name cannot be empty" });
+        return;
+      }
+      updates.name = name.trim();
+    }
+    if (description !== undefined) updates.description = description;
+    if (fteCount !== undefined) {
+      if (typeof fteCount !== "number" || fteCount < 0.1 || fteCount > 100) {
+        res.status(400).json({ error: "fteCount must be between 0.1 and 100" });
+        return;
+      }
+      updates.fteCount = fteCount;
+    }
+    if (isActive !== undefined) updates.isActive = isActive;
+
+    if (Object.keys(updates).length === 0) {
+      res.status(400).json({ error: "No fields to update" });
       return;
     }
 
-    const rows = await db
-      .select({
-        id: usersTable.id,
-        name: usersTable.name,
-        email: usersTable.email,
-        role: usersTable.role,
-        reportingToId: usersTable.reportingToId,
-        createdAt: usersTable.createdAt,
-      })
-      .from(clientUsersTable)
-      .innerJoin(usersTable, eq(clientUsersTable.userId, usersTable.id))
-      .where(eq(clientUsersTable.clientId, clientId));
+    const [client] = await db
+      .update(clientsTable)
+      .set(updates)
+      .where(eq(clientsTable.id, clientId))
+      .returning();
 
-    res.json(rows);
+    if (!client) {
+      res.status(404).json({ error: "Client not found" });
+      return;
+    }
+
+    res.json(client);
   },
 );
 
+router.delete(
+  "/clients/:clientId",
+  requireRole("avp"),
+  async (req, res): Promise<void> => {
+    const clientId = await resolveClient(req, res);
+    if (!clientId) return;
+
+    try {
+      const [client] = await db
+        .delete(clientsTable)
+        .where(eq(clientsTable.id, clientId))
+        .returning();
+
+      if (!client) {
+        res.status(404).json({ error: "Client not found" });
+        return;
+      }
+      res.json({ message: "Client deleted" });
+    } catch (err: unknown) {
+      // Projects cascade, but the time entries beneath them do not — this
+      // previously surfaced as an unexplained 500.
+      const pgCode =
+        (err as { code?: string; cause?: { code?: string } })?.code ??
+        (err as { cause?: { code?: string } })?.cause?.code;
+      if (pgCode === "23503") {
+        res.status(400).json({
+          error:
+            "Cannot delete a client whose projects have time entries logged against them. Deactivate it instead.",
+        });
+        return;
+      }
+      throw err;
+    }
+  },
+);
+
+// ─── Assignments ─────────────────────────────────────────────────────────────
+
+router.get("/clients/:clientId/assignments", async (req, res): Promise<void> => {
+  const clientId = await resolveClient(req, res);
+  if (!clientId) return;
+
+  const rows = await db
+    .select({
+      id: usersTable.id,
+      name: usersTable.name,
+      email: usersTable.email,
+      role: usersTable.role,
+      reportingToId: usersTable.reportingToId,
+      createdAt: usersTable.createdAt,
+    })
+    .from(clientUsersTable)
+    .innerJoin(usersTable, eq(clientUsersTable.userId, usersTable.id))
+    .where(eq(clientUsersTable.clientId, clientId));
+
+  res.json(rows);
+});
+
 router.post(
   "/clients/:clientId/assignments",
+  requireRole("avp"),
   async (req, res): Promise<void> => {
-    const clientId = parseInt(
-      Array.isArray(req.params.clientId)
-        ? req.params.clientId[0]
-        : req.params.clientId,
-      10,
-    );
-    if (isNaN(clientId)) {
-      res.status(400).json({ error: "Invalid client ID" });
-      return;
-    }
-
-    const role = await getCurrentUserRole(req.session.userId!);
-    if (!["avp", "md"].includes(role)) {
-      res.status(403).json({ error: "Only AVPs and MDs can assign users to clients" });
-      return;
-    }
+    const clientId = await resolveClient(req, res);
+    if (!clientId) return;
 
     const { userId } = req.body as { userId?: number };
     if (!userId) {
       res.status(400).json({ error: "userId is required" });
+      return;
+    }
+
+    const [target] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId));
+    if (!target) {
+      res.status(400).json({ error: "userId does not match a user" });
       return;
     }
 
@@ -282,27 +280,14 @@ router.post(
 
 router.delete(
   "/clients/:clientId/assignments/:userId",
+  requireRole("avp"),
   async (req, res): Promise<void> => {
-    const clientId = parseInt(
-      Array.isArray(req.params.clientId)
-        ? req.params.clientId[0]
-        : req.params.clientId,
-      10,
-    );
-    const userId = parseInt(
-      Array.isArray(req.params.userId)
-        ? req.params.userId[0]
-        : req.params.userId,
-      10,
-    );
-    if (isNaN(clientId) || isNaN(userId)) {
-      res.status(400).json({ error: "Invalid IDs" });
-      return;
-    }
+    const clientId = await resolveClient(req, res);
+    if (!clientId) return;
 
-    const role = await getCurrentUserRole(req.session.userId!);
-    if (!["avp", "md"].includes(role)) {
-      res.status(403).json({ error: "Only AVPs and MDs can remove users from clients" });
+    const userId = parseId(req.params.userId);
+    if (!userId) {
+      res.status(400).json({ error: "Invalid user ID" });
       return;
     }
 
@@ -319,17 +304,16 @@ router.delete(
   },
 );
 
-// ─── Client FTE history ───────────────────────────────────────────────────────
-
-function parseClientId(raw: string | string[]): number {
-  return parseInt(Array.isArray(raw) ? raw[0] : raw, 10);
-}
+// ─── FTE history ─────────────────────────────────────────────────────────────
+// Contracted capacity is commercial data and drives billing, so the whole
+// resource — reads included — is AVP and above.
 
 router.get(
   "/clients/:clientId/fte-history",
+  requireRole("avp"),
   async (req, res): Promise<void> => {
-    const clientId = parseClientId(req.params.clientId);
-    if (isNaN(clientId)) { res.status(400).json({ error: "Invalid client ID" }); return; }
+    const clientId = await resolveClient(req, res);
+    if (!clientId) return;
 
     const rows = await db
       .select()
@@ -343,15 +327,10 @@ router.get(
 
 router.post(
   "/clients/:clientId/fte-history",
+  requireRole("avp"),
   async (req, res): Promise<void> => {
-    const clientId = parseClientId(req.params.clientId);
-    if (isNaN(clientId)) { res.status(400).json({ error: "Invalid client ID" }); return; }
-
-    const role = await getCurrentUserRole(req.session.userId!);
-    if (!["avp", "md"].includes(role)) {
-      res.status(403).json({ error: "Only AVPs and MDs can manage FTE history" });
-      return;
-    }
+    const clientId = await resolveClient(req, res);
+    if (!clientId) return;
 
     const { fteCount, effectiveFrom, effectiveTo } = req.body as {
       fteCount?: number;
@@ -372,13 +351,20 @@ router.post(
       return;
     }
     if (effectiveTo && effectiveTo < effectiveFrom) {
-      res.status(400).json({ error: "effectiveTo must be on or after effectiveFrom" });
+      res
+        .status(400)
+        .json({ error: "effectiveTo must be on or after effectiveFrom" });
       return;
     }
 
     const [row] = await db
       .insert(clientFteHistoryTable)
-      .values({ clientId, fteCount, effectiveFrom, effectiveTo: effectiveTo ?? null })
+      .values({
+        clientId,
+        fteCount,
+        effectiveFrom,
+        effectiveTo: effectiveTo ?? null,
+      })
       .returning();
 
     res.status(201).json(row);
@@ -387,23 +373,31 @@ router.post(
 
 router.delete(
   "/clients/:clientId/fte-history/:entryId",
+  requireRole("avp"),
   async (req, res): Promise<void> => {
-    const clientId = parseClientId(req.params.clientId);
-    const entryId = parseInt(Array.isArray(req.params.entryId) ? req.params.entryId[0] : req.params.entryId, 10);
-    if (isNaN(clientId) || isNaN(entryId)) { res.status(400).json({ error: "Invalid IDs" }); return; }
+    const clientId = await resolveClient(req, res);
+    if (!clientId) return;
 
-    const role = await getCurrentUserRole(req.session.userId!);
-    if (!["avp", "md"].includes(role)) {
-      res.status(403).json({ error: "Only AVPs and MDs can manage FTE history" });
+    const entryId = parseId(req.params.entryId);
+    if (!entryId) {
+      res.status(400).json({ error: "Invalid entry ID" });
       return;
     }
 
     const [deleted] = await db
       .delete(clientFteHistoryTable)
-      .where(and(eq(clientFteHistoryTable.id, entryId), eq(clientFteHistoryTable.clientId, clientId)))
+      .where(
+        and(
+          eq(clientFteHistoryTable.id, entryId),
+          eq(clientFteHistoryTable.clientId, clientId),
+        ),
+      )
       .returning();
 
-    if (!deleted) { res.status(404).json({ error: "FTE history entry not found" }); return; }
+    if (!deleted) {
+      res.status(404).json({ error: "FTE history entry not found" });
+      return;
+    }
     res.json({ message: "FTE history entry deleted" });
   },
 );

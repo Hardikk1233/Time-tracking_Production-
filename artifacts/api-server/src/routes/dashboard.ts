@@ -13,6 +13,17 @@ import {
   publicHolidaysTable,
   leavesTable,
 } from "@workspace/db";
+import { principal } from "../middlewares/auth";
+import { visibleClientIds, visibleUserIds } from "../lib/scope";
+import {
+  productivity,
+  percent,
+  billableHoursSql,
+  nonBillableHoursSql,
+  totalHoursSql,
+  pendingHoursSql,
+  HOURS_PER_DAY,
+} from "../lib/metrics";
 
 const router: IRouter = Router();
 
@@ -114,39 +125,60 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
 
   const [result] = await db
     .select({
-      totalHours: sql<number>`COALESCE(SUM(${timeEntriesTable.hours}), 0)`,
-      billableHours: sql<number>`COALESCE(SUM(COALESCE(${timeEntriesTable.billableHours}, 0)), 0)`,
-      nonBillableHours: sql<number>`COALESCE(SUM(${timeEntriesTable.hours} - COALESCE(${timeEntriesTable.billableHours}, 0)), 0)`,
+      totalHours: totalHoursSql,
+      billableHours: billableHoursSql,
+      nonBillableHours: nonBillableHoursSql,
+      pendingHours: pendingHoursSql,
       pendingApprovalCount: sql<number>`COUNT(CASE WHEN ${timeEntriesTable.status} = 'pending' THEN 1 END)`,
       approvedHours: sql<number>`COALESCE(SUM(CASE WHEN ${timeEntriesTable.status} = 'approved' THEN ${timeEntriesTable.hours} ELSE 0 END), 0)`,
     })
     .from(timeEntriesTable)
     .where(and(...conditions));
 
+  const totalHours = Number(result?.totalHours ?? 0);
   const billable = Number(result?.billableHours ?? 0);
-  const capacityHours = effectiveWorkingDays * 8;
+  const measures = productivity({
+    totalHours,
+    billableHours: billable,
+    availableWorkingDays: effectiveWorkingDays,
+  });
 
   res.json({
-    totalHours: Number(result?.totalHours ?? 0),
+    totalHours,
     billableHours: billable,
     nonBillableHours: Number(result?.nonBillableHours ?? 0),
+    pendingHours: Number(result?.pendingHours ?? 0),
     pendingApprovalCount: Number(result?.pendingApprovalCount ?? 0),
     approvedHours: Number(result?.approvedHours ?? 0),
     workingDays: baseWorkingDays,
     effectiveWorkingDays,
     leaveDays,
-    capacityHours,
-    utilization: capacityHours > 0 ? Math.round((billable / capacityHours) * 100) : 0,
+    capacityHours: measures.capacityHours,
+    recordedUtilization: measures.recordedUtilization,
+    billableUtilization: measures.billableUtilization,
+    efficiency: measures.efficiency,
+    // Retained so existing screens keep working; billableUtilization is the
+    // name to use going forward.
+    utilization: measures.billableUtilization,
   });
 });
 
 // ─── Client hours (aggregate per-client totals, kept for compatibility) ───────
 
 router.get("/dashboard/client-hours", async (req, res): Promise<void> => {
+  const me = principal(req);
   const { startDate, endDate } = req.query as {
     startDate?: string;
     endDate?: string;
   };
+
+  // Previously unscoped: every client's billable totals were readable by any
+  // signed-in user, including Analysts with no involvement in those accounts.
+  const allowedClients = await visibleClientIds(me);
+  if (allowedClients !== null && allowedClients.length === 0) {
+    res.json([]);
+    return;
+  }
 
   const entryConditions = [];
   if (startDate) entryConditions.push(gte(timeEntriesTable.date, startDate));
@@ -158,15 +190,20 @@ router.get("/dashboard/client-hours", async (req, res): Promise<void> => {
     .select({
       clientId: clientsTable.id,
       clientName: clientsTable.name,
-      totalHours: sql<number>`COALESCE(SUM(${timeEntriesTable.hours}), 0)`,
-      billableHours: sql<number>`COALESCE(SUM(COALESCE(${timeEntriesTable.billableHours}, 0)), 0)`,
-      nonBillableHours: sql<number>`COALESCE(SUM(${timeEntriesTable.hours} - COALESCE(${timeEntriesTable.billableHours}, 0)), 0)`,
+      totalHours: totalHoursSql,
+      billableHours: billableHoursSql,
+      nonBillableHours: nonBillableHoursSql,
     })
     .from(clientsTable)
     .leftJoin(projectsTable, eq(projectsTable.clientId, clientsTable.id))
     .leftJoin(
       timeEntriesTable,
       and(eq(timeEntriesTable.projectId, projectsTable.id), entryWhere),
+    )
+    .where(
+      allowedClients === null
+        ? undefined
+        : inArray(clientsTable.id, allowedClients),
     )
     .groupBy(clientsTable.id, clientsTable.name)
     .orderBy(sql`COALESCE(SUM(${timeEntriesTable.hours}), 0) DESC`);
@@ -200,6 +237,14 @@ router.get("/dashboard/client-hours-trend", async (req, res): Promise<void> => {
   const clientIdNum = parseInt(clientId, 10);
   if (isNaN(clientIdNum)) {
     res.status(400).json({ error: "Invalid clientId" });
+    return;
+  }
+
+  // Any clientId was previously accepted, so a trend for an unrelated account
+  // could be pulled just by changing the query string.
+  const allowedClients = await visibleClientIds(principal(req));
+  if (allowedClients !== null && !allowedClients.includes(clientIdNum)) {
+    res.status(404).json({ error: "Client not found" });
     return;
   }
 
@@ -273,8 +318,8 @@ router.get("/dashboard/client-hours-trend", async (req, res): Promise<void> => {
     );
 
     const billable = Number(r.billableHours);
-    // Client capacity accounts for FTE count
-    const capacity = effectiveWorkingDays * 8 * fteCount;
+    // Contract capacity, not staff capacity: what the client engaged us for.
+    const capacity = effectiveWorkingDays * HOURS_PER_DAY * fteCount;
 
     let period: string;
     let label: string;
@@ -301,7 +346,10 @@ router.get("/dashboard/client-hours-trend", async (req, res): Promise<void> => {
       workingDays: effectiveWorkingDays,
       fteCount,
       capacity,
-      utilization: capacity > 0 ? Math.round((billable / capacity) * 100) : 0,
+      // Contract utilisation - a different measure from a person's, sharing
+      // only the word. Named explicitly so the two are not read as comparable.
+      contractUtilization: percent(billable, capacity),
+      utilization: percent(billable, capacity),
     };
   });
 
@@ -311,7 +359,7 @@ router.get("/dashboard/client-hours-trend", async (req, res): Promise<void> => {
 // ─── Team utilization ─────────────────────────────────────────────────────────
 
 router.get("/dashboard/utilization", async (req, res): Promise<void> => {
-  const currentUserId = req.session.userId!;
+  const me = principal(req);
   const { startDate, endDate } = req.query as {
     startDate?: string;
     endDate?: string;
@@ -323,20 +371,17 @@ router.get("/dashboard/utilization", async (req, res): Promise<void> => {
   const entryWhere =
     entryConditions.length > 0 ? and(...entryConditions) : undefined;
 
-  // Role-based visibility
-  const [currentUser] = await db
-    .select({ role: usersTable.role })
-    .from(usersTable)
-    .where(eq(usersTable.id, currentUserId));
-
-  let userWhereClause;
-  const currentRole = currentUser?.role ?? "analyst";
-
-  if (currentRole === "analyst") {
-    userWhereClause = eq(usersTable.id, currentUserId);
-  } else if (currentRole === "associate") {
-    userWhereClause = sql`(${usersTable.id} = ${currentUserId} OR (${usersTable.role} = 'analyst' AND ${usersTable.reportingToId} = ${currentUserId}))`;
+  // Scoped exactly as time entries and the activity feed are. This previously
+  // used the reporting line instead, so an Associate saw only the analysts
+  // formally reporting to them - not the people they actually work alongside
+  // on their projects - and the table disagreed with the rest of the screen.
+  const visible = await visibleUserIds(me);
+  if (visible !== null && visible.length === 0) {
+    res.json([]);
+    return;
   }
+  const userWhereClause =
+    visible === null ? undefined : inArray(usersTable.id, visible);
 
   // Fetch time entry aggregates and holidays in parallel
   const now = new Date();
@@ -353,10 +398,10 @@ router.get("/dashboard/utilization", async (req, res): Promise<void> => {
         userId: usersTable.id,
         userName: usersTable.name,
         role: usersTable.role,
-        totalHours: sql<number>`COALESCE(SUM(${timeEntriesTable.hours}), 0)`,
-        billableHours: sql<number>`COALESCE(SUM(COALESCE(${timeEntriesTable.billableHours}, 0)), 0)`,
-        nonBillableHours: sql<number>`COALESCE(SUM(${timeEntriesTable.hours} - COALESCE(${timeEntriesTable.billableHours}, 0)), 0)`,
-        pendingHours: sql<number>`COALESCE(SUM(CASE WHEN ${timeEntriesTable.status} = 'pending' THEN ${timeEntriesTable.hours} ELSE 0 END), 0)`,
+        totalHours: totalHoursSql,
+        billableHours: billableHoursSql,
+        nonBillableHours: nonBillableHoursSql,
+        pendingHours: pendingHoursSql,
       })
       .from(usersTable)
       .leftJoin(
@@ -371,12 +416,12 @@ router.get("/dashboard/utilization", async (req, res): Promise<void> => {
 
   const baseWorkingDays = countWorkingDaysEffective(resolvedStart, resolvedEnd, holidaySet);
 
-  // Fetch leaves for all visible users in the date range
-  const visibleUserIds = rows.map((r) => r.userId);
+  // Fetch leaves for everyone in the table, to discount their capacity.
+  const listedUserIds = rows.map((r) => r.userId);
   let leavesByUser: Record<number, number> = {};
 
-  if (visibleUserIds.length > 0) {
-    const leaveConditions = [inArray(leavesTable.userId, visibleUserIds)];
+  if (listedUserIds.length > 0) {
+    const leaveConditions = [inArray(leavesTable.userId, listedUserIds)];
     if (startDate) leaveConditions.push(gte(leavesTable.date, startDate));
     if (endDate) leaveConditions.push(lte(leavesTable.date, endDate));
 
@@ -401,7 +446,11 @@ router.get("/dashboard/utilization", async (req, res): Promise<void> => {
       const billable = Number(r.billableHours);
       const leaveDays = leavesByUser[r.userId] ?? 0;
       const effectiveWorkingDays = Math.max(baseWorkingDays - leaveDays, 0);
-      const capacityHours = effectiveWorkingDays * 8;
+      const measures = productivity({
+        totalHours: total,
+        billableHours: billable,
+        availableWorkingDays: effectiveWorkingDays,
+      });
       return {
         userId: r.userId,
         userName: r.userName,
@@ -412,8 +461,12 @@ router.get("/dashboard/utilization", async (req, res): Promise<void> => {
         pendingHours: Number(r.pendingHours),
         leaveDays,
         effectiveWorkingDays,
-        utilization: capacityHours > 0 ? Math.round((billable / capacityHours) * 100) : 0,
-        efficiency: total > 0 ? Math.round((billable / total) * 100) : 0,
+        capacityHours: measures.capacityHours,
+        recordedUtilization: measures.recordedUtilization,
+        billableUtilization: measures.billableUtilization,
+        efficiency: measures.efficiency,
+        // Kept for the current table; billableUtilization supersedes it.
+        utilization: measures.billableUtilization,
       };
     }),
   );
@@ -422,8 +475,21 @@ router.get("/dashboard/utilization", async (req, res): Promise<void> => {
 // ─── Recent activity ─────────────────────────────────────────────────────────
 
 router.get("/dashboard/recent-activity", async (req, res): Promise<void> => {
+  const me = principal(req);
   const { limit } = req.query as { limit?: string };
-  const limitNum = Math.min(parseInt(limit ?? "20", 10), 100);
+  const parsedLimit = parseInt(limit ?? "20", 10);
+  const limitNum = Math.min(
+    Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 20,
+    100,
+  );
+
+  // Previously firm-wide: names, clients and free-text descriptions from every
+  // colleague's entries were returned to anyone signed in.
+  const visible = await visibleUserIds(me);
+  if (visible !== null && visible.length === 0) {
+    res.json([]);
+    return;
+  }
 
   const rows = await db
     .select({
@@ -450,6 +516,11 @@ router.get("/dashboard/recent-activity", async (req, res): Promise<void> => {
     .innerJoin(tasksTable, eq(timeEntriesTable.taskId, tasksTable.id))
     .leftJoin(projectsTable, eq(timeEntriesTable.projectId, projectsTable.id))
     .leftJoin(clientsTable, eq(projectsTable.clientId, clientsTable.id))
+    .where(
+      visible === null
+        ? undefined
+        : inArray(timeEntriesTable.userId, visible),
+    )
     .orderBy(sql`${timeEntriesTable.createdAt} DESC`)
     .limit(limitNum);
 

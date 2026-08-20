@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { eq, and, inArray, or } from "drizzle-orm";
 import {
   db,
@@ -10,71 +10,84 @@ import {
   tasksTable,
   usersTable,
 } from "@workspace/db";
+import { principal, requireRole } from "../middlewares/auth";
+import {
+  isProjectVisible,
+  isClientVisible,
+  visibleClientIds,
+} from "../lib/scope";
+import { parseId } from "../lib/validation";
 
 const router: IRouter = Router();
 
-const CAN_MANAGE_PROJECTS = ["associate", "avp", "md"];
-
-async function getCurrentUserRole(userId: number) {
-  const [u] = await db
-    .select({ role: usersTable.role })
-    .from(usersTable)
-    .where(eq(usersTable.id, userId));
-  return u?.role ?? "analyst";
+/**
+ * Resolves the project id and confirms the caller may act on it.
+ *
+ * Returns null having already answered the request when it may not — every
+ * project route below funnels through this, because a role check alone let an
+ * Associate rename, delete or assign themselves to any project by id.
+ */
+async function resolveProject(
+  req: Request,
+  res: Response,
+): Promise<number | null> {
+  const projectId = parseId(req.params.projectId);
+  if (!projectId) {
+    res.status(400).json({ error: "Invalid project ID" });
+    return null;
+  }
+  if (!(await isProjectVisible(principal(req), projectId))) {
+    // 404 rather than 403: existence itself is not something to leak.
+    res.status(404).json({ error: "Project not found" });
+    return null;
+  }
+  return projectId;
 }
 
-// Projects are visible to: MDs (all), and anyone assigned to the project's
-// client OR assigned directly to the project.
-async function getVisibleProjectScope(
-  userId: number,
-): Promise<{ clientIds: number[]; projectIds: number[] } | null> {
-  const role = await getCurrentUserRole(userId);
-  if (role === "md") return null;
-
-  const [clientRows, projectRows] = await Promise.all([
-    db
-      .select({ clientId: clientUsersTable.clientId })
-      .from(clientUsersTable)
-      .where(eq(clientUsersTable.userId, userId)),
-    db
-      .select({ projectId: projectUsersTable.projectId })
-      .from(projectUsersTable)
-      .where(eq(projectUsersTable.userId, userId)),
-  ]);
-
-  return {
-    clientIds: clientRows.map((r) => r.clientId),
-    projectIds: projectRows.map((r) => r.projectId),
-  };
-}
+// ─── Read ────────────────────────────────────────────────────────────────────
 
 router.get("/projects", async (req, res): Promise<void> => {
+  const me = principal(req);
   const { clientId } = req.query as { clientId?: string };
 
-  const scope = await getVisibleProjectScope(req.session.userId!);
+  const [clientRows, projectRows] =
+    me.role === "md"
+      ? [null, null]
+      : await Promise.all([
+          db
+            .select({ clientId: clientUsersTable.clientId })
+            .from(clientUsersTable)
+            .where(eq(clientUsersTable.userId, me.id)),
+          db
+            .select({ projectId: projectUsersTable.projectId })
+            .from(projectUsersTable)
+            .where(eq(projectUsersTable.userId, me.id)),
+        ]);
 
   let visibilityClause;
-  if (scope !== null) {
-    if (scope.clientIds.length === 0 && scope.projectIds.length === 0) {
+  if (clientRows !== null && projectRows !== null) {
+    const clientIds = clientRows.map((r) => r.clientId);
+    const projectIds = projectRows.map((r) => r.projectId);
+    if (clientIds.length === 0 && projectIds.length === 0) {
       res.json([]);
       return;
     }
     const clauses = [];
-    if (scope.clientIds.length > 0) {
-      clauses.push(inArray(projectsTable.clientId, scope.clientIds));
+    if (clientIds.length > 0) {
+      clauses.push(inArray(projectsTable.clientId, clientIds));
     }
-    if (scope.projectIds.length > 0) {
-      clauses.push(inArray(projectsTable.id, scope.projectIds));
+    if (projectIds.length > 0) {
+      clauses.push(inArray(projectsTable.id, projectIds));
     }
     visibilityClause = or(...clauses);
   }
 
   let whereClause = visibilityClause;
-  if (clientId) {
-    const cId = parseInt(clientId, 10);
+  const filterClientId = clientId ? parseId(clientId) : null;
+  if (filterClientId) {
     whereClause = visibilityClause
-      ? and(eq(projectsTable.clientId, cId), visibilityClause)
-      : eq(projectsTable.clientId, cId);
+      ? and(eq(projectsTable.clientId, filterClientId), visibilityClause)
+      : eq(projectsTable.clientId, filterClientId);
   }
 
   const rows = await db
@@ -95,93 +108,9 @@ router.get("/projects", async (req, res): Promise<void> => {
   res.json(rows);
 });
 
-router.post("/projects", async (req, res): Promise<void> => {
-  const role = await getCurrentUserRole(req.session.userId!);
-  if (!CAN_MANAGE_PROJECTS.includes(role)) {
-    res.status(403).json({ error: "Only Associates and above can create projects" });
-    return;
-  }
-
-  const { clientId, name, description, taskIds, userIds } = req.body as {
-    clientId?: number;
-    name?: string;
-    description?: string;
-    taskIds?: number[];
-    userIds?: number[];
-  };
-
-  if (!clientId || !name) {
-    res.status(400).json({ error: "clientId and name are required" });
-    return;
-  }
-
-  const [project] = await db
-    .insert(projectsTable)
-    .values({ clientId, name, description: description ?? null })
-    .returning();
-
-  if (Array.isArray(taskIds) && taskIds.length > 0) {
-    await db
-      .insert(projectTasksTable)
-      .values(taskIds.map((taskId) => ({ projectId: project.id, taskId })))
-      .onConflictDoNothing();
-  }
-
-  // Auto-assign the creator so they can see the project, plus any explicitly chosen users
-  const assignees = new Set<number>([req.session.userId!]);
-  if (Array.isArray(userIds)) {
-    userIds.forEach((id) => typeof id === "number" && assignees.add(id));
-  }
-  await db
-    .insert(projectUsersTable)
-    .values([...assignees].map((userId) => ({ projectId: project.id, userId })))
-    .onConflictDoNothing();
-
-  const [client] = await db
-    .select({ name: clientsTable.name })
-    .from(clientsTable)
-    .where(eq(clientsTable.id, clientId));
-
-  res.status(201).json({
-    ...project,
-    clientName: client?.name ?? "",
-  });
-});
-
-async function assertProjectVisible(
-  userId: number,
-  projectId: number,
-): Promise<boolean> {
-  const scope = await getVisibleProjectScope(userId);
-  if (scope === null) return true;
-
-  if (scope.projectIds.includes(projectId)) return true;
-  if (scope.clientIds.length === 0) return false;
-
-  const [project] = await db
-    .select({ clientId: projectsTable.clientId })
-    .from(projectsTable)
-    .where(eq(projectsTable.id, projectId));
-
-  return !!project && scope.clientIds.includes(project.clientId);
-}
-
 router.get("/projects/:projectId", async (req, res): Promise<void> => {
-  const projectId = parseInt(
-    Array.isArray(req.params.projectId)
-      ? req.params.projectId[0]
-      : req.params.projectId,
-    10,
-  );
-  if (isNaN(projectId)) {
-    res.status(400).json({ error: "Invalid project ID" });
-    return;
-  }
-
-  if (!(await assertProjectVisible(req.session.userId!, projectId))) {
-    res.status(403).json({ error: "Access denied" });
-    return;
-  }
+  const projectId = await resolveProject(req, res);
+  if (!projectId) return;
 
   const [row] = await db
     .select({
@@ -205,105 +134,160 @@ router.get("/projects/:projectId", async (req, res): Promise<void> => {
   res.json(row);
 });
 
-router.patch("/projects/:projectId", async (req, res): Promise<void> => {
-  const projectId = parseInt(
-    Array.isArray(req.params.projectId)
-      ? req.params.projectId[0]
-      : req.params.projectId,
-    10,
-  );
-  if (isNaN(projectId)) {
-    res.status(400).json({ error: "Invalid project ID" });
-    return;
-  }
+// ─── Create / update / delete ────────────────────────────────────────────────
 
-  const role = await getCurrentUserRole(req.session.userId!);
-  if (!CAN_MANAGE_PROJECTS.includes(role)) {
-    res.status(403).json({ error: "Only Associates and above can edit projects" });
-    return;
-  }
+router.post(
+  "/projects",
+  requireRole("associate"),
+  async (req, res): Promise<void> => {
+    const me = principal(req);
+    const { clientId, name, description, taskIds, userIds } = req.body as {
+      clientId?: number;
+      name?: string;
+      description?: string;
+      taskIds?: number[];
+      userIds?: number[];
+    };
 
-  const { name, description, isActive } = req.body as {
-    name?: string;
-    description?: string | null;
-    isActive?: boolean;
-  };
+    if (!clientId || !name?.trim()) {
+      res.status(400).json({ error: "clientId and name are required" });
+      return;
+    }
 
-  const updates: Partial<typeof projectsTable.$inferInsert> = {};
-  if (name) updates.name = name;
-  if (description !== undefined) updates.description = description;
-  if (isActive !== undefined) updates.isActive = isActive;
+    // A project could previously be created under any client — and since the
+    // creator is auto-assigned below, that handed out visibility of an account
+    // the caller had nothing to do with.
+    if (!(await isClientVisible(me, clientId))) {
+      res.status(404).json({ error: "Client not found" });
+      return;
+    }
 
-  if (Object.keys(updates).length === 0) {
-    res.status(400).json({ error: "No fields to update" });
-    return;
-  }
+    const [client] = await db
+      .select({ name: clientsTable.name })
+      .from(clientsTable)
+      .where(eq(clientsTable.id, clientId));
+    if (!client) {
+      res.status(404).json({ error: "Client not found" });
+      return;
+    }
 
-  const [project] = await db
-    .update(projectsTable)
-    .set(updates)
-    .where(eq(projectsTable.id, projectId))
-    .returning();
+    const [project] = await db
+      .insert(projectsTable)
+      .values({ clientId, name: name.trim(), description: description ?? null })
+      .returning();
 
-  if (!project) {
-    res.status(404).json({ error: "Project not found" });
-    return;
-  }
+    if (Array.isArray(taskIds) && taskIds.length > 0) {
+      await db
+        .insert(projectTasksTable)
+        .values(taskIds.map((taskId) => ({ projectId: project.id, taskId })))
+        .onConflictDoNothing();
+    }
 
-  const [client] = await db
-    .select({ name: clientsTable.name })
-    .from(clientsTable)
-    .where(eq(clientsTable.id, project.clientId));
+    const assignees = new Set<number>([me.id]);
+    if (Array.isArray(userIds)) {
+      userIds.forEach((id) => typeof id === "number" && assignees.add(id));
+    }
+    await db
+      .insert(projectUsersTable)
+      .values([...assignees].map((userId) => ({ projectId: project.id, userId })))
+      .onConflictDoNothing();
 
-  res.json({ ...project, clientName: client?.name ?? "", isActive: project.isActive });
-});
+    res.status(201).json({ ...project, clientName: client.name });
+  },
+);
 
-router.delete("/projects/:projectId", async (req, res): Promise<void> => {
-  const projectId = parseInt(
-    Array.isArray(req.params.projectId)
-      ? req.params.projectId[0]
-      : req.params.projectId,
-    10,
-  );
-  if (isNaN(projectId)) {
-    res.status(400).json({ error: "Invalid project ID" });
-    return;
-  }
+router.patch(
+  "/projects/:projectId",
+  requireRole("associate"),
+  async (req, res): Promise<void> => {
+    const projectId = await resolveProject(req, res);
+    if (!projectId) return;
 
-  const role = await getCurrentUserRole(req.session.userId!);
-  if (!CAN_MANAGE_PROJECTS.includes(role)) {
-    res.status(403).json({ error: "Only Associates and above can delete projects" });
-    return;
-  }
+    const { name, description, isActive } = req.body as {
+      name?: string;
+      description?: string | null;
+      isActive?: boolean;
+    };
 
-  const [project] = await db
-    .delete(projectsTable)
-    .where(eq(projectsTable.id, projectId))
-    .returning();
+    const updates: Partial<typeof projectsTable.$inferInsert> = {};
+    if (name !== undefined) {
+      if (!name.trim()) {
+        res.status(400).json({ error: "name cannot be empty" });
+        return;
+      }
+      updates.name = name.trim();
+    }
+    if (description !== undefined) updates.description = description;
+    if (isActive !== undefined) updates.isActive = isActive;
 
-  if (!project) {
-    res.status(404).json({ error: "Project not found" });
-    return;
-  }
+    if (Object.keys(updates).length === 0) {
+      res.status(400).json({ error: "No fields to update" });
+      return;
+    }
 
-  res.json({ message: "Project deleted" });
-});
+    const [project] = await db
+      .update(projectsTable)
+      .set(updates)
+      .where(eq(projectsTable.id, projectId))
+      .returning();
 
-// ─── Project user assignments ──────────────────────────────────────────────
+    if (!project) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+
+    const [client] = await db
+      .select({ name: clientsTable.name })
+      .from(clientsTable)
+      .where(eq(clientsTable.id, project.clientId));
+
+    res.json({ ...project, clientName: client?.name ?? "" });
+  },
+);
+
+router.delete(
+  "/projects/:projectId",
+  requireRole("associate"),
+  async (req, res): Promise<void> => {
+    const projectId = await resolveProject(req, res);
+    if (!projectId) return;
+
+    try {
+      const [project] = await db
+        .delete(projectsTable)
+        .where(eq(projectsTable.id, projectId))
+        .returning();
+
+      if (!project) {
+        res.status(404).json({ error: "Project not found" });
+        return;
+      }
+      res.json({ message: "Project deleted" });
+    } catch (err: unknown) {
+      // Time entries reference the project without a cascade, so this raised an
+      // unhandled 500 rather than explaining the problem.
+      const pgCode =
+        (err as { code?: string; cause?: { code?: string } })?.code ??
+        (err as { cause?: { code?: string } })?.cause?.code;
+      if (pgCode === "23503") {
+        res.status(400).json({
+          error:
+            "Cannot delete a project that has time entries logged against it. Deactivate it instead.",
+        });
+        return;
+      }
+      throw err;
+    }
+  },
+);
+
+// ─── User assignments ────────────────────────────────────────────────────────
 
 router.get(
   "/projects/:projectId/assignments",
   async (req, res): Promise<void> => {
-    const projectId = parseInt(
-      Array.isArray(req.params.projectId)
-        ? req.params.projectId[0]
-        : req.params.projectId,
-      10,
-    );
-    if (isNaN(projectId)) {
-      res.status(400).json({ error: "Invalid project ID" });
-      return;
-    }
+    const projectId = await resolveProject(req, res);
+    if (!projectId) return;
 
     const rows = await db
       .select({
@@ -324,27 +308,23 @@ router.get(
 
 router.post(
   "/projects/:projectId/assignments",
+  requireRole("associate"),
   async (req, res): Promise<void> => {
-    const projectId = parseInt(
-      Array.isArray(req.params.projectId)
-        ? req.params.projectId[0]
-        : req.params.projectId,
-      10,
-    );
-    if (isNaN(projectId)) {
-      res.status(400).json({ error: "Invalid project ID" });
-      return;
-    }
-
-    const role = await getCurrentUserRole(req.session.userId!);
-    if (!CAN_MANAGE_PROJECTS.includes(role)) {
-      res.status(403).json({ error: "Only Associates and above can assign users to projects" });
-      return;
-    }
+    const projectId = await resolveProject(req, res);
+    if (!projectId) return;
 
     const { userId } = req.body as { userId?: number };
     if (!userId) {
       res.status(400).json({ error: "userId is required" });
+      return;
+    }
+
+    const [target] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId));
+    if (!target) {
+      res.status(400).json({ error: "userId does not match a user" });
       return;
     }
 
@@ -359,27 +339,14 @@ router.post(
 
 router.delete(
   "/projects/:projectId/assignments/:userId",
+  requireRole("associate"),
   async (req, res): Promise<void> => {
-    const projectId = parseInt(
-      Array.isArray(req.params.projectId)
-        ? req.params.projectId[0]
-        : req.params.projectId,
-      10,
-    );
-    const userId = parseInt(
-      Array.isArray(req.params.userId)
-        ? req.params.userId[0]
-        : req.params.userId,
-      10,
-    );
-    if (isNaN(projectId) || isNaN(userId)) {
-      res.status(400).json({ error: "Invalid IDs" });
-      return;
-    }
+    const projectId = await resolveProject(req, res);
+    if (!projectId) return;
 
-    const role = await getCurrentUserRole(req.session.userId!);
-    if (!CAN_MANAGE_PROJECTS.includes(role)) {
-      res.status(403).json({ error: "Only Associates and above can remove users from projects" });
+    const userId = parseId(req.params.userId);
+    if (!userId) {
+      res.status(400).json({ error: "Invalid user ID" });
       return;
     }
 
@@ -396,61 +363,46 @@ router.delete(
   },
 );
 
-// ─── Project task assignments (global catalog subset enabled per project) ──
+// ─── Enabled tasks (subset of the global catalog) ────────────────────────────
 
-router.get(
-  "/projects/:projectId/tasks",
-  async (req, res): Promise<void> => {
-    const projectId = parseInt(
-      Array.isArray(req.params.projectId)
-        ? req.params.projectId[0]
-        : req.params.projectId,
-      10,
-    );
-    if (isNaN(projectId)) {
-      res.status(400).json({ error: "Invalid project ID" });
-      return;
-    }
+router.get("/projects/:projectId/tasks", async (req, res): Promise<void> => {
+  const projectId = await resolveProject(req, res);
+  if (!projectId) return;
 
-    const rows = await db
-      .select({
-        id: tasksTable.id,
-        name: tasksTable.name,
-        description: tasksTable.description,
-        createdAt: tasksTable.createdAt,
-      })
-      .from(projectTasksTable)
-      .innerJoin(tasksTable, eq(projectTasksTable.taskId, tasksTable.id))
-      .where(eq(projectTasksTable.projectId, projectId))
-      .orderBy(tasksTable.name);
+  const rows = await db
+    .select({
+      id: tasksTable.id,
+      name: tasksTable.name,
+      description: tasksTable.description,
+      createdAt: tasksTable.createdAt,
+    })
+    .from(projectTasksTable)
+    .innerJoin(tasksTable, eq(projectTasksTable.taskId, tasksTable.id))
+    .where(eq(projectTasksTable.projectId, projectId))
+    .orderBy(tasksTable.name);
 
-    res.json(rows);
-  },
-);
+  res.json(rows);
+});
 
 router.post(
   "/projects/:projectId/tasks",
+  requireRole("associate"),
   async (req, res): Promise<void> => {
-    const projectId = parseInt(
-      Array.isArray(req.params.projectId)
-        ? req.params.projectId[0]
-        : req.params.projectId,
-      10,
-    );
-    if (isNaN(projectId)) {
-      res.status(400).json({ error: "Invalid project ID" });
-      return;
-    }
-
-    const role = await getCurrentUserRole(req.session.userId!);
-    if (!CAN_MANAGE_PROJECTS.includes(role)) {
-      res.status(403).json({ error: "Only Associates and above can manage project tasks" });
-      return;
-    }
+    const projectId = await resolveProject(req, res);
+    if (!projectId) return;
 
     const { taskId } = req.body as { taskId?: number };
     if (!taskId) {
       res.status(400).json({ error: "taskId is required" });
+      return;
+    }
+
+    const [task] = await db
+      .select({ id: tasksTable.id })
+      .from(tasksTable)
+      .where(eq(tasksTable.id, taskId));
+    if (!task) {
+      res.status(400).json({ error: "taskId does not match a task" });
       return;
     }
 
@@ -465,25 +417,14 @@ router.post(
 
 router.delete(
   "/projects/:projectId/tasks/:taskId",
+  requireRole("associate"),
   async (req, res): Promise<void> => {
-    const projectId = parseInt(
-      Array.isArray(req.params.projectId)
-        ? req.params.projectId[0]
-        : req.params.projectId,
-      10,
-    );
-    const taskId = parseInt(
-      Array.isArray(req.params.taskId) ? req.params.taskId[0] : req.params.taskId,
-      10,
-    );
-    if (isNaN(projectId) || isNaN(taskId)) {
-      res.status(400).json({ error: "Invalid IDs" });
-      return;
-    }
+    const projectId = await resolveProject(req, res);
+    if (!projectId) return;
 
-    const role = await getCurrentUserRole(req.session.userId!);
-    if (!CAN_MANAGE_PROJECTS.includes(role)) {
-      res.status(403).json({ error: "Only Associates and above can manage project tasks" });
+    const taskId = parseId(req.params.taskId);
+    if (!taskId) {
+      res.status(400).json({ error: "Invalid task ID" });
       return;
     }
 

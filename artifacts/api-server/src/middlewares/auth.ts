@@ -1,13 +1,226 @@
 import { type Request, type Response, type NextFunction } from "express";
+import { eq } from "drizzle-orm";
+import { db, usersTable } from "@workspace/db";
+import { atLeast, type Role } from "../lib/roles";
+import {
+  verifyEntraToken,
+  isEntraConfigured,
+  EntraAuthError,
+  type EntraIdentity,
+} from "../lib/entra";
+import { config } from "../config";
+import { logger } from "../lib/logger";
 
-export function requireAuth(
+/** The authenticated caller, resolved once per request. */
+export interface Principal {
+  id: number;
+  name: string;
+  email: string;
+  role: Role;
+  /** How this request authenticated — useful when auditing the cutover. */
+  via: "entra" | "session";
+}
+
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Express {
+    interface Request {
+      principal?: Principal;
+    }
+  }
+}
+
+type UserRow = typeof usersTable.$inferSelect;
+
+function toPrincipal(user: UserRow, via: Principal["via"]): Principal {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    via,
+  };
+}
+
+/**
+ * Maps a verified Entra identity onto a local user row, creating it on first
+ * sign-in.
+ *
+ * Entra is the source of truth for who exists and what they may do, so there
+ * is no invite flow: being in the right security group *is* the account. Role
+ * and name are re-synced whenever the token disagrees with the stored row.
+ *
+ * Returns null when the account exists but is deactivated locally.
+ */
+async function resolveEntraUser(
+  identity: EntraIdentity,
+): Promise<UserRow | null> {
+  let [user] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.entraOid, identity.oid));
+
+  // First Entra sign-in for someone who already has a password account: adopt
+  // the existing row so their history stays attached to them.
+  if (!user) {
+    const [byEmail] = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.email, identity.email));
+
+    if (byEmail) {
+      [user] = await db
+        .update(usersTable)
+        .set({ entraOid: identity.oid })
+        .where(eq(usersTable.id, byEmail.id))
+        .returning();
+    }
+  }
+
+  if (!user) {
+    const inserted = await db
+      .insert(usersTable)
+      .values({
+        name: identity.name,
+        email: identity.email,
+        entraOid: identity.oid,
+        role: identity.role,
+        passwordHash: null,
+      })
+      .onConflictDoNothing()
+      .returning();
+    user = inserted[0];
+
+    // Lost a race with a concurrent first request; the winner's row is there.
+    if (!user) {
+      [user] = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.entraOid, identity.oid));
+    }
+  }
+
+  if (!user) return null;
+  if (!user.isActive) return null;
+
+  // Entra owns role and display name; a change there takes effect on the next
+  // token rather than needing a corresponding edit in this app.
+  if (user.role !== identity.role || user.name !== identity.name) {
+    const [updated] = await db
+      .update(usersTable)
+      .set({ role: identity.role, name: identity.name })
+      .where(eq(usersTable.id, user.id))
+      .returning();
+    if (updated) user = updated;
+  }
+
+  return user;
+}
+
+function bearerToken(req: Request): string | null {
+  const header = req.headers.authorization;
+  if (!header) return null;
+  const [scheme, ...rest] = header.split(" ");
+  if (scheme?.toLowerCase() !== "bearer") return null;
+  const token = rest.join(" ").trim();
+  return token || null;
+}
+
+/**
+ * Authenticates the request and resolves the caller's identity and role once,
+ * so downstream handlers authorise against `req.principal` instead of each
+ * issuing its own lookup.
+ *
+ * Accepts an Entra bearer token when the tenant is configured, and falls back
+ * to the session cookie until ENTRA_ONLY retires it.
+ */
+export async function requireAuth(
   req: Request,
   res: Response,
   next: NextFunction,
-): void {
+): Promise<void> {
+  const token = bearerToken(req);
+
+  if (token && isEntraConfigured()) {
+    try {
+      const identity = await verifyEntraToken(token);
+      const user = await resolveEntraUser(identity);
+
+      if (!user) {
+        res.status(403).json({ error: "This account has been deactivated" });
+        return;
+      }
+
+      req.principal = toPrincipal(user, "entra");
+      next();
+      return;
+    } catch (err) {
+      if (err instanceof EntraAuthError) {
+        // Logged with the reason; the client is told only that it failed.
+        logger.warn({ reason: err.reason }, "Rejected Entra token");
+        res.status(401).json({ error: "Not authenticated" });
+        return;
+      }
+      throw err;
+    }
+  }
+
+  // A bearer token was presented but tokens are not accepted here.
+  if (token && !isEntraConfigured()) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+
+  if (config.entraOnly) {
+    res.status(401).json({ error: "Sign in with your Microsoft account" });
+    return;
+  }
+
   if (!req.session.userId) {
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
+
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, req.session.userId));
+
+  if (!user) {
+    req.session.destroy(() => {});
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+
+  // A deactivated account keeps a valid session cookie until it expires, so
+  // this is the only thing that actually revokes access.
+  if (!user.isActive) {
+    req.session.destroy(() => {});
+    res.status(403).json({ error: "This account has been deactivated" });
+    return;
+  }
+
+  req.principal = toPrincipal(user, "session");
   next();
+}
+
+/** Reads the principal established by requireAuth. */
+export function principal(req: Request): Principal {
+  if (!req.principal) {
+    // Only reachable if a route is mounted before requireAuth.
+    throw new Error("principal() called on an unauthenticated request");
+  }
+  return req.principal;
+}
+
+/** Gate a route at a minimum rank, e.g. requireRole("associate"). */
+export function requireRole(minimum: Role) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const me = principal(req);
+    if (!atLeast(me.role, minimum)) {
+      res.status(403).json({ error: "You do not have permission to do this" });
+      return;
+    }
+    next();
+  };
 }

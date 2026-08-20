@@ -15,7 +15,11 @@ async function buildAll() {
   await rm(distDir, { recursive: true, force: true });
 
   await esbuild({
-    entryPoints: [path.resolve(artifactDir, "src/index.ts")],
+    entryPoints: [
+      path.resolve(artifactDir, "src/index.ts"),
+      // Shipped in the same image and run as a pre-deploy job.
+      path.resolve(artifactDir, "src/migrate.ts"),
+    ],
     platform: "node",
     bundle: true,
     format: "esm",

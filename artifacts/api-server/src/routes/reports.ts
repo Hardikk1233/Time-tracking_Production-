@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and, gte, lte, sql, inArray, isNull, or } from "drizzle-orm";
 import { format, subMonths, startOfMonth, endOfMonth, eachMonthOfInterval } from "date-fns";
+import { productivity, percent, HOURS_PER_DAY } from "../lib/metrics";
 import {
   db,
   timeEntriesTable,
@@ -189,7 +190,10 @@ function buildPeriodStats(billable: number, contracted: number) {
   return {
     billableHours: billable,
     contractedHours: contracted,
-    utilization: contracted > 0 ? Math.round((billable / contracted) * 1000) / 10 : 0,
+    // Contract utilisation: measured against what the client engaged, not
+    // against staff capacity.
+    contractUtilization: percent(billable, contracted),
+    utilization: percent(billable, contracted),
   };
 }
 
@@ -382,13 +386,14 @@ router.get("/client-report", async (req, res): Promise<void> => {
       const repDate = monthStr + "-15";
       const fte = getApplicableFte(repDate, focusHistory, focusClient.fteCount);
       const wd = countWorkingDays(wStart, wEnd, holidaySet);
-      const contracted = fte * wd * 8;
+      const contracted = fte * wd * HOURS_PER_DAY;
       const billable = billableByMonth.get(monthStr) ?? 0;
       return {
         month: monthStr,
         billableHours: billable,
         contractedHours: contracted,
-        utilization: contracted > 0 ? Math.round((billable / contracted) * 1000) / 10 : 0,
+        contractUtilization: percent(billable, contracted),
+        utilization: percent(billable, contracted),
       };
     });
   }
@@ -471,7 +476,7 @@ router.get("/team-report", async (req, res): Promise<void> => {
       totalHours: total,
       billableHours: billable,
       nonBillableHours: total - billable,
-      efficiency: total > 0 ? Math.round((billable / total) * 1000) / 10 : 0,
+      efficiency: percent(billable, total),
     };
   }));
 });
@@ -525,13 +530,21 @@ router.get("/my-report", async (req, res): Promise<void> => {
   const totalHours   = entries.reduce((s, e) => s + e.totalHours, 0);
   const billableHours = entries.reduce((s, e) => s + e.billableHours, 0);
 
+  const measures = productivity({
+    totalHours,
+    billableHours,
+    availableWorkingDays: availableDays,
+  });
+
   res.json({
     entries,
     summary: {
       workingDays, leaveDays, availableDays, targetHours, totalHours, billableHours,
       nonBillableHours: totalHours - billableHours,
-      utilization: targetHours > 0 ? Math.round((billableHours / targetHours) * 1000) / 10 : 0,
-      efficiency:  totalHours  > 0 ? Math.round((billableHours / totalHours)  * 1000) / 10 : 0,
+      recordedUtilization: measures.recordedUtilization,
+      billableUtilization: measures.billableUtilization,
+      efficiency: measures.efficiency,
+      utilization: measures.billableUtilization,
     },
   });
 });

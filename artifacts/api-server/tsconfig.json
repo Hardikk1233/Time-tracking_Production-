@@ -4,10 +4,11 @@
     "incremental": true,
     "tsBuildInfoFile": ".tsbuildinfo",
     "outDir": "dist",
-    "rootDir": "src",
+    // No rootDir: this config only type-checks (--noEmit) — esbuild produces
+    // the bundle — and the test files sit outside src/.
     "types": ["node"]
   },
-  "include": ["src"],
+  "include": ["src", "test", "vitest.config.ts"],
   "references": [
     {
       "path": "../../lib/db"

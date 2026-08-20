@@ -1,0 +1,149 @@
+# Builds the image, applies database migrations, then rolls a new revision.
+#
+# Order matters and is deliberate: migrations run as a one-shot job *before*
+# the new revision goes live, so a failed migration stops the deploy instead of
+# putting every replica into a crash loop.
+#
+# Authentication uses OIDC federated credentials - GitHub proves its identity
+# to Azure per run. There is no stored Azure secret to leak or rotate.
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      skipMigrations:
+        description: 'Skip database migrations (only if you are certain none are pending)'
+        type: boolean
+        default: false
+
+concurrency:
+  # Never let two deploys race for the same revision.
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  id-token: write   # required for OIDC
+  contents: read
+
+env:
+  RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  CONTAINER_APP: ${{ vars.AZURE_CONTAINER_APP }}
+  MIGRATION_JOB: ${{ vars.AZURE_MIGRATION_JOB }}
+  REGISTRY: ${{ vars.AZURE_REGISTRY_LOGIN_SERVER }}
+  IMAGE_NAME: timetrack
+
+jobs:
+  deploy:
+    name: Build, migrate, release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sign in to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign in to the container registry
+        run: az acr login --name "${REGISTRY%%.*}"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          # Tagged by commit so any revision can be traced back to its source,
+          # with a moving tag for convenience.
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Apply database migrations
+        if: ${{ !inputs.skipMigrations }}
+        run: |
+          set -euo pipefail
+          IMAGE="${REGISTRY}/${IMAGE_NAME}:${{ github.sha }}"
+
+          echo "Pointing the migration job at ${IMAGE}"
+          az containerapp job update \
+            --name "$MIGRATION_JOB" \
+            --resource-group "$RESOURCE_GROUP" \
+            --image "$IMAGE" \
+            --output none
+
+          EXECUTION=$(az containerapp job start \
+            --name "$MIGRATION_JOB" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query name -o tsv)
+          echo "Started $EXECUTION"
+
+          # Poll to completion. A migration that fails must stop the deploy.
+          for _ in $(seq 1 60); do
+            STATUS=$(az containerapp job execution show \
+              --name "$MIGRATION_JOB" \
+              --resource-group "$RESOURCE_GROUP" \
+              --job-execution-name "$EXECUTION" \
+              --query properties.status -o tsv)
+            echo "  status: $STATUS"
+            case "$STATUS" in
+              Succeeded) echo "Migrations applied."; exit 0 ;;
+              Failed|Degraded)
+                echo "::error::Migration job $EXECUTION did not succeed - deployment stopped."
+                az containerapp job logs show \
+                  --name "$MIGRATION_JOB" \
+                  --resource-group "$RESOURCE_GROUP" \
+                  --execution "$EXECUTION" --tail 100 || true
+                exit 1 ;;
+            esac
+            sleep 10
+          done
+
+          echo "::error::Migration job did not finish within 10 minutes."
+          exit 1
+
+      - name: Release the new revision
+        run: |
+          set -euo pipefail
+          az containerapp update \
+            --name "$CONTAINER_APP" \
+            --resource-group "$RESOURCE_GROUP" \
+            --image "${REGISTRY}/${IMAGE_NAME}:${{ github.sha }}" \
+            --output none
+          echo "Revision updated. The old one drains once the new one is healthy."
+
+      - name: Confirm the deployment is serving
+        run: |
+          set -euo pipefail
+          FQDN=$(az containerapp show \
+            --name "$CONTAINER_APP" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query properties.configuration.ingress.fqdn -o tsv)
+
+          echo "Checking https://${FQDN}/api/healthz"
+          for attempt in $(seq 1 20); do
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' "https://${FQDN}/api/healthz" || echo 000)
+            if [ "$CODE" = "200" ]; then
+              echo "Healthy. Live at https://${FQDN}"
+              exit 0
+            fi
+            echo "  attempt ${attempt}: HTTP ${CODE}"
+            sleep 10
+          done
+
+          echo "::error::New revision never became healthy. Roll back with:"
+          echo "  az containerapp revision list -n $CONTAINER_APP -g $RESOURCE_GROUP -o table"
+          echo "  az containerapp ingress traffic set -n $CONTAINER_APP -g $RESOURCE_GROUP --revision-weight <previous>=100"
+          exit 1

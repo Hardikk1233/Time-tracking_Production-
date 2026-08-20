@@ -1,0 +1,36 @@
+# Dependencies and build output are produced inside the image; copying the
+# host's versions would both bloat the context and risk shipping binaries built
+# for the wrong platform.
+node_modules
+**/node_modules
+dist
+**/dist
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+.git
+.gitignore
+
+# Local development only
+.env
+.env.*
+.pgtmp
+.cache
+.local
+.vscode
+.idea
+
+# Replit tooling has no meaning in a container build
+.replit
+.replitignore
+**/.replit-artifact
+
+# Docs and agent notes
+*.md
+docs
+.agents
+attached_assets
+
+# Deployment definitions - used to build the environment, not the image
+infra
+.github
