@@ -15,8 +15,13 @@ const migrationsFolder = path.resolve(here, "../../../lib/db/drizzle");
  * the suite instead of silently passing against a stale fixture.
  */
 export async function setup(): Promise<void> {
+  // TEST_DATABASE_URL first: vitest.config.ts injects DATABASE_URL through
+  // `test.env`, which reaches the test workers but not this process, so in CI
+  // only the raw variable is visible here. Reading DATABASE_URL as well keeps
+  // a developer's own export working.
   const url = new URL(
-    process.env["DATABASE_URL"] ??
+    process.env["TEST_DATABASE_URL"] ??
+      process.env["DATABASE_URL"] ??
       "postgresql://postgres@localhost:5432/timetracker_test",
   );
   const dbName = url.pathname.replace(/^\//, "");
