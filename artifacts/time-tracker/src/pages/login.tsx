@@ -1,10 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
+import { getAuthConfig, isEntraEnabled, signInWithMicrosoft } from '@/lib/entra';
 import { useLogin, LoginInput, getGetMeQueryKey } from '@workspace/api-client-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,12 +18,29 @@ const loginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
+/** The four-square Microsoft mark, inline to avoid pulling in an icon set. */
+function MicrosoftMark() {
+  return (
+    <svg className="w-4 h-4" viewBox="0 0 21 21" aria-hidden="true">
+      <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+      <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+      <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+      <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+    </svg>
+  );
+}
+
 export default function Login() {
   const [, setLocation] = useLocation();
   const { isAuthenticated, isLoading } = useAuth();
   const loginMutation = useLogin();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Resolved before the app mounted, so these are plain reads, not state.
+  const { passwordSignIn } = getAuthConfig();
+  const microsoftAvailable = isEntraEnabled();
+  const [microsoftPending, setMicrosoftPending] = useState(false);
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -58,6 +76,31 @@ export default function Login() {
     });
   };
 
+  const onMicrosoftSignIn = async () => {
+    setMicrosoftPending(true);
+    try {
+      await signInWithMicrosoft();
+      // The token getter is live from here, so refetch rather than trust the
+      // cached anonymous answer.
+      await queryClient.refetchQueries({ queryKey: getGetMeQueryKey() });
+      setLocation('/dashboard');
+    } catch (error: any) {
+      // A closed popup is a deliberate cancellation, not a failure to report.
+      if (error?.errorCode !== 'user_cancelled') {
+        toast({
+          variant: 'destructive',
+          title: 'Microsoft sign-in failed',
+          description:
+            error?.errorMessage ||
+            error?.message ||
+            'Your account may not be assigned a TimeTrack role. Contact an administrator.',
+        });
+      }
+    } finally {
+      setMicrosoftPending(false);
+    }
+  };
+
   return (
     <div className="min-h-[100dvh] w-full flex bg-background">
       {/* Left Pane - Form */}
@@ -69,9 +112,49 @@ export default function Login() {
               TimeTrack
             </div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Sign In</h1>
-            <p className="text-muted-foreground text-sm font-medium">Enter your credentials to access your terminal.</p>
+            <p className="text-muted-foreground text-sm font-medium">
+              {passwordSignIn
+                ? 'Enter your credentials to access your terminal.'
+                : 'Sign in with your work account to access your terminal.'}
+            </p>
           </div>
 
+          {microsoftAvailable && (
+            <div className="space-y-6">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onMicrosoftSignIn}
+                disabled={microsoftPending}
+                className="w-full h-11 text-base font-semibold gap-2 active:scale-[0.98] transition-transform"
+                data-testid="button-microsoft"
+              >
+                {microsoftPending ? (
+                  <div className="w-5 h-5 border-2 border-foreground border-t-transparent rounded-full animate-spin"></div>
+                ) : (
+                  <>
+                    <MicrosoftMark />
+                    Sign in with Microsoft
+                  </>
+                )}
+              </Button>
+
+              {passwordSignIn && (
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-border/60" />
+                  </div>
+                  <div className="relative flex justify-center">
+                    <span className="bg-card px-3 text-xs uppercase tracking-wider font-bold text-muted-foreground">
+                      or
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {passwordSignIn && (
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <div className="space-y-4">
@@ -129,6 +212,14 @@ export default function Login() {
               </Button>
             </form>
           </Form>
+          )}
+
+          {!passwordSignIn && !microsoftAvailable && (
+            <p className="text-sm text-destructive" data-testid="text-no-signin">
+              No sign-in method is available. The server has disabled passwords but
+              Microsoft sign-in is not configured.
+            </p>
+          )}
 
           <div className="pt-8 text-center">
             <p className="text-xs text-muted-foreground">

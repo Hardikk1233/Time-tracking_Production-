@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
+import { signOutFromMicrosoft } from '@/lib/entra';
 import { useLogout, getGetMeQueryKey } from '@workspace/api-client-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -26,10 +27,13 @@ export function Sidebar() {
 
   const handleLogout = () => {
     logout.mutate(undefined, {
-      onSuccess: () => {
+      onSuccess: async () => {
         // Use null (not undefined) so React Query keeps 'success' state,
         // avoiding isLoading=true and the spinner flash during transition.
         queryClient.setQueryData(getGetMeQueryKey(), null as any);
+        // End the Microsoft session too: otherwise the next sign-in reuses it
+        // silently and signing out looks like it did nothing.
+        await signOutFromMicrosoft();
         setLocation('/login');
       }
     });
