@@ -4,6 +4,7 @@ import {
   type Configuration,
 } from '@azure/msal-browser';
 import { setAuthTokenGetter } from '@workspace/api-client-react';
+import { reportError } from './error-reporting';
 
 /**
  * Microsoft Entra ID sign-in for the browser.
@@ -119,6 +120,10 @@ export async function initAuth(): Promise<AuthConfig> {
     // button altogether, so one failure would remove any way to retry.
     lastSignInError =
       error?.errorMessage || error?.message || String(error);
+    // The only place this specific failure - the actual reason Entra refused
+    // the sign-in - can be captured. It is caught here on purpose, so it never
+    // reaches window.onerror or triggers an unhandledrejection.
+    reportError(error, { kind: 'msal-redirect-handling' });
   }
 
   msal = instance;
@@ -147,6 +152,12 @@ export async function getAccessToken(): Promise<string | null> {
     if (error instanceof InteractionRequiredAuthError) {
       return null;
     }
+    // Rethrown into customFetch, which has no try/catch around this call, so
+    // it propagates into whichever query triggered it - React Query treats
+    // that as a query error rather than an unhandledrejection, and it would
+    // otherwise vanish. Reported here since this is the last point that sees
+    // the real error object.
+    reportError(error, { kind: 'msal-acquire-token-silent' });
     throw error;
   }
 }
