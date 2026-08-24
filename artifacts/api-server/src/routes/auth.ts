@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { config } from "../config";
 import { isEntraConfigured } from "../lib/entra";
+import { principal, requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
@@ -91,16 +92,21 @@ router.post("/auth/logout", async (req, res): Promise<void> => {
   res.json({ message: "Logged out successfully" });
 });
 
-router.get("/auth/me", async (req, res): Promise<void> => {
-  if (!req.session.userId) {
-    res.status(401).json({ error: "Not authenticated" });
-    return;
-  }
+// requireAuth is applied here explicitly rather than by mount order: this
+// router sits before the app-wide `router.use(requireAuth)` in routes/index.ts
+// on purpose, so /auth/login and /auth/config stay reachable while signed
+// out. Before this, /auth/me carried its own session-only check predating
+// Entra support, so a bearer token — valid, correctly scoped, actually sent —
+// was never even inspected: this route always answered from the cookie alone,
+// silently and without logging anything, indistinguishable from a token
+// being rejected.
+router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {
+  const { id: userId } = principal(req);
 
   const [user] = await db
     .select()
     .from(usersTable)
-    .where(eq(usersTable.id, req.session.userId));
+    .where(eq(usersTable.id, userId));
 
   if (!user) {
     req.session.destroy(() => {});

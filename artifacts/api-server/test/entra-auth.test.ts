@@ -314,6 +314,27 @@ describe("Entra ID authentication", () => {
     });
   });
 
+  describe("/auth/me", () => {
+    it("recognises a bearer token, not only the session cookie", async () => {
+      // /auth/me predates Entra and originally checked req.session.userId
+      // directly, bypassing requireAuth entirely. A perfectly valid token was
+      // silently ignored rather than rejected: no log, a plain fast 401,
+      // indistinguishable from the token never having been sent at all.
+      const token = await mintToken({
+        oid: "oid-me-check",
+        email: "me-check@tristone.test",
+        name: "Me Check",
+        roles: ["TimeTrack.MD"],
+      });
+
+      const res = await request(app).get("/api/auth/me").set(bearer(token));
+
+      expect(res.status).toBe(200);
+      expect(res.body.email).toBe("me-check@tristone.test");
+      expect(res.body.role).toBe("md");
+    });
+  });
+
   describe("coexisting with password sign-in during the migration", () => {
     it("keeps session sign-in working while Entra is enabled", async () => {
       const agent = await signIn(app, "md@test.local");
