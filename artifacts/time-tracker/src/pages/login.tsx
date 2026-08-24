@@ -79,24 +79,20 @@ export default function Login() {
   const onMicrosoftSignIn = async () => {
     setMicrosoftPending(true);
     try {
+      // Navigates this window to Microsoft and does not return. On the way
+      // back, initAuth completes the handshake before the app renders and the
+      // effect above sends an authenticated user to the dashboard.
       await signInWithMicrosoft();
-      // The token getter is live from here, so refetch rather than trust the
-      // cached anonymous answer.
-      await queryClient.refetchQueries({ queryKey: getGetMeQueryKey() });
-      setLocation('/dashboard');
     } catch (error: any) {
-      // A closed popup is a deliberate cancellation, not a failure to report.
-      if (error?.errorCode !== 'user_cancelled') {
-        toast({
-          variant: 'destructive',
-          title: 'Microsoft sign-in failed',
-          description:
-            error?.errorMessage ||
-            error?.message ||
-            'Your account may not be assigned a TimeTrack role. Contact an administrator.',
-        });
-      }
-    } finally {
+      toast({
+        variant: 'destructive',
+        title: 'Microsoft sign-in failed',
+        description:
+          error?.errorMessage ||
+          error?.message ||
+          'Your account may not be assigned a TimeTrack role. Contact an administrator.',
+      });
+      // Only reached when the navigation never happened.
       setMicrosoftPending(false);
     }
   };

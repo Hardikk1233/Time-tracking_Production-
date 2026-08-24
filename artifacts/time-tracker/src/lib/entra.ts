@@ -77,11 +77,9 @@ export async function initAuth(): Promise<AuthConfig> {
     auth: {
       clientId: entra.clientId,
       authority: `https://login.microsoftonline.com/${entra.tenantId}`,
-      // A near-empty page, not the application root. Pointing this at the root
-      // makes the popup load the whole SPA and show a second login screen
-      // inside itself instead of closing. Must be registered as a SPA redirect
-      // URI in Entra exactly as it is built here.
-      redirectUri: `${window.location.origin}/blank.html`,
+      // Redirect flow returns to the app itself, which loads and completes the
+      // handshake in initAuth below. Registered as a SPA redirect URI in Entra.
+      redirectUri: window.location.origin,
     },
     cache: {
       // Not localStorage: tokens should not outlive the browser session.
@@ -91,12 +89,14 @@ export async function initAuth(): Promise<AuthConfig> {
 
   const instance = new PublicClientApplication(configuration);
   await instance.initialize();
-  // Completes the handshake when we arrived back from a redirect sign-in.
-  await instance.handleRedirectPromise();
 
-  const [existing] = instance.getAllAccounts();
-  if (existing) {
-    instance.setActiveAccount(existing);
+  // Completes the handshake when this load is the return leg of a redirect
+  // sign-in. Returns null on an ordinary load, which is not an error.
+  const redirectResult = await instance.handleRedirectPromise();
+
+  const account = redirectResult?.account ?? instance.getAllAccounts()[0];
+  if (account) {
+    instance.setActiveAccount(account);
   }
 
   msal = instance;
@@ -129,13 +129,22 @@ export async function getAccessToken(): Promise<string | null> {
   }
 }
 
+/**
+ * Starts sign-in by navigating this window to Microsoft.
+ *
+ * Redirect rather than popup: a popup only works when the opener can watch the
+ * window it opened. Opened from Teams or Outlook, or with a popup blocker in
+ * the way, the opener cannot, and sign-in hangs on a blank window that never
+ * closes. Navigating the top window has none of those failure modes.
+ *
+ * The returned promise does not resolve - the page is being navigated away.
+ */
 export async function signInWithMicrosoft(): Promise<void> {
   if (!msal) {
     throw new Error('Microsoft sign-in is not configured for this environment');
   }
 
-  const result = await msal.loginPopup({ scopes });
-  msal.setActiveAccount(result.account);
+  await msal.loginRedirect({ scopes });
 }
 
 /** Clears the Microsoft session too, so the next sign-in re-prompts. */
@@ -145,5 +154,5 @@ export async function signOutFromMicrosoft(): Promise<void> {
   const account = msal.getActiveAccount();
   if (!account) return;
 
-  await msal.logoutPopup({ account });
+  await msal.logoutRedirect({ account });
 }
