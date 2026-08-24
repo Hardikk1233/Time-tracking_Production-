@@ -25,6 +25,25 @@ export const loginLimiter = rateLimit({
 });
 
 /**
+ * Crash-report intake.
+ *
+ * This endpoint is unauthenticated by necessity — the reports worth having are
+ * the ones from a browser that could not sign in — so it is the easiest thing
+ * in the API to point a script at. A render loop that throws on every frame
+ * would also flood it without any malice at all, which is the likelier way
+ * this gets abused. Low enough to make either pointless; the client batches
+ * and drops the excess rather than retrying.
+ */
+export const devIngestLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 30,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  skip: skipInTests,
+  message: { error: "Too many reports." },
+});
+
+/**
  * Broad ceiling for the rest of the API — high enough that ordinary use never
  * touches it, low enough to blunt scripted enumeration.
  */

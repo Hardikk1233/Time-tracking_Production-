@@ -10,12 +10,20 @@ import dashboardRouter from "./dashboard";
 import holidaysRouter from "./holidays";
 import leavesRouter from "./leaves";
 import reportsRouter from "./reports";
+import { devIngestRouter, feedbackRouter, devConsoleRouter } from "./dev";
 import { requireAuth } from "../middlewares/auth";
+import { requireDevConsole } from "../middlewares/dev-console";
+import { devIngestLimiter } from "../middlewares/rate-limit";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(authRouter);
+
+// Crash reports are taken before authentication on purpose: a browser that
+// failed to sign in is exactly the case worth capturing, and demanding a valid
+// token would discard the evidence for the bug being reported.
+router.use(devIngestLimiter, devIngestRouter);
 
 // All routes below require authentication
 router.use(requireAuth);
@@ -29,5 +37,10 @@ router.use(dashboardRouter);
 router.use(holidaysRouter);
 router.use(leavesRouter);
 router.use("/reports", reportsRouter);
+
+// Temporary rollout tooling. Anyone signed in may send feedback; only the
+// DEV_CONSOLE_EMAILS allowlist may read what has been collected.
+router.use(feedbackRouter);
+router.use("/dev", requireDevConsole, devConsoleRouter);
 
 export default router;

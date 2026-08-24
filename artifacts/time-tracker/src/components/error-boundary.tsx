@@ -1,4 +1,5 @@
 import React from 'react';
+import { reportError } from '@/lib/error-reporting';
 
 export class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
   constructor(props: { children: React.ReactNode }) {
@@ -12,6 +13,12 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('App crashed:', error, info.componentStack);
+    // The component stack is the half that says *where* it broke; the browser
+    // console keeps it only for whoever happened to have devtools open.
+    reportError(error, {
+      kind: 'react-error-boundary',
+      componentStack: info.componentStack ?? undefined,
+    });
   }
 
   render() {
