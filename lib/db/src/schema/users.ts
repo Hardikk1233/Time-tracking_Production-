@@ -26,6 +26,12 @@ export const usersTable = pgTable("users", {
   role: text("role", { enum: ["analyst", "associate", "avp", "md"] })
     .notNull()
     .default("analyst"),
+  /**
+   * Overrides the role's default label — e.g. VP and SVP both hold the avp
+   * permission rank (same access, same authorization checks) but should not
+   * appear to have signed in as "AVP". Null shows the ordinary role label.
+   */
+  title: text("title"),
   // Real foreign key: a dangling manager id silently corrupts approval scoping
   // and the reporting-line queries the reports build on.
   reportingToId: integer("reporting_to_id").references(

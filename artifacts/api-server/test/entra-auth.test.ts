@@ -240,6 +240,40 @@ describe("Entra ID authentication", () => {
       }
     });
 
+    it("shows a title override for someone the hierarchy has no rank for", async () => {
+      // Kashif Lone (VP) and Rohanjit Das (SVP) both hold the avp permission
+      // rank - Entra's role claim cannot tell them apart from an ordinary
+      // AVP - but should not appear signed in as "AVP".
+      const token = await mintToken({
+        oid: "oid-vp-title",
+        email: "kashif.lone@tristone-partners.com",
+        roles: ["TimeTrack.AVP"],
+      });
+      await request(app).get("/api/time-entries").set(bearer(token));
+
+      const [user] = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.entraOid, "oid-vp-title"));
+      expect(user.role).toBe("avp");
+      expect(user.title).toBe("VP");
+    });
+
+    it("leaves the title unset for an AVP with no override", async () => {
+      const token = await mintToken({
+        oid: "oid-plain-avp",
+        email: "plain-avp@tristone.test",
+        roles: ["TimeTrack.AVP"],
+      });
+      await request(app).get("/api/time-entries").set(bearer(token));
+
+      const [user] = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.entraOid, "oid-plain-avp"));
+      expect(user.title).toBeNull();
+    });
+
     it("grants the most senior role when someone is in several groups", async () => {
       const token = await mintToken({
         oid: "oid-multi",

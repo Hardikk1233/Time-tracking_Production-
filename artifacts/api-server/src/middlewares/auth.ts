@@ -43,6 +43,27 @@ function toPrincipal(user: UserRow, via: Principal["via"]): Principal {
 }
 
 /**
+ * People whose real designation the four-tier role hierarchy cannot express.
+ *
+ * Kashif Lone and Rohanjit Das hold the avp permission rank - same access,
+ * same authorization checks as every other AVP - but their actual titles are
+ * Vice President and Senior Vice President. Entra's app role claim cannot
+ * carry this: mapping them to a role of their own would have meant a fifth
+ * permission tier for a distinction that is cosmetic. This overrides only
+ * what they see themselves signed in as.
+ *
+ * Keyed by email to match how an existing password account is adopted below.
+ */
+const TITLE_OVERRIDES: Record<string, string> = {
+  "kashif.lone@tristone-partners.com": "VP",
+  "rohanjit.das@tristone-partners.com": "SVP",
+};
+
+function titleOverrideFor(email: string): string | null {
+  return TITLE_OVERRIDES[email.toLowerCase()] ?? null;
+}
+
+/**
  * Maps a verified Entra identity onto a local user row, creating it on first
  * sign-in.
  *
@@ -85,6 +106,7 @@ async function resolveEntraUser(
         email: identity.email,
         entraOid: identity.oid,
         role: identity.role,
+        title: titleOverrideFor(identity.email),
         passwordHash: null,
       })
       .onConflictDoNothing()
@@ -104,11 +126,19 @@ async function resolveEntraUser(
   if (!user.isActive) return null;
 
   // Entra owns role and display name; a change there takes effect on the next
-  // token rather than needing a corresponding edit in this app.
-  if (user.role !== identity.role || user.name !== identity.name) {
+  // token rather than needing a corresponding edit in this app. A title
+  // override is filled in once, for a row that predates it, and left alone
+  // after - the token carries no such claim, so there is nothing to re-sync.
+  const overrideTitle =
+    user.title == null ? titleOverrideFor(identity.email) : null;
+  if (user.role !== identity.role || user.name !== identity.name || overrideTitle) {
     const [updated] = await db
       .update(usersTable)
-      .set({ role: identity.role, name: identity.name })
+      .set({
+        role: identity.role,
+        name: identity.name,
+        ...(overrideTitle ? { title: overrideTitle } : {}),
+      })
       .where(eq(usersTable.id, user.id))
       .returning();
     if (updated) user = updated;

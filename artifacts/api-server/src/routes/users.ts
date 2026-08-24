@@ -19,6 +19,7 @@ function formatUser(user: UserRow, managerNames: Map<number, string>) {
     name: user.name,
     email: user.email,
     role: user.role,
+    title: user.title ?? null,
     reportingToId: user.reportingToId ?? null,
     reportingToName:
       user.reportingToId != null

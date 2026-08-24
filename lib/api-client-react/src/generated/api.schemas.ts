@@ -37,6 +37,11 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
+  /**
+     * Overrides the role's default label, e.g. "VP" for someone who holds the avp permission rank under a different real designation. Null shows the ordinary role label.
+     * @nullable
+     */
+  title?: string | null;
   /** @nullable */
   reportingToId?: number | null;
   /** @nullable */

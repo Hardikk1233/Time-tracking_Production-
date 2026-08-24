@@ -15,6 +15,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
 import { signOutFromMicrosoft } from '@/lib/entra';
+import { displayTitle } from '@/lib/roles';
 import { useLogout, getGetMeQueryKey } from '@workspace/api-client-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -103,9 +104,9 @@ export function Sidebar() {
             </div>
             <div className="flex flex-col overflow-hidden">
               <span className="text-sm font-medium truncate">{user.name}</span>
-              <span className="text-xs text-sidebar-foreground/60 capitalize flex items-center gap-1">
+              <span className="text-xs text-sidebar-foreground/60 flex items-center gap-1">
                 {role === 'md' && <ShieldCheck className="w-3 h-3 text-amber-500" />}
-                {role}
+                {displayTitle(user)}
               </span>
             </div>
           </div>

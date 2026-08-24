@@ -1323,6 +1323,12 @@ components:
         role:
           type: string
           enum: [analyst, associate, avp, md]
+        title:
+          description: >-
+            Overrides the role's default label, e.g. "VP" for someone who
+            holds the avp permission rank under a different real designation.
+            Null shows the ordinary role label.
+          type: ["string", "null"]
         reportingToId:
           type: ["integer", "null"]
         reportingToName:

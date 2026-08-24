@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/lib/auth';
+import { displayTitle } from '@/lib/roles';
 import { 
   useListUsers, 
   useCreateUser,
@@ -159,7 +160,7 @@ export default function Team() {
                     <div className="flex items-center gap-1.5 flex-wrap justify-center">
                       <Badge variant="secondary" className="font-mono text-[10px] uppercase tracking-wider">
                         {u.role === 'md' && <ShieldCheck className="w-3 h-3 mr-1 text-amber-500" />}
-                        {u.role}
+                        {displayTitle(u)}
                       </Badge>
                       {isInactive && (
                         <Badge variant="outline" className="text-[10px] font-mono text-amber-600 border-amber-300 bg-amber-50">
