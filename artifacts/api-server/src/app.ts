@@ -27,15 +27,21 @@ app.disable("x-powered-by");
 
 app.use(
   helmet({
-    // The app and API share an origin, and the SPA's bundled assets are all
-    // same-origin, so a strict default policy holds without exceptions.
+    // Almost everything is same-origin. The exceptions are listed one by one
+    // rather than relaxed wholesale, so each stays justified on its own.
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
         // Vite injects a small inline style block for the initial paint.
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", "data:", "blob:"],
-        connectSrc: ["'self'"],
+        // Google Fonts serves the stylesheet that the @font-face rules live in.
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
+        imgSrc: ["'self'", "data:", "blob:", "https://grainy-gradients.vercel.app"],
+        // Microsoft sign-in: MSAL exchanges the authorization code for a token
+        // by POSTing to the tenant's token endpoint. Without this the redirect
+        // completes, the code comes back, and the exchange is blocked - which
+        // looks exactly like a sign-in that silently fails.
+        connectSrc: ["'self'", "https://login.microsoftonline.com"],
         objectSrc: ["'none'"],
         frameAncestors: ["'none'"],
       },
