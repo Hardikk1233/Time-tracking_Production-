@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="robots" content="noindex" />
+    <title>Signing in</title>
+  </head>
+  <body>
+    <!--
+      Redirect target for the Microsoft sign-in popup, and deliberately empty.
+
+      Pointing MSAL at the application root instead makes the popup load the
+      whole SPA and render a second login screen inside itself, which is what
+      the user sees rather than the popup closing. MSAL only needs a page on
+      this origin that loads and does nothing.
+    -->
+  </body>
+</html>

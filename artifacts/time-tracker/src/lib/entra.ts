@@ -77,8 +77,11 @@ export async function initAuth(): Promise<AuthConfig> {
     auth: {
       clientId: entra.clientId,
       authority: `https://login.microsoftonline.com/${entra.tenantId}`,
-      // Registered as a SPA redirect URI by the deployment.
-      redirectUri: window.location.origin,
+      // A near-empty page, not the application root. Pointing this at the root
+      // makes the popup load the whole SPA and show a second login screen
+      // inside itself instead of closing. Must be registered as a SPA redirect
+      // URI in Entra exactly as it is built here.
+      redirectUri: `${window.location.origin}/blank.html`,
     },
     cache: {
       // Not localStorage: tokens should not outlive the browser session.
