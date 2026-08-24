@@ -204,6 +204,45 @@ export async function requireAuth(
   next();
 }
 
+/**
+ * Best-effort identification for endpoints that accept anonymous callers.
+ *
+ * Used by the crash-report intake, where the most valuable reports are the ones
+ * thrown *before* sign-in completes — a token that will not verify is the bug
+ * being reported, so refusing the report would discard the evidence. Returns
+ * null rather than throwing, and never provisions an account: creating users is
+ * requireAuth's job on a request that actually authenticated.
+ */
+export async function optionalPrincipal(
+  req: Request,
+): Promise<Principal | null> {
+  try {
+    const token = bearerToken(req);
+
+    if (token && isEntraConfigured()) {
+      const identity = await verifyEntraToken(token);
+      const [user] = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.entraOid, identity.oid));
+      return user?.isActive ? toPrincipal(user, "entra") : null;
+    }
+
+    if (req.session?.userId) {
+      const [user] = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.id, req.session.userId));
+      return user?.isActive ? toPrincipal(user, "session") : null;
+    }
+
+    return null;
+  } catch {
+    // An unattributed report is still worth keeping.
+    return null;
+  }
+}
+
 /** Reads the principal established by requireAuth. */
 export function principal(req: Request): Principal {
   if (!req.principal) {

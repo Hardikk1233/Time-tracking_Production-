@@ -29,6 +29,13 @@
       "when": 1787205343757,
       "tag": "0003_free_drax",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787566899741,
+      "tag": "0004_dev_console",
+      "breakpoints": true
     }
   ]
 }

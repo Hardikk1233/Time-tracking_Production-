@@ -13,6 +13,7 @@ import router from "./routes";
 import { apiLimiter, loginLimiter } from "./middlewares/rate-limit";
 import { config } from "./config";
 import { logger } from "./lib/logger";
+import { recordEvent } from "./lib/dev-events";
 import "./types/session.d";
 
 const app: Express = express();
@@ -147,6 +148,25 @@ if (config.staticDir) {
 
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   req.log?.error({ err }, "Unhandled error");
+
+  // Also kept in the database for the /dev console, so a failure someone hit
+  // can be read back later without going to Log Analytics. Detached and
+  // self-silencing: if the database is what broke, this must not throw on top
+  // of the error already being handled.
+  recordEvent({
+    source: "server",
+    level: "error",
+    message: err.message || err.name || "Unhandled error",
+    stack: err.stack ?? null,
+    url: req.originalUrl,
+    method: req.method,
+    statusCode: 500,
+    userId: req.principal?.id ?? null,
+    userEmail: req.principal?.email ?? null,
+    userAgent: req.headers["user-agent"] ?? null,
+    requestId: String(req.id ?? ""),
+  });
+
   if (res.headersSent) return;
   res.status(500).json({ error: "Internal server error" });
 });

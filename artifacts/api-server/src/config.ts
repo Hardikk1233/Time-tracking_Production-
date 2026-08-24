@@ -131,6 +131,32 @@ export const config = {
   entraJwksUri: read("ENTRA_JWKS_URI"),
   /** Refuse password sign-in, leaving Entra as the only way in. */
   entraOnly: boolean("ENTRA_ONLY", false),
+
+  // ─── Temporary rollout tooling ─────────────────────────────────────────────
+  // The /dev console and the feedback widget exist to get the Entra rollout
+  // debugged. Both are inert unless configured, and both are meant to be
+  // removed once the app has settled.
+
+  /**
+   * Comma-separated emails allowed to open the /dev console. Empty disables the
+   * console outright — an unset variable must not mean "open to everyone".
+   */
+  devConsoleEmails: list("DEV_CONSOLE_EMAILS").map((email) =>
+    email.toLowerCase(),
+  ),
+
+  /**
+   * Where to POST a notification when feedback arrives — a Teams incoming
+   * webhook, or anything else that accepts JSON. Unset means the console's
+   * unread count is the only signal.
+   */
+  feedbackWebhookUrl: read("FEEDBACK_WEBHOOK_URL"),
+
+  /**
+   * How many events to keep. Trimmed opportunistically on write so an error
+   * loop in one browser cannot fill the 32 GB volume the timesheets live on.
+   */
+  devEventRetention: integer("DEV_EVENT_RETENTION", 5000, 100, 100_000),
 } as const;
 
 if (missing.length > 0 || invalid.length > 0) {

@@ -17,6 +17,7 @@ import Team from '@/pages/team';
 import Approvals from '@/pages/approvals';
 import Holidays from '@/pages/holidays';
 import Reports from '@/pages/reports';
+import DevConsole from '@/pages/dev';
 
 const queryClient = new QueryClient();
 
@@ -35,6 +36,9 @@ function ProtectedRoutes() {
         <Route path="/holidays" component={Holidays} />
         <Route path="/approvals" component={Approvals} />
         <Route path="/reports" component={Reports} />
+        {/* Temporary rollout console. Unlinked from the sidebar on purpose —
+            the server gates it by allowlist, so reaching it grants nothing. */}
+        <Route path="/dev" component={DevConsole} />
         <Route component={NotFound} />
       </Switch>
     </MainLayout>

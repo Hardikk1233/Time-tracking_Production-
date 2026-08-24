@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { Sidebar } from './sidebar';
 import { useAuth } from '@/lib/auth';
 import { useLocation } from 'wouter';
+import { FeedbackWidget } from '@/components/feedback-widget';
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -27,6 +28,9 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </main>
+      {/* Temporary, for the rollout. Inside the authenticated layout so it
+          never appears on the login screen. */}
+      <FeedbackWidget />
     </div>
   );
 }

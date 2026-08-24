@@ -9,3 +9,5 @@ export * from "./timeEntries";
 export * from "./timeEntryEvents";
 export * from "./holidays";
 export * from "./leaves";
+export * from "./appEvents";
+export * from "./feedback";
