@@ -48,8 +48,8 @@ param entraSpaClientId string
 @description('Scope the SPA requests, e.g. api://<id>/access_as_user.')
 param entraApiScope string
 
-@description('Refuse password sign-in, leaving Entra as the only way in. Flip this at cutover.')
-param entraOnly bool = false
+@description('Refuse password sign-in, leaving Entra as the only way in. Flipped at cutover on 2026-08-24.')
+param entraOnly bool = true
 
 @description('Container image to run. Left as the placeholder on first deploy; the pipeline sets the real one.')
 param containerImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
