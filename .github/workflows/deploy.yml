@@ -121,6 +121,7 @@ jobs:
             --name "$CONTAINER_APP" \
             --resource-group "$RESOURCE_GROUP" \
             --image "${REGISTRY}/${IMAGE_NAME}:${{ github.sha }}" \
+            --set-env-vars "ENTRA_ONLY=true" \
             --output none
           echo "Revision updated. The old one drains once the new one is healthy."
 
