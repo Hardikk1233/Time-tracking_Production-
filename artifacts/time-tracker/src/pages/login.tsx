@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
-import { getAuthConfig, isEntraEnabled, signInWithMicrosoft } from '@/lib/entra';
+import { getAuthConfig, getSignInError, isEntraEnabled, signInWithMicrosoft } from '@/lib/entra';
 import { useLogin, LoginInput, getGetMeQueryKey } from '@workspace/api-client-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -55,6 +55,19 @@ export default function Login() {
       setLocation('/dashboard');
     }
   }, [isAuthenticated, setLocation]);
+
+  // Entra reports a refusal on the return leg of the redirect, not to the
+  // button handler, so without this the user lands back here with no reason.
+  useEffect(() => {
+    const signInError = getSignInError();
+    if (signInError) {
+      toast({
+        variant: 'destructive',
+        title: 'Microsoft sign-in failed',
+        description: signInError,
+      });
+    }
+  }, [toast]);
 
   if (isLoading || isAuthenticated) {
     return null;

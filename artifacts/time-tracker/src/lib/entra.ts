@@ -31,6 +31,7 @@ export interface AuthConfig {
 let authConfig: AuthConfig = { passwordSignIn: true, entra: null };
 let msal: PublicClientApplication | null = null;
 let scopes: string[] = [];
+let lastSignInError: string | null = null;
 
 export function getAuthConfig(): AuthConfig {
   return authConfig;
@@ -38,6 +39,18 @@ export function getAuthConfig(): AuthConfig {
 
 export function isEntraEnabled(): boolean {
   return msal !== null;
+}
+
+/**
+ * Why the last sign-in attempt failed, or null.
+ *
+ * Entra reports a refusal - an unassigned account, a blocked app - on the
+ * return leg of the redirect rather than to the caller, so without this the
+ * reason is thrown away and the user is returned to the login screen with no
+ * explanation.
+ */
+export function getSignInError(): string | null {
+  return lastSignInError;
 }
 
 async function fetchAuthConfig(): Promise<AuthConfig> {
@@ -88,15 +101,24 @@ export async function initAuth(): Promise<AuthConfig> {
   };
 
   const instance = new PublicClientApplication(configuration);
-  await instance.initialize();
 
-  // Completes the handshake when this load is the return leg of a redirect
-  // sign-in. Returns null on an ordinary load, which is not an error.
-  const redirectResult = await instance.handleRedirectPromise();
+  try {
+    await instance.initialize();
 
-  const account = redirectResult?.account ?? instance.getAllAccounts()[0];
-  if (account) {
-    instance.setActiveAccount(account);
+    // Completes the handshake when this load is the return leg of a redirect
+    // sign-in. Returns null on an ordinary load, which is not an error.
+    const redirectResult = await instance.handleRedirectPromise();
+
+    const account = redirectResult?.account ?? instance.getAllAccounts()[0];
+    if (account) {
+      instance.setActiveAccount(account);
+    }
+  } catch (error: any) {
+    // A refused sign-in throws here on the way back. Record it and carry on:
+    // letting it escape leaves msal unassigned, which hides the Microsoft
+    // button altogether, so one failure would remove any way to retry.
+    lastSignInError =
+      error?.errorMessage || error?.message || String(error);
   }
 
   msal = instance;
