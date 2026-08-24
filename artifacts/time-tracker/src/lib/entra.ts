@@ -110,11 +110,28 @@ export async function initAuth(): Promise<AuthConfig> {
     // sign-in. Returns null on an ordinary load, which is not an error.
     const redirectResult = await instance.handleRedirectPromise();
 
+    // Temporary trace for the rollout: a valid token has been confirmed to
+    // come back from Microsoft while the API never receives one, so the gap
+    // is somewhere in this function or getAccessToken. Remove once resolved.
+    console.log('[entra-debug] handleRedirectPromise resolved', {
+      hasRedirectResult: redirectResult !== null,
+      redirectAccountUpn: redirectResult?.account?.username ?? null,
+      cachedAccountCount: instance.getAllAccounts().length,
+    });
+
     const account = redirectResult?.account ?? instance.getAllAccounts()[0];
     if (account) {
       instance.setActiveAccount(account);
     }
+    console.log('[entra-debug] active account after initAuth', {
+      username: account?.username ?? null,
+    });
   } catch (error: any) {
+    console.log('[entra-debug] handleRedirectPromise threw', {
+      name: error?.name,
+      errorCode: error?.errorCode,
+      message: error?.errorMessage || error?.message,
+    });
     // A refused sign-in throws here on the way back. Record it and carry on:
     // letting it escape leaves msal unassigned, which hides the Microsoft
     // button altogether, so one failure would remove any way to retry.
@@ -140,15 +157,31 @@ export async function initAuth(): Promise<AuthConfig> {
  * the login screen deliberately.
  */
 export async function getAccessToken(): Promise<string | null> {
-  if (!msal) return null;
+  if (!msal) {
+    console.log('[entra-debug] getAccessToken: msal not initialized');
+    return null;
+  }
 
   const account = msal.getActiveAccount() ?? msal.getAllAccounts()[0];
-  if (!account) return null;
+  if (!account) {
+    console.log('[entra-debug] getAccessToken: no account available');
+    return null;
+  }
 
   try {
     const result = await msal.acquireTokenSilent({ account, scopes });
+    console.log('[entra-debug] acquireTokenSilent succeeded', {
+      tokenLength: result.accessToken.length,
+      scopes: result.scopes,
+    });
     return result.accessToken;
-  } catch (error) {
+  } catch (error: any) {
+    console.log('[entra-debug] acquireTokenSilent threw', {
+      name: error?.name,
+      errorCode: error?.errorCode,
+      message: error?.errorMessage || error?.message,
+      isInteractionRequired: error instanceof InteractionRequiredAuthError,
+    });
     if (error instanceof InteractionRequiredAuthError) {
       return null;
     }

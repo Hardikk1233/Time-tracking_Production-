@@ -353,9 +353,22 @@ export async function customFetch<T = unknown>(
   // Authorization header has been explicitly provided.
   if (_authTokenGetter && !headers.has("authorization")) {
     const token = await _authTokenGetter();
+    // Temporary trace for the Entra rollout: a valid token has been confirmed
+    // to come back from Microsoft while the API never receives one. Remove
+    // once resolved.
+    console.log("[entra-debug] customFetch token attach", {
+      url: resolveUrl(input),
+      getterConfigured: true,
+      tokenReturned: token !== null,
+      tokenLength: token?.length ?? 0,
+    });
     if (token) {
       headers.set("authorization", `Bearer ${token}`);
     }
+  } else if (!_authTokenGetter) {
+    console.log("[entra-debug] customFetch: no auth getter registered", {
+      url: resolveUrl(input),
+    });
   }
 
   const requestInfo = { method, url: resolveUrl(input) };
