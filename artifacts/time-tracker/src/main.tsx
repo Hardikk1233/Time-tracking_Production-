@@ -5,6 +5,8 @@ import { ErrorBoundary } from './components/error-boundary';
 import { initAuth } from './lib/entra';
 import { installErrorReporting } from './lib/error-reporting';
 
+import './index.css';
+
 // Installed before anything else so a crash during sign-in configuration or the
 // first render is captured rather than only reaching the browser's console.
 installErrorReporting();
