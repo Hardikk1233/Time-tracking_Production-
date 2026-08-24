@@ -177,7 +177,12 @@ export async function signInWithMicrosoft(): Promise<void> {
     throw new Error('Microsoft sign-in is not configured for this environment');
   }
 
-  await msal.loginRedirect({ scopes });
+  // Without this, a browser already carrying an active Microsoft SSO session
+  // signs straight in as whichever account that session belongs to - on a
+  // shared machine, silently the wrong one, with no chance to notice before
+  // Entra refuses it downstream. Always asking is a small tax on the common
+  // case to remove a confusing failure on a shared one.
+  await msal.loginRedirect({ scopes, prompt: 'select_account' });
 }
 
 /** Clears the Microsoft session too, so the next sign-in re-prompts. */
