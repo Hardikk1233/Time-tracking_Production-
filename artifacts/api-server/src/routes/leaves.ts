@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { principal } from "../middlewares/auth";
 import { eq, and, gte, lte, inArray } from "drizzle-orm";
 import { db, leavesTable, usersTable } from "@workspace/db";
 
@@ -20,7 +21,7 @@ const router: IRouter = Router();
 // AVP/MD see all in their team.
 
 router.get("/leaves", async (req, res): Promise<void> => {
-  const currentUserId = req.session.userId!;
+  const currentUserId = principal(req).id;
   const { startDate, endDate, userId } = req.query as {
     startDate?: string;
     endDate?: string;
@@ -89,7 +90,7 @@ router.get("/leaves", async (req, res): Promise<void> => {
 // ─── Bulk log leave days ──────────────────────────────────────────────────────
 
 router.post("/leaves/bulk", async (req, res): Promise<void> => {
-  const currentUserId = req.session.userId!;
+  const currentUserId = principal(req).id;
   const { dates, note } = req.body as { dates?: unknown; note?: string };
 
   if (!Array.isArray(dates) || dates.length === 0) {
@@ -156,7 +157,7 @@ router.post("/leaves/bulk", async (req, res): Promise<void> => {
 // ─── Log a leave day ──────────────────────────────────────────────────────────
 
 router.post("/leaves", async (req, res): Promise<void> => {
-  const currentUserId = req.session.userId!;
+  const currentUserId = principal(req).id;
   const { date, note } = req.body as { date?: string; note?: string };
 
   if (!date) {
@@ -206,7 +207,7 @@ router.post("/leaves", async (req, res): Promise<void> => {
 // ─── Delete a leave ───────────────────────────────────────────────────────────
 
 router.delete("/leaves/:id", async (req, res): Promise<void> => {
-  const currentUserId = req.session.userId!;
+  const currentUserId = principal(req).id;
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid ID" });

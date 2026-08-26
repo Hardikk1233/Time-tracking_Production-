@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { principal } from "../middlewares/auth";
 import { eq } from "drizzle-orm";
 import { db, tasksTable, projectTasksTable, usersTable } from "@workspace/db";
 
@@ -40,7 +41,7 @@ router.get("/tasks", async (req, res): Promise<void> => {
 });
 
 router.post("/tasks", async (req, res): Promise<void> => {
-  const role = await getCurrentUserRole(req.session.userId!);
+  const role = await getCurrentUserRole(principal(req).id);
   if (!["avp", "md"].includes(role)) {
     res.status(403).json({ error: "Only AVPs and MDs can add tasks to the catalog" });
     return;
@@ -104,7 +105,7 @@ router.patch("/tasks/:taskId", async (req, res): Promise<void> => {
     return;
   }
 
-  const role = await getCurrentUserRole(req.session.userId!);
+  const role = await getCurrentUserRole(principal(req).id);
   if (!["avp", "md"].includes(role)) {
     res.status(403).json({ error: "Only AVPs and MDs can edit tasks" });
     return;
@@ -156,7 +157,7 @@ router.delete("/tasks/:taskId", async (req, res): Promise<void> => {
     return;
   }
 
-  const role = await getCurrentUserRole(req.session.userId!);
+  const role = await getCurrentUserRole(principal(req).id);
   if (!["avp", "md"].includes(role)) {
     res.status(403).json({ error: "Only AVPs and MDs can delete tasks" });
     return;

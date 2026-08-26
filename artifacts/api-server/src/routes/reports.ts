@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { principal } from "../middlewares/auth";
 import { eq, and, gte, lte, sql, inArray, isNull, or } from "drizzle-orm";
 import { format, subMonths, startOfMonth, endOfMonth, eachMonthOfInterval } from "date-fns";
 import { productivity, percent, HOURS_PER_DAY } from "../lib/metrics";
@@ -200,7 +201,7 @@ function buildPeriodStats(billable: number, contracted: number) {
 // ─── Auth middleware (all roles) ───────────────────────────────────────────────
 
 router.use(async (req, res, next) => {
-  const userId = req.session.userId!;
+  const userId = principal(req).id;
   const [user] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, userId));
   if (!user) { res.status(403).json({ error: "User not found" }); return; }
   (req as any)._reporterRole = user.role;

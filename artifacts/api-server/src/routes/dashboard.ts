@@ -82,7 +82,7 @@ async function fetchHolidaySet(startDate?: string, endDate?: string): Promise<Se
 // ─── Summary (always scoped to the current user) ─────────────────────────────
 
 router.get("/dashboard/summary", async (req, res): Promise<void> => {
-  const currentUserId = req.session.userId!;
+  const currentUserId = principal(req).id;
   const { startDate, endDate } = req.query as {
     startDate?: string;
     endDate?: string;
@@ -545,7 +545,7 @@ router.get("/dashboard/recent-activity", async (req, res): Promise<void> => {
 // Entries logged by the approver themselves are excluded (can't self-approve).
 
 router.get("/dashboard/pending-approvals", async (req, res): Promise<void> => {
-  const currentUserId = req.session.userId!;
+  const currentUserId = principal(req).id;
   const [currentUser] = await db
     .select({ role: usersTable.role })
     .from(usersTable)

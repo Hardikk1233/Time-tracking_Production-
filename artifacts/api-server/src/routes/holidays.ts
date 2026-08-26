@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { principal } from "../middlewares/auth";
 import { db, publicHolidaysTable } from "@workspace/db";
 import { eq, asc } from "drizzle-orm";
 import { usersTable } from "@workspace/db";
@@ -21,7 +22,7 @@ router.post("/public-holidays", async (req, res): Promise<void> => {
   const [u] = await db
     .select({ role: usersTable.role })
     .from(usersTable)
-    .where(eq(usersTable.id, req.session.userId!));
+    .where(eq(usersTable.id, principal(req).id));
   if (u?.role !== "md") {
     res.status(403).json({ error: "Only MDs can manage public holidays" });
     return;
@@ -46,7 +47,7 @@ router.delete("/public-holidays/:id", async (req, res): Promise<void> => {
   const [u] = await db
     .select({ role: usersTable.role })
     .from(usersTable)
-    .where(eq(usersTable.id, req.session.userId!));
+    .where(eq(usersTable.id, principal(req).id));
   if (u?.role !== "md") {
     res.status(403).json({ error: "Only MDs can manage public holidays" });
     return;
