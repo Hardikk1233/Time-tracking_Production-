@@ -3,6 +3,8 @@ import healthRouter from "./health";
 import authRouter from "./auth";
 import usersRouter from "./users";
 import clientsRouter from "./clients";
+import hourBlocksRouter from "./hour-blocks";
+import productsRouter from "./products";
 import projectsRouter from "./projects";
 import tasksRouter from "./tasks";
 import timeEntriesRouter from "./time-entries";
@@ -30,6 +32,8 @@ router.use(requireAuth);
 
 router.use(usersRouter);
 router.use(clientsRouter);
+router.use(hourBlocksRouter);
+router.use(productsRouter);
 router.use(projectsRouter);
 router.use(tasksRouter);
 router.use(timeEntriesRouter);

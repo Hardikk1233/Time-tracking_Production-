@@ -21,6 +21,25 @@ const router: IRouter = Router();
  * reads client assignments rather than reaching through projects the way the
  * dashboard's data-visibility scope does.
  */
+/**
+ * The commercial arrangements a client can be on.
+ *
+ * Kept as a literal list checked here rather than trusting the request body:
+ * the column is a text enum, so an unrecognised value would otherwise reach
+ * Postgres and fail as a constraint violation instead of a clear 400.
+ */
+const ENGAGEMENT_TYPES = ["fte", "block_hours", "product"] as const;
+type EngagementType = (typeof ENGAGEMENT_TYPES)[number];
+
+const ENGAGEMENT_TYPE_ERROR = `engagementType must be one of: ${ENGAGEMENT_TYPES.join(", ")}`;
+
+function isEngagementType(value: unknown): value is EngagementType {
+  return (
+    typeof value === "string" &&
+    (ENGAGEMENT_TYPES as readonly string[]).includes(value)
+  );
+}
+
 async function managedClientIds(me: Principal): Promise<number[] | null> {
   if (me.role === "md") return null;
 
@@ -84,12 +103,14 @@ router.get("/clients", async (req, res): Promise<void> => {
 
 router.post("/clients", requireRole("avp"), async (req, res): Promise<void> => {
   const me = principal(req);
-  const { name, description, fteCount, associateIds } = req.body as {
-    name?: string;
-    description?: string;
-    fteCount?: number;
-    associateIds?: number[];
-  };
+  const { name, description, fteCount, engagementType, associateIds } =
+    req.body as {
+      name?: string;
+      description?: string;
+      fteCount?: number;
+      engagementType?: string;
+      associateIds?: number[];
+    };
 
   if (!name?.trim()) {
     res.status(400).json({ error: "name is required" });
@@ -101,9 +122,21 @@ router.post("/clients", requireRole("avp"), async (req, res): Promise<void> => {
       ? fteCount
       : 1;
 
+  if (engagementType !== undefined && !isEngagementType(engagementType)) {
+    res.status(400).json({ error: ENGAGEMENT_TYPE_ERROR });
+    return;
+  }
+
   const [client] = await db
     .insert(clientsTable)
-    .values({ name: name.trim(), description: description ?? null, fteCount: fte })
+    .values({
+      name: name.trim(),
+      description: description ?? null,
+      fteCount: fte,
+      // Omitted rather than defaulted here, so the column default stays the
+      // single place "fte" is decided.
+      ...(engagementType ? { engagementType } : {}),
+    })
     .returning();
 
   // The creator is assigned so the client stays visible to them.
@@ -144,12 +177,14 @@ router.patch(
     const clientId = await resolveClient(req, res);
     if (!clientId) return;
 
-    const { name, description, fteCount, isActive } = req.body as {
-      name?: string;
-      description?: string | null;
-      fteCount?: number;
-      isActive?: boolean;
-    };
+    const { name, description, fteCount, engagementType, isActive } =
+      req.body as {
+        name?: string;
+        description?: string | null;
+        fteCount?: number;
+        engagementType?: string;
+        isActive?: boolean;
+      };
 
     const updates: Partial<typeof clientsTable.$inferInsert> = {};
     if (name !== undefined) {
@@ -166,6 +201,16 @@ router.patch(
         return;
       }
       updates.fteCount = fteCount;
+    }
+    if (engagementType !== undefined) {
+      if (!isEngagementType(engagementType)) {
+        res.status(400).json({ error: ENGAGEMENT_TYPE_ERROR });
+        return;
+      }
+      // Switching away from block_hours leaves the purchased blocks in place
+      // rather than deleting them: the client did buy those hours, and a type
+      // changed by mistake should be recoverable by changing it back.
+      updates.engagementType = engagementType;
     }
     if (isActive !== undefined) updates.isActive = isActive;
 
