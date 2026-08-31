@@ -43,6 +43,13 @@ export function isEntraConfigured(): boolean {
   return Boolean(config.entraTenantId && config.entraAudience);
 }
 
+/** Every audience a token may legitimately carry. */
+export function acceptedAudiences(): string[] {
+  return [config.entraAudience!, config.mcpPublicUrl].filter(
+    (value): value is string => Boolean(value),
+  );
+}
+
 let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 
 function keyStore(): ReturnType<typeof createRemoteJWKSet> {
@@ -102,7 +109,11 @@ export async function verifyEntraToken(token: string): Promise<EntraIdentity> {
   let payload: JWTPayload;
   try {
     const verified = await jwtVerify(token, keyStore(), {
-      audience: config.entraAudience!,
+      // The MCP endpoint is reached with tokens whose audience is its own URL,
+      // because Claude names it as the OAuth resource. Same tenant, same
+      // signing keys, same person — only `aud` differs, so both are accepted
+      // rather than the endpoint growing a second verification path.
+      audience: acceptedAudiences(),
       issuer: config.entraIssuer ?? [
         `https://login.microsoftonline.com/${config.entraTenantId}/v2.0`,
         `https://sts.windows.net/${config.entraTenantId}/`,

@@ -10,6 +10,7 @@ import helmet from "helmet";
 import session from "express-session";
 import pinoHttp from "pino-http";
 import router from "./routes";
+import mcpRouter, { protectedResourceMetadata } from "./routes/mcp";
 import { apiLimiter, loginLimiter } from "./middlewares/rate-limit";
 import { config } from "./config";
 import { logger } from "./lib/logger";
@@ -104,6 +105,16 @@ app.use(
 app.use("/api/auth/login", loginLimiter);
 app.use("/api", apiLimiter);
 app.use("/api", router);
+
+// The Claude connector endpoint. Outside /api because its URL is also its OAuth
+// resource identifier, which has to stay stable and match MCP_PUBLIC_URL
+// exactly.
+app.use("/mcp", mcpRouter);
+
+// RFC 9728 discovery, at the host root where clients look. Both spellings are
+// served because clients differ on whether they append the resource path.
+app.get("/.well-known/oauth-protected-resource", protectedResourceMetadata);
+app.get("/.well-known/oauth-protected-resource/mcp", protectedResourceMetadata);
 
 // Unmatched API paths must answer as the API, not fall through to the SPA
 // fallback below — a 200 with an HTML body would look like success to the

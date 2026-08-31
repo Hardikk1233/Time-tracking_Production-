@@ -132,6 +132,21 @@ export const config = {
   /** Refuse password sign-in, leaving Entra as the only way in. */
   entraOnly: boolean("ENTRA_ONLY", false),
 
+  /**
+   * Public URL of the MCP endpoint, e.g. https://timetrack.example.com/mcp.
+   *
+   * Doubles as a second accepted token audience. Claude sends this URL as the
+   * OAuth `resource` (RFC 8707), so Entra issues tokens whose audience is the
+   * URL rather than the API's Application ID URI — the same person, a different
+   * `aud`. It must be registered as an Application ID URI on the API app
+   * registration or Entra refuses the token request outright.
+   *
+   * Unset leaves the MCP endpoint returning 404, which is the right default:
+   * an endpoint that cannot state its own address cannot be authenticated
+   * against.
+   */
+  mcpPublicUrl: read("MCP_PUBLIC_URL"),
+
   // ─── Temporary rollout tooling ─────────────────────────────────────────────
   // The /dev console and the feedback widget exist to get the Entra rollout
   // debugged. Both are inert unless configured, and both are meant to be

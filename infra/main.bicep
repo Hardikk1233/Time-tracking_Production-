@@ -66,6 +66,19 @@ here rather than adding it by hand keeps a later deploy from dropping it.
 ''')
 param customDomain string = ''
 
+@description('''
+Public URL of the MCP endpoint for Claude connectors, e.g.
+https://timetrack.tristone-partners.com/mcp. Empty leaves the endpoint
+answering 404, which is the right default: an endpoint that cannot state its
+own address cannot be authenticated against.
+
+Must match, character for character, an Application ID URI registered on the
+API app registration. Claude names this URL as the OAuth resource, Entra issues
+a token whose audience is this exact string, and a mismatch fails the token
+request rather than the request that follows it.
+''')
+param mcpPublicUrl string = ''
+
 @description('Container image to run. Left as the placeholder on first deploy; the pipeline sets the real one.')
 param containerImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
 
@@ -389,6 +402,7 @@ var appEnvironmentVariables = [
   { name: 'ENTRA_SPA_CLIENT_ID', value: entraSpaClientId }
   { name: 'ENTRA_API_SCOPE', value: entraApiScope }
   { name: 'ENTRA_ONLY', value: string(entraOnly) }
+  { name: 'MCP_PUBLIC_URL', value: mcpPublicUrl }
 ]
 
 var appSecrets = [

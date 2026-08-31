@@ -147,6 +147,22 @@ async function resolveEntraUser(
   return user;
 }
 
+/**
+ * Turns a verified Entra identity into a principal, for callers that sit
+ * outside the Express middleware chain — currently the MCP endpoint.
+ *
+ * Deliberately the same path requireAuth takes, so a person reaching the app
+ * through a Claude connector is provisioned, adopted and role-synced exactly as
+ * they are through the browser. Null means the account exists but is
+ * deactivated locally.
+ */
+export async function resolveEntraPrincipal(
+  identity: EntraIdentity,
+): Promise<Principal | null> {
+  const user = await resolveEntraUser(identity);
+  return user ? toPrincipal(user, "entra") : null;
+}
+
 function bearerToken(req: Request): string | null {
   const header = req.headers.authorization;
   if (!header) return null;

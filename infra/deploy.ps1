@@ -43,6 +43,11 @@ param(
     # the CNAME and asuid TXT records resolve: certificate issuance validates
     # against them and the deployment fails if it cannot.
     [string] $CustomDomain,
+
+    # Public URL of the MCP endpoint for Claude connectors, e.g.
+    # https://timetrack.tristone-partners.com/mcp. Must match an Application ID
+    # URI on the API app registration exactly.
+    [string] $McpPublicUrl,
     [int]    $MonthlyBudgetUsd = 40,
     [switch] $GeoRedundantBackup,
 
@@ -184,6 +189,7 @@ $parameters = @(
     "entraSpaClientId=$($entra['ENTRA_SPA_CLIENT_ID'])",
     "entraApiScope=$($entra['ENTRA_API_SCOPE'])",
     "customDomain=$CustomDomain",
+    "mcpPublicUrl=$McpPublicUrl",
     "monthlyBudgetUsd=$MonthlyBudgetUsd",
     "geoRedundantBackup=$($GeoRedundantBackup.IsPresent.ToString().ToLower())",
     "enablePurgeProtection=$((-not $Disposable).ToString().ToLower())",
