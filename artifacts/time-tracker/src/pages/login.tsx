@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { Clock } from 'lucide-react';
+import logo from '@/assets/logo.png';
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -250,6 +251,16 @@ export default function Login() {
           </div>
         </div>
         
+        {/* The wordmark is white ink on transparency, so it belongs on this pane
+            and would vanish on the light one. mb-auto holds it to the top while
+            the parent keeps the headline at the bottom. Rendered just under its
+            natural 34px height so it stays crisp rather than upscaled. */}
+        <img
+          src={logo}
+          alt="Tristone Strategic Partners"
+          className="relative z-10 h-8 w-auto mb-auto"
+        />
+
         <div className="relative z-10 max-w-md">
           <div className="h-1 w-12 bg-primary mb-6"></div>
           <h2 className="text-4xl font-serif tracking-tight text-sidebar-foreground mb-4">Precision in every minute.</h2>
