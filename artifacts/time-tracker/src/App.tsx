@@ -19,6 +19,7 @@ import Approvals from '@/pages/approvals';
 import Holidays from '@/pages/holidays';
 import Reports from '@/pages/reports';
 import DevConsole from '@/pages/dev';
+import TimePolicy from '@/pages/time-policy';
 
 const queryClient = new QueryClient();
 
@@ -52,6 +53,9 @@ function Router() {
     <Switch>
       <Route path="/" component={() => <Login />} />
       <Route path="/login" component={Login} />
+      {/* Public: linked from the login screen, where there is no session yet.
+          Must sit above the catch-all or it falls into ProtectedRoutes. */}
+      <Route path="/time-policy" component={TimePolicy} />
       <Route path="*" component={ProtectedRoutes} />
     </Switch>
   );

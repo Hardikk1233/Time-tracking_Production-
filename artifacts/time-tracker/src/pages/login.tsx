@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useLocation } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -233,7 +233,14 @@ export default function Login() {
 
           <div className="pt-8 text-center">
             <p className="text-xs text-muted-foreground">
-              By signing in, you acknowledge the <a href="#" className="underline hover:text-foreground">Firm's Time Policy</a>.
+              By signing in, you acknowledge the{' '}
+              <Link
+                href="/time-policy"
+                className="underline hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded"
+              >
+                Firm's Time Policy
+              </Link>
+              .
             </p>
           </div>
         </div>
