@@ -251,15 +251,29 @@ export default function Login() {
           </div>
         </div>
         
-        {/* The wordmark is white ink on transparency, so it belongs on this pane
-            and would vanish on the light one. mb-auto holds it to the top while
-            the parent keeps the headline at the bottom. Rendered just under its
-            natural 34px height so it stays crisp rather than upscaled. */}
-        <img
-          src={logo}
-          alt="Tristone Strategic Partners"
-          className="relative z-10 h-8 w-auto mb-auto"
-        />
+        {/* Brand lockup, held to the top by mb-auto while the parent keeps the
+            headline at the bottom.
+
+            The wordmark is white ink on transparency, so it belongs on this pane
+            and would vanish on the light one. It is a 246x34 raster whose strokes
+            are roughly half anti-aliasing, so it is rendered *below* its source
+            height: downscaling averages those soft edges into something that
+            reads sharp, where any enlargement puts the mush on display. The rule
+            and descriptor give it context, so the restrained size reads as
+            deliberate rather than as an image that failed to load properly. */}
+        <div className="relative z-10 mb-auto flex flex-col gap-3.5">
+          <img
+            src={logo}
+            alt="Tristone Strategic Partners"
+            className="h-[26px] w-auto"
+          />
+          <div className="flex items-center gap-3">
+            <span className="h-px w-8 bg-sidebar-foreground/25" />
+            <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-sidebar-foreground/45">
+              Strategic Partners
+            </span>
+          </div>
+        </div>
 
         <div className="relative z-10 max-w-md">
           <div className="h-1 w-12 bg-primary mb-6"></div>
