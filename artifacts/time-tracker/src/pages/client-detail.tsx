@@ -28,6 +28,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { HourBlocksCard, ProductAllocationCard } from '@/components/client-engagement';
 import {
   ArrowLeft, Building2, Users, FolderKanban, UserPlus, UserMinus,
   ChevronRight, TrendingUp, Plus, Trash2, Calendar,
@@ -65,6 +66,10 @@ export default function ClientDetail() {
   const deleteFteMutation = useDeleteClientFteHistory();
 
   const isManager = ['avp', 'md'].includes(user?.role || '');
+  // Blocks and product allocation open up one rank lower than client admin,
+  // matching requireRole("associate") on the API.
+  const canAllocate = ['associate', 'avp', 'md'].includes(user?.role || '');
+  const engagementType = client?.engagementType ?? 'fte';
 
   const assignedIds = new Set((assignments || []).map(u => u.id));
   const unassignedUsers = (allUsers || []).filter(u => !assignedIds.has(u.id));
@@ -298,7 +303,16 @@ export default function ClientDetail() {
         </Card>
       </div>
 
+      {/* The engagement decides which of these is meaningful, so only one shows. */}
+      {engagementType === 'block_hours' && (
+        <HourBlocksCard clientId={clientId} canManage={canAllocate} />
+      )}
+      {engagementType === 'product' && (
+        <ProductAllocationCard clientId={clientId} canManage={canAllocate} />
+      )}
+
       {/* FTE History */}
+      {engagementType === 'fte' && (
       <Card className="shadow-sm border-border">
         <CardHeader className="border-b border-border/50 bg-muted/20 pb-4">
           <div className="flex items-center justify-between">
@@ -398,6 +412,7 @@ export default function ClientDetail() {
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

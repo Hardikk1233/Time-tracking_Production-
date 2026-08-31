@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   CalendarDays,
   BarChart2,
+  Package,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
@@ -63,6 +64,9 @@ export function Sidebar() {
   const navItems = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Time Entries', path: '/time-entries', icon: Clock },
+    // Not gated: an analyst cannot define a product but does need to see the
+    // ones they have been asked to produce.
+    { name: 'Products', path: '/products', icon: Package },
     ...(isAssociateOrAbove ? [
       { name: 'Approvals', path: '/approvals', icon: CheckSquare },
       { name: 'Projects', path: '/projects', icon: FolderKanban },

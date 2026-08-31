@@ -30,6 +30,10 @@ tags:
     description: Employee leave management
   - name: reports
     description: Custom reports (AVP and MD only)
+  - name: products
+    description: Product catalog and allocation
+  - name: hour-blocks
+    description: Blocks of hours bought by a client
 
 paths:
   /healthz:
@@ -1243,6 +1247,242 @@ paths:
               schema:
                 $ref: "#/components/schemas/MyReport"
 
+  /products:
+    get:
+      operationId: listProducts
+      tags: [products]
+      summary: List the product catalog
+      responses:
+        "200":
+          description: Products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+    post:
+      operationId: createProduct
+      tags: [products]
+      summary: Define a product (Associate and above)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "409":
+          description: A product with that name already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /products/{productId}:
+    patch:
+      operationId: updateProduct
+      tags: [products]
+      summary: Rename or redescribe a product (Associate and above)
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteProduct
+      tags: [products]
+      summary: Delete a product and its allocations (Associate and above)
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /clients/{clientId}/product-assignments:
+    get:
+      operationId: listClientProductAssignments
+      tags: [products]
+      summary: Who is producing what for a client
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      responses:
+        "200":
+          description: Allocations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProductAssignment"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: assignProduct
+      tags: [products]
+      summary: Allocate a product to somebody (Associate and above)
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductAssignmentInput"
+      responses:
+        "201":
+          description: Allocated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductAssignment"
+        "404":
+          description: Client, product or assignee not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Already allocated to that person
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /my-product-assignments:
+    get:
+      operationId: listMyProductAssignments
+      tags: [products]
+      summary: What the caller has been asked to produce
+      responses:
+        "200":
+          description: Allocations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MyProductAssignment"
+
+  /product-assignments/{assignmentId}:
+    delete:
+      operationId: deleteProductAssignment
+      tags: [products]
+      summary: Withdraw an allocation (Associate and above)
+      parameters:
+        - $ref: "#/components/parameters/AssignmentId"
+      responses:
+        "204":
+          description: Withdrawn
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /clients/{clientId}/hour-blocks:
+    get:
+      operationId: getClientHourBlocks
+      tags: [hour-blocks]
+      summary: Blocks bought by a client, and what is left
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      responses:
+        "200":
+          description: Blocks and the derived balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HourBlockSummary"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createHourBlock
+      tags: [hour-blocks]
+      summary: Record a purchase (Associate and above)
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HourBlockInput"
+      responses:
+        "201":
+          description: Recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HourBlockRecord"
+        "400":
+          description: Invalid hours or purchase date
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /hour-blocks/{hourBlockId}:
+    delete:
+      operationId: deleteHourBlock
+      tags: [hour-blocks]
+      summary: Remove a block recorded in error (Associate and above)
+      parameters:
+        - $ref: "#/components/parameters/HourBlockId"
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+
 components:
   parameters:
     UserId:
@@ -1271,6 +1511,24 @@ components:
         type: integer
     EntryId:
       name: entryId
+      in: path
+      required: true
+      schema:
+        type: integer
+    ProductId:
+      name: productId
+      in: path
+      required: true
+      schema:
+        type: integer
+    HourBlockId:
+      name: hourBlockId
+      in: path
+      required: true
+      schema:
+        type: integer
+    AssignmentId:
+      name: assignmentId
       in: path
       required: true
       schema:
@@ -1382,7 +1640,7 @@ components:
     # ─── Clients ─────────────────────────────────────────────────────────
     Client:
       type: object
-      required: [id, name, fteCount, createdAt]
+      required: [id, name, fteCount, engagementType, createdAt]
       properties:
         id:
           type: integer
@@ -1395,6 +1653,8 @@ components:
           minimum: 0.1
           maximum: 100
           description: "Number of full-time equivalents; 1 FTE = 8h/day, 40h/week, 160h/month"
+        engagementType:
+          $ref: "#/components/schemas/EngagementType"
         isActive:
           type: boolean
           default: true
@@ -1455,6 +1715,8 @@ components:
           minimum: 0.1
           maximum: 100
           default: 1
+        engagementType:
+          $ref: "#/components/schemas/EngagementType"
         associateIds:
           type: array
           items:
@@ -1473,6 +1735,8 @@ components:
           type: number
           minimum: 0.1
           maximum: 100
+        engagementType:
+          $ref: "#/components/schemas/EngagementType"
         isActive:
           type: boolean
 
@@ -1564,6 +1828,185 @@ components:
           minLength: 1
         description:
           type: ["string", "null"]
+
+    # ─── Engagements ──────────────────────────────────────────────────────
+    EngagementType:
+      type: string
+      enum: [fte, block_hours, product]
+      description: "How a client is engaged: dedicated FTEs, a purchased block of hours, or defined deliverables"
+
+    Product:
+      type: object
+      required: [id, name, createdAt, createdById, createdByName]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        createdById:
+          type: integer
+        createdByName:
+          type: string
+
+    ProductInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: string
+
+    ProductUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: ["string", "null"]
+
+    ProductAssignment:
+      type: object
+      required: [id, productId, productName, assigneeUserId, assigneeName, assigneeRole, assignedById, assignedAt]
+      properties:
+        id:
+          type: integer
+        productId:
+          type: integer
+        productName:
+          type: string
+        assigneeUserId:
+          type: integer
+        assigneeName:
+          type: string
+        assigneeRole:
+          type: string
+          enum: [analyst, associate, avp, md]
+        assignedById:
+          type: integer
+        assignedAt:
+          type: string
+          format: date-time
+
+    MyProductAssignment:
+      type: object
+      required: [id, productId, productName, clientId, clientName, assignedAt]
+      properties:
+        id:
+          type: integer
+        productId:
+          type: integer
+        productName:
+          type: string
+        productDescription:
+          type: ["string", "null"]
+        clientId:
+          type: integer
+        clientName:
+          type: string
+        assignedAt:
+          type: string
+          format: date-time
+
+    ProductAssignmentInput:
+      type: object
+      required: [productId, assigneeUserId]
+      properties:
+        productId:
+          type: integer
+        assigneeUserId:
+          type: integer
+
+    HourBlock:
+      type: object
+      required: [id, hours, purchasedOn, createdAt, createdById, createdByName]
+      properties:
+        id:
+          type: integer
+        hours:
+          type: number
+          exclusiveMinimum: 0
+        purchasedOn:
+          type: string
+          format: date
+        note:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        createdById:
+          type: integer
+        createdByName:
+          type: string
+
+    HourBlockRecord:
+      type: object
+      required: [id, clientId, hours, purchasedOn, createdAt, createdById]
+      properties:
+        id:
+          type: integer
+        clientId:
+          type: integer
+        hours:
+          type: number
+        purchasedOn:
+          type: string
+          format: date
+        note:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        createdById:
+          type: integer
+
+    HourBlockInput:
+      type: object
+      required: [hours, purchasedOn]
+      properties:
+        hours:
+          type: number
+          exclusiveMinimum: 0
+        purchasedOn:
+          type: string
+          format: date
+          description: "Date of purchase (YYYY-MM-DD)"
+        note:
+          type: string
+
+    HourBlockSummary:
+      type: object
+      required: [clientId, clientName, engagementType, blocks, purchasedHours, consumedHours, approvedHours, remainingHours]
+      properties:
+        clientId:
+          type: integer
+        clientName:
+          type: string
+        engagementType:
+          $ref: "#/components/schemas/EngagementType"
+        blocks:
+          type: array
+          items:
+            $ref: "#/components/schemas/HourBlock"
+        purchasedHours:
+          type: number
+          description: "Sum of every block bought"
+        consumedHours:
+          type: number
+          description: "Hours logged against the client, excluding rejected entries"
+        approvedHours:
+          type: number
+          description: "The approved subset of consumed hours"
+        remainingHours:
+          type: number
+          description: "purchasedHours minus consumedHours; may go negative once a block is overrun"
 
     # ─── Time Entries ─────────────────────────────────────────────────────
     TimeEntry:

@@ -203,6 +203,7 @@ export const ListClientsResponseItem = zod.object({
   "name": zod.string(),
   "description": zod.string().nullish(),
   "fteCount": zod.number().min(listClientsResponseFteCountMin).max(listClientsResponseFteCountMax).describe('Number of full-time equivalents; 1 FTE = 8h\/day, 40h\/week, 160h\/month'),
+  "engagementType": zod.enum(['fte', 'block_hours', 'product']).describe('How a client is engaged: dedicated FTEs, a purchased block of hours, or defined deliverables'),
   "isActive": zod.boolean().default(listClientsResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
@@ -223,6 +224,7 @@ export const CreateClientBody = zod.object({
   "name": zod.string().min(1),
   "description": zod.string().optional(),
   "fteCount": zod.number().min(createClientBodyFteCountMin).max(createClientBodyFteCountMax).default(createClientBodyFteCountDefault),
+  "engagementType": zod.enum(['fte', 'block_hours', 'product']).optional().describe('How a client is engaged: dedicated FTEs, a purchased block of hours, or defined deliverables'),
   "associateIds": zod.array(zod.int()).optional().describe('IDs of Associates to assign as responsible')
 })
 
@@ -236,6 +238,7 @@ export const CreateClientResponse = zod.object({
   "name": zod.string(),
   "description": zod.string().nullish(),
   "fteCount": zod.number().min(createClientResponseFteCountMin).max(createClientResponseFteCountMax).describe('Number of full-time equivalents; 1 FTE = 8h\/day, 40h\/week, 160h\/month'),
+  "engagementType": zod.enum(['fte', 'block_hours', 'product']).describe('How a client is engaged: dedicated FTEs, a purchased block of hours, or defined deliverables'),
   "isActive": zod.boolean().default(createClientResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
@@ -258,6 +261,7 @@ export const GetClientResponse = zod.object({
   "name": zod.string(),
   "description": zod.string().nullish(),
   "fteCount": zod.number().min(getClientResponseFteCountMin).max(getClientResponseFteCountMax).describe('Number of full-time equivalents; 1 FTE = 8h\/day, 40h\/week, 160h\/month'),
+  "engagementType": zod.enum(['fte', 'block_hours', 'product']).describe('How a client is engaged: dedicated FTEs, a purchased block of hours, or defined deliverables'),
   "isActive": zod.boolean().default(getClientResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
@@ -280,6 +284,7 @@ export const UpdateClientBody = zod.object({
   "name": zod.string().min(1).optional(),
   "description": zod.string().nullish(),
   "fteCount": zod.number().min(updateClientBodyFteCountMin).max(updateClientBodyFteCountMax).optional(),
+  "engagementType": zod.enum(['fte', 'block_hours', 'product']).optional().describe('How a client is engaged: dedicated FTEs, a purchased block of hours, or defined deliverables'),
   "isActive": zod.boolean().optional()
 })
 
@@ -293,6 +298,7 @@ export const UpdateClientResponse = zod.object({
   "name": zod.string(),
   "description": zod.string().nullish(),
   "fteCount": zod.number().min(updateClientResponseFteCountMin).max(updateClientResponseFteCountMax).describe('Number of full-time equivalents; 1 FTE = 8h\/day, 40h\/week, 160h\/month'),
+  "engagementType": zod.enum(['fte', 'block_hours', 'product']).describe('How a client is engaged: dedicated FTEs, a purchased block of hours, or defined deliverables'),
   "isActive": zod.boolean().default(updateClientResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
@@ -1374,5 +1380,213 @@ export const GetMyReportResponse = zod.object({
   "efficiency": zod.number().describe('billableHours \/ totalHours × 100')
 })
 })
+
+
+/**
+ * @summary List the product catalog
+ */
+export const ListProductsResponseItem = zod.object({
+  "id": zod.int(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "createdById": zod.int(),
+  "createdByName": zod.string()
+})
+export const ListProductsResponse = zod.array(ListProductsResponseItem)
+
+
+/**
+ * @summary Define a product (Associate and above)
+ */
+
+
+
+export const CreateProductBody = zod.object({
+  "name": zod.string().min(1),
+  "description": zod.string().optional()
+})
+
+export const CreateProductResponse = zod.object({
+  "id": zod.int(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "createdById": zod.int(),
+  "createdByName": zod.string()
+})
+
+
+/**
+ * @summary Rename or redescribe a product (Associate and above)
+ */
+export const UpdateProductParams = zod.object({
+  "productId": zod.coerce.number().int()
+})
+
+
+
+
+export const UpdateProductBody = zod.object({
+  "name": zod.string().min(1).optional(),
+  "description": zod.string().nullish()
+})
+
+export const UpdateProductResponse = zod.object({
+  "id": zod.int(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "createdById": zod.int(),
+  "createdByName": zod.string()
+})
+
+
+/**
+ * @summary Delete a product and its allocations (Associate and above)
+ */
+export const DeleteProductParams = zod.object({
+  "productId": zod.coerce.number().int()
+})
+
+export const DeleteProductResponse = zod.void()
+
+
+/**
+ * @summary Who is producing what for a client
+ */
+export const ListClientProductAssignmentsParams = zod.object({
+  "clientId": zod.coerce.number().int()
+})
+
+export const ListClientProductAssignmentsResponseItem = zod.object({
+  "id": zod.int(),
+  "productId": zod.int(),
+  "productName": zod.string(),
+  "assigneeUserId": zod.int(),
+  "assigneeName": zod.string(),
+  "assigneeRole": zod.enum(['analyst', 'associate', 'avp', 'md']),
+  "assignedById": zod.int(),
+  "assignedAt": zod.coerce.date()
+})
+export const ListClientProductAssignmentsResponse = zod.array(ListClientProductAssignmentsResponseItem)
+
+
+/**
+ * @summary Allocate a product to somebody (Associate and above)
+ */
+export const AssignProductParams = zod.object({
+  "clientId": zod.coerce.number().int()
+})
+
+export const AssignProductBody = zod.object({
+  "productId": zod.int(),
+  "assigneeUserId": zod.int()
+})
+
+export const AssignProductResponse = zod.object({
+  "id": zod.int(),
+  "productId": zod.int(),
+  "productName": zod.string(),
+  "assigneeUserId": zod.int(),
+  "assigneeName": zod.string(),
+  "assigneeRole": zod.enum(['analyst', 'associate', 'avp', 'md']),
+  "assignedById": zod.int(),
+  "assignedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary What the caller has been asked to produce
+ */
+export const ListMyProductAssignmentsResponseItem = zod.object({
+  "id": zod.int(),
+  "productId": zod.int(),
+  "productName": zod.string(),
+  "productDescription": zod.string().nullish(),
+  "clientId": zod.int(),
+  "clientName": zod.string(),
+  "assignedAt": zod.coerce.date()
+})
+export const ListMyProductAssignmentsResponse = zod.array(ListMyProductAssignmentsResponseItem)
+
+
+/**
+ * @summary Withdraw an allocation (Associate and above)
+ */
+export const DeleteProductAssignmentParams = zod.object({
+  "assignmentId": zod.coerce.number().int()
+})
+
+export const DeleteProductAssignmentResponse = zod.void()
+
+
+/**
+ * @summary Blocks bought by a client, and what is left
+ */
+export const GetClientHourBlocksParams = zod.object({
+  "clientId": zod.coerce.number().int()
+})
+
+export const getClientHourBlocksResponseBlocksItemHoursExclusiveMin = 0;
+
+
+
+export const GetClientHourBlocksResponse = zod.object({
+  "clientId": zod.int(),
+  "clientName": zod.string(),
+  "engagementType": zod.enum(['fte', 'block_hours', 'product']).describe('How a client is engaged: dedicated FTEs, a purchased block of hours, or defined deliverables'),
+  "blocks": zod.array(zod.object({
+  "id": zod.int(),
+  "hours": zod.number().gt(getClientHourBlocksResponseBlocksItemHoursExclusiveMin),
+  "purchasedOn": zod.coerce.date(),
+  "note": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "createdById": zod.int(),
+  "createdByName": zod.string()
+})),
+  "purchasedHours": zod.number().describe('Sum of every block bought'),
+  "consumedHours": zod.number().describe('Hours logged against the client, excluding rejected entries'),
+  "approvedHours": zod.number().describe('The approved subset of consumed hours'),
+  "remainingHours": zod.number().describe('purchasedHours minus consumedHours; may go negative once a block is overrun')
+})
+
+
+/**
+ * @summary Record a purchase (Associate and above)
+ */
+export const CreateHourBlockParams = zod.object({
+  "clientId": zod.coerce.number().int()
+})
+
+export const createHourBlockBodyHoursExclusiveMin = 0;
+
+
+
+export const CreateHourBlockBody = zod.object({
+  "hours": zod.number().gt(createHourBlockBodyHoursExclusiveMin),
+  "purchasedOn": zod.coerce.date().describe('Date of purchase (YYYY-MM-DD)'),
+  "note": zod.string().optional()
+})
+
+export const CreateHourBlockResponse = zod.object({
+  "id": zod.int(),
+  "clientId": zod.int(),
+  "hours": zod.number(),
+  "purchasedOn": zod.coerce.date(),
+  "note": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "createdById": zod.int()
+})
+
+
+/**
+ * @summary Remove a block recorded in error (Associate and above)
+ */
+export const DeleteHourBlockParams = zod.object({
+  "hourBlockId": zod.coerce.number().int()
+})
+
+export const DeleteHourBlockResponse = zod.void()
 
 

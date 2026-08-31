@@ -93,6 +93,18 @@ export interface UserUpdate {
   isActive?: boolean;
 }
 
+/**
+ * How a client is engaged: dedicated FTEs, a purchased block of hours, or defined deliverables
+ */
+export type EngagementType = typeof EngagementType[keyof typeof EngagementType];
+
+
+export const EngagementType = {
+  fte: 'fte',
+  block_hours: 'block_hours',
+  product: 'product',
+} as const;
+
 export interface Client {
   id: number;
   name: string;
@@ -104,6 +116,7 @@ export interface Client {
      * @maximum 100
      */
   fteCount: number;
+  engagementType: EngagementType;
   isActive?: boolean;
   createdAt: string;
 }
@@ -146,6 +159,7 @@ export interface ClientInput {
      * @maximum 100
      */
   fteCount?: number;
+  engagementType?: EngagementType;
   /** IDs of Associates to assign as responsible */
   associateIds?: number[];
 }
@@ -160,6 +174,7 @@ export interface ClientUpdate {
      * @maximum 100
      */
   fteCount?: number;
+  engagementType?: EngagementType;
   isActive?: boolean;
 }
 
@@ -212,6 +227,112 @@ export interface TaskUpdate {
   name?: string;
   /** @nullable */
   description?: string | null;
+}
+
+export interface Product {
+  id: number;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  createdAt: string;
+  createdById: number;
+  createdByName: string;
+}
+
+export interface ProductInput {
+  /** @minLength 1 */
+  name: string;
+  description?: string;
+}
+
+export interface ProductUpdate {
+  /** @minLength 1 */
+  name?: string;
+  /** @nullable */
+  description?: string | null;
+}
+
+export type ProductAssignmentAssigneeRole = typeof ProductAssignmentAssigneeRole[keyof typeof ProductAssignmentAssigneeRole];
+
+
+export const ProductAssignmentAssigneeRole = {
+  analyst: 'analyst',
+  associate: 'associate',
+  avp: 'avp',
+  md: 'md',
+} as const;
+
+export interface ProductAssignment {
+  id: number;
+  productId: number;
+  productName: string;
+  assigneeUserId: number;
+  assigneeName: string;
+  assigneeRole: ProductAssignmentAssigneeRole;
+  assignedById: number;
+  assignedAt: string;
+}
+
+export interface MyProductAssignment {
+  id: number;
+  productId: number;
+  productName: string;
+  /** @nullable */
+  productDescription?: string | null;
+  clientId: number;
+  clientName: string;
+  assignedAt: string;
+}
+
+export interface ProductAssignmentInput {
+  productId: number;
+  assigneeUserId: number;
+}
+
+export interface HourBlock {
+  id: number;
+  /** @exclusiveMinimum 0 */
+  hours: number;
+  purchasedOn: string;
+  /** @nullable */
+  note?: string | null;
+  createdAt: string;
+  createdById: number;
+  createdByName: string;
+}
+
+export interface HourBlockRecord {
+  id: number;
+  clientId: number;
+  hours: number;
+  purchasedOn: string;
+  /** @nullable */
+  note?: string | null;
+  createdAt: string;
+  createdById: number;
+}
+
+export interface HourBlockInput {
+  /** @exclusiveMinimum 0 */
+  hours: number;
+  /** Date of purchase (YYYY-MM-DD) */
+  purchasedOn: string;
+  note?: string;
+}
+
+export interface HourBlockSummary {
+  clientId: number;
+  clientName: string;
+  engagementType: EngagementType;
+  blocks: HourBlock[];
+  /** Sum of every block bought */
+  purchasedHours: number;
+  /** Hours logged against the client, excluding rejected entries */
+  consumedHours: number;
+  /** The approved subset of consumed hours */
+  approvedHours: number;
+  /** purchasedHours minus consumedHours; may go negative once a block is overrun */
+  remainingHours: number;
 }
 
 export type TimeEntryStatus = typeof TimeEntryStatus[keyof typeof TimeEntryStatus];

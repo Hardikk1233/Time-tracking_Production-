@@ -5,6 +5,7 @@
  * Time Tracking API
  * OpenAPI spec version: 0.1.0
  */
+import type { EngagementType } from './engagementType';
 
 export interface ClientInput {
   /** @minLength 1 */
@@ -15,6 +16,7 @@ export interface ClientInput {
      * @maximum 100
      */
   fteCount?: number;
+  engagementType?: EngagementType;
   /** IDs of Associates to assign as responsible */
   associateIds?: number[];
 }

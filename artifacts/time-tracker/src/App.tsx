@@ -13,6 +13,7 @@ import ClientDetail from '@/pages/client-detail';
 import Projects from '@/pages/projects';
 import ProjectDetail from '@/pages/project-detail';
 import Tasks from '@/pages/tasks';
+import Products from '@/pages/products';
 import Team from '@/pages/team';
 import Approvals from '@/pages/approvals';
 import Holidays from '@/pages/holidays';
@@ -32,6 +33,7 @@ function ProtectedRoutes() {
         <Route path="/projects" component={Projects} />
         <Route path="/projects/:id" component={ProjectDetail} />
         <Route path="/tasks" component={Tasks} />
+        <Route path="/products" component={Products} />
         <Route path="/team" component={Team} />
         <Route path="/holidays" component={Holidays} />
         <Route path="/approvals" component={Approvals} />

@@ -24,15 +24,30 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Building2, ChevronRight, Users, PowerOff, Power } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Plus, Trash2, Building2, ChevronRight, Users, PowerOff, Power, Clock, Package } from 'lucide-react';
 
 const clientSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   description: z.string().optional(),
+  engagementType: z.enum(['fte', 'block_hours', 'product']).default('fte'),
   fteCount: z.coerce.number().min(0.1, 'Min 0.1 FTE').max(100, 'Max 100 FTEs').default(1),
   associateIds: z.array(z.number()).optional(),
 });
 type ClientForm = z.infer<typeof clientSchema>;
+
+/** How each engagement reads on screen, and what it means in one line. */
+export const ENGAGEMENT_LABELS: Record<string, string> = {
+  fte: 'FTE',
+  block_hours: 'Block of Hours',
+  product: 'Product',
+};
+
+const ENGAGEMENT_HINTS: Record<string, string> = {
+  fte: 'Dedicated capacity, billed as a share of full-time people.',
+  block_hours: 'The client buys hours up front and work draws them down.',
+  product: 'The client buys defined deliverables, allocated to whoever produces them.',
+};
 
 export default function Clients() {
   const { user } = useAuth();
@@ -160,13 +175,24 @@ export default function Clients() {
                   </p>
 
                   <div className="flex items-center gap-2 mb-4">
-                    <Badge variant="outline" className="text-xs font-mono text-primary border-primary/30 bg-primary/5">
-                      <Users className="w-3 h-3 mr-1" />
-                      {client.fteCount ?? 1} FTE
-                    </Badge>
-                    <span className="text-xs text-muted-foreground font-mono">
-                      {(((client.fteCount ?? 1) * 160)).toFixed(0)}h/mo capacity
-                    </span>
+                    {/* Capacity is an FTE idea; on the other engagements it would be a
+                        number with no meaning, so only the badge is shown there. */}
+                    {(client.engagementType ?? 'fte') === 'fte' ? (
+                      <>
+                        <Badge variant="outline" className="text-xs font-mono text-primary border-primary/30 bg-primary/5">
+                          <Users className="w-3 h-3 mr-1" />
+                          {client.fteCount ?? 1} FTE
+                        </Badge>
+                        <span className="text-xs text-muted-foreground font-mono">
+                          {(((client.fteCount ?? 1) * 160)).toFixed(0)}h/mo capacity
+                        </span>
+                      </>
+                    ) : (
+                      <Badge variant="outline" className="text-xs font-mono text-primary border-primary/30 bg-primary/5">
+                        {client.engagementType === 'block_hours' ? <Clock className="w-3 h-3 mr-1" /> : <Package className="w-3 h-3 mr-1" />}
+                        {ENGAGEMENT_LABELS[client.engagementType] ?? client.engagementType}
+                      </Badge>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between mt-auto pt-4 border-t border-border/50">
@@ -201,10 +227,11 @@ function CreateClientDialog({ open, onOpenChange }: { open: boolean, onOpenChang
 
   const form = useForm<ClientForm>({
     resolver: zodResolver(clientSchema),
-    defaultValues: { name: '', description: '', fteCount: 1, associateIds: [] },
+    defaultValues: { name: '', description: '', engagementType: 'fte', fteCount: 1, associateIds: [] },
   });
 
   const selectedAssociateIds: number[] = form.watch('associateIds') ?? [];
+  const engagementType = form.watch('engagementType');
 
   const toggleAssociate = (id: number) => {
     const current = form.getValues('associateIds') ?? [];
@@ -213,12 +240,12 @@ function CreateClientDialog({ open, onOpenChange }: { open: boolean, onOpenChang
 
   const onSubmit = (data: ClientForm) => {
     createMutation.mutate(
-      { data: { name: data.name, description: data.description, fteCount: data.fteCount, associateIds: data.associateIds } as any },
+      { data: { name: data.name, description: data.description, engagementType: data.engagementType, fteCount: data.fteCount, associateIds: data.associateIds } as any },
       {
         onSuccess: () => {
           toast({ title: 'Client created' });
           queryClient.invalidateQueries({ queryKey: getListClientsQueryKey() });
-          form.reset({ name: '', description: '', fteCount: 1, associateIds: [] });
+          form.reset({ name: '', description: '', engagementType: 'fte', fteCount: 1, associateIds: [] });
           onOpenChange(false);
         },
         onError: (err: any) => {
@@ -256,19 +283,54 @@ function CreateClientDialog({ open, onOpenChange }: { open: boolean, onOpenChang
                 <FormMessage />
               </FormItem>
             )} />
-            <FormField control={form.control} name="fteCount" render={({ field }) => (
+            <FormField control={form.control} name="engagementType" render={({ field }) => (
               <FormItem>
-                <FormLabel>No. of FTEs</FormLabel>
-                <FormControl>
-                  <Input type="number" step="0.1" min="0.1" max="100" placeholder="1" {...field} />
-                </FormControl>
-                <p className="text-xs text-muted-foreground mt-1">
-                  1 FTE = 8 h/day · 40 h/week · 160 h/month capacity
-                  {field.value > 0 && <> — <span className="text-primary font-medium">{(field.value * 160).toFixed(0)} h/mo total</span></>}
-                </p>
+                <FormLabel>Engagement</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="How is this client engaged?" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="fte">FTE</SelectItem>
+                    <SelectItem value="block_hours">Block of Hours</SelectItem>
+                    <SelectItem value="product">Product</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">{ENGAGEMENT_HINTS[field.value]}</p>
                 <FormMessage />
               </FormItem>
             )} />
+            {/* FTE count only means something on an FTE engagement. The column keeps
+                its default on the others rather than asking for a number nobody uses. */}
+            {engagementType === 'fte' && (
+              <FormField control={form.control} name="fteCount" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>No. of FTEs</FormLabel>
+                  <FormControl>
+                    <Input type="number" step="0.1" min="0.1" max="100" placeholder="1" {...field} />
+                  </FormControl>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    1 FTE = 8 h/day · 40 h/week · 160 h/month capacity
+                    {field.value > 0 && <> — <span className="text-primary font-medium">{(field.value * 160).toFixed(0)} h/mo total</span></>}
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            )}
+            {engagementType === 'block_hours' && (
+              <p className="text-xs text-muted-foreground border border-dashed border-border rounded-md p-3">
+                Record the hours bought on the client page once it exists — purchases are
+                added as separate blocks so top-ups keep their own history.
+              </p>
+            )}
+            {engagementType === 'product' && (
+              <p className="text-xs text-muted-foreground border border-dashed border-border rounded-md p-3">
+                Define deliverables in the Products catalog, then allocate them to people
+                on the client page.
+              </p>
+            )}
             <div className="space-y-2">
               <Label>Associates Responsible <span className="text-muted-foreground font-normal">(Optional)</span></Label>
               {associates && associates.length > 0 ? (
