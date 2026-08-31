@@ -289,7 +289,6 @@ export default function Login() {
           <div className="h-1 w-12 bg-primary mb-6"></div>
           <h2 className="text-4xl font-serif tracking-tight text-sidebar-foreground mb-4">Precision in every minute.</h2>
           <p className="text-sidebar-foreground/70 font-mono text-sm leading-relaxed">
-            SYSTEM // TERMINAL ACCESS GRANTED<br/>
             UPTIME // 99.99%<br/>
             STATUS // SECURE
           </p>
