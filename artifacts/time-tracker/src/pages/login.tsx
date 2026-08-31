@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { Clock } from 'lucide-react';
-import logo from '@/assets/logo.png';
+import logo from '@/assets/logo.svg';
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -261,11 +261,21 @@ export default function Login() {
             reads sharp, where any enlargement puts the mush on display. The rule
             and descriptor give it context, so the restrained size reads as
             deliberate rather than as an image that failed to load properly. */}
-        <div className="relative z-10 mb-auto flex flex-col gap-3.5">
+        <div className="relative z-10 mb-auto flex flex-col items-start gap-3.5">
+          {/* items-start and self-start both matter: a flex column stretches its
+              children across the cross axis by default, which widened the mark
+              to the whole pane and threw away its 7.24:1 ratio.
+
+              Vector now, so the height is a free choice rather than a ceiling —
+              the export shipped without a viewBox, which is added in the asset
+              so this scales instead of cropping. */}
           <img
             src={logo}
             alt="Tristone Strategic Partners"
-            className="h-[26px] w-auto"
+            width={246}
+            height={34}
+            style={{ height: '30px', width: 'auto', maxWidth: 'none' }}
+            className="block self-start"
           />
           <div className="flex items-center gap-3">
             <span className="h-px w-8 bg-sidebar-foreground/25" />
