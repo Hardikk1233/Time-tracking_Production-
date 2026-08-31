@@ -89,7 +89,20 @@ export function protectedResourceMetadata(_req: Request, res: Response): void {
   }
 
   res.json({
-    resource: config.mcpPublicUrl,
+    // The API's Application ID URI, not this endpoint's URL.
+    //
+    // A client sends this value as the OAuth resource indicator (RFC 8707)
+    // alongside the scope below, and Entra rejects the pair unless the resource
+    // is a registered Application ID URI of the app that owns the scope —
+    // AADSTS9010010, "the resource parameter provided in the request doesn't
+    // match with the requested scopes".
+    //
+    // Naming the endpoint URL here cannot satisfy that: Entra will only accept
+    // an identifier on a domain the tenant has verified, so an
+    // azurecontainerapps.io address is refused outright with
+    // HostNameNotOnVerifiedDomain. Once the app is on a verified domain this
+    // can become the endpoint URL, which is what the spec would prefer.
+    resource: config.entraAudience,
     authorization_servers: [
       `https://login.microsoftonline.com/${config.entraTenantId}/v2.0`,
     ],
