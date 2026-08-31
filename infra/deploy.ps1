@@ -38,6 +38,11 @@ param(
     [string] $SubscriptionId,
     [string] $EnvironmentName = "prod",
     [string] $AlertEmail,
+
+    # Custom hostname, e.g. timetrack.tristone-partners.com. Only pass this once
+    # the CNAME and asuid TXT records resolve: certificate issuance validates
+    # against them and the deployment fails if it cannot.
+    [string] $CustomDomain,
     [int]    $MonthlyBudgetUsd = 40,
     [switch] $GeoRedundantBackup,
 
@@ -178,6 +183,7 @@ $parameters = @(
     "entraAudience=$($entra['ENTRA_AUDIENCE'])",
     "entraSpaClientId=$($entra['ENTRA_SPA_CLIENT_ID'])",
     "entraApiScope=$($entra['ENTRA_API_SCOPE'])",
+    "customDomain=$CustomDomain",
     "monthlyBudgetUsd=$MonthlyBudgetUsd",
     "geoRedundantBackup=$($GeoRedundantBackup.IsPresent.ToString().ToLower())",
     "enablePurgeProtection=$((-not $Disposable).ToString().ToLower())",

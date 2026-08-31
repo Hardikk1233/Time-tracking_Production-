@@ -51,6 +51,21 @@ param entraApiScope string
 @description('Refuse password sign-in, leaving Entra as the only way in. Flipped at cutover on 2026-08-24.')
 param entraOnly bool = true
 
+@description('''
+Custom hostname for the app, e.g. timetrack.tristone-partners.com. Empty leaves
+the app on its generated azurecontainerapps.io address.
+
+Set this only once DNS resolves, because certificate issuance validates against
+it and the deployment fails if it cannot:
+
+  CNAME  timetrack        -> <the app FQDN>
+  TXT    asuid.timetrack  -> the environment customDomainVerificationId
+
+The certificate is a free managed one, renewed by Azure. Declaring the binding
+here rather than adding it by hand keeps a later deploy from dropping it.
+''')
+param customDomain string = ''
+
 @description('Container image to run. Left as the placeholder on first deploy; the pipeline sets the real one.')
 param containerImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
 
@@ -343,6 +358,20 @@ resource containerEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
   }
 }
 
+// A free managed certificate for the custom hostname, renewed by Azure. Azure
+// validates ownership through the CNAME while issuing, so this resource is the
+// one that fails if DNS is not in place yet.
+resource domainCertificate 'Microsoft.App/managedEnvironments/managedCertificates@2024-03-01' = if (!empty(customDomain)) {
+  parent: containerEnv
+  name: 'cert-${replace(customDomain, '.', '-')}'
+  location: location
+  tags: tags
+  properties: {
+    subjectName: customDomain
+    domainControlValidation: 'CNAME'
+  }
+}
+
 // ─── The application ─────────────────────────────────────────────────────────
 
 var appEnvironmentVariables = [
@@ -391,6 +420,15 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         targetPort: 8080
         transport: 'auto'
         allowInsecure: false
+        // The generated azurecontainerapps.io hostname keeps working alongside
+        // this, so adding a domain does not invalidate links already shared.
+        customDomains: empty(customDomain) ? null : [
+          {
+            name: customDomain
+            certificateId: domainCertificate.id
+            bindingType: 'SniEnabled'
+          }
+        ]
       }
       registries: [
         {
