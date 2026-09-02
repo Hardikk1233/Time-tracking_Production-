@@ -150,12 +150,36 @@ export async function visibleClientIds(
     return rows.map((r) => r.clientId);
   }
 
-  const rows = await db
-    .selectDistinct({ clientId: projectsTable.clientId })
-    .from(projectUsersTable)
-    .innerJoin(projectsTable, eq(projectsTable.id, projectUsersTable.projectId))
-    .where(eq(projectUsersTable.userId, me.id));
-  return [...new Set(rows.map((r) => r.clientId))];
+  // Analysts and associates reach clients two ways, and both have to count.
+  //
+  // Through their projects, which is the common case. But also through a direct
+  // client assignment, because otherwise an associate put on a client cannot
+  // act on it until a project exists there — and creating that first project is
+  // itself gated on being able to see the client. The client appeared in their
+  // list (GET /clients reads client assignments) while every write refused it
+  // as "Client not found", which reads as the app being broken rather than as a
+  // permission boundary.
+  const [viaProjects, viaClient] = await Promise.all([
+    db
+      .selectDistinct({ clientId: projectsTable.clientId })
+      .from(projectUsersTable)
+      .innerJoin(
+        projectsTable,
+        eq(projectsTable.id, projectUsersTable.projectId),
+      )
+      .where(eq(projectUsersTable.userId, me.id)),
+    db
+      .selectDistinct({ clientId: clientUsersTable.clientId })
+      .from(clientUsersTable)
+      .where(eq(clientUsersTable.userId, me.id)),
+  ]);
+
+  return [
+    ...new Set([
+      ...viaProjects.map((r) => r.clientId),
+      ...viaClient.map((r) => r.clientId),
+    ]),
+  ];
 }
 
 /**
