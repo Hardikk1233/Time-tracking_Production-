@@ -266,8 +266,8 @@ export default function Login() {
             are roughly half anti-aliasing, so it is rendered *below* its source
             height: downscaling averages those soft edges into something that
             reads sharp, where any enlargement puts the mush on display. The rule
-            and descriptor give it context, so the restrained size reads as
-            deliberate rather than as an image that failed to load properly. */}
+            beneath gives the restrained size a reason, so it reads as deliberate
+            rather than as an image that failed to load properly. */}
         <div className="relative z-10 mb-auto flex flex-col items-start gap-3.5">
           {/* items-start and self-start both matter: a flex column stretches its
               children across the cross axis by default, which widened the mark
@@ -284,12 +284,7 @@ export default function Login() {
             style={{ height: '30px', width: 'auto', maxWidth: 'none' }}
             className="block self-start"
           />
-          <div className="flex items-center gap-3">
-            <span className="h-px w-8 bg-sidebar-foreground/25" />
-            <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-sidebar-foreground/45">
-              Strategic Partners
-            </span>
-          </div>
+          <span className="h-px w-8 bg-sidebar-foreground/25" />
         </div>
 
         <div className="relative z-10 max-w-md">
