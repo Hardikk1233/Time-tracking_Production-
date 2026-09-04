@@ -167,8 +167,10 @@ describe("authorization", () => {
     it("explains rather than 500s when deleting a project with time logged", async () => {
       await seedEntry({ userId: f.analyst, projectId: f.auditProjectId, taskId: f.taskId });
       const res = await md.delete(`/api/projects/${f.auditProjectId}`);
-      expect(res.status).toBe(400);
-      expect(res.body.error).toMatch(/time entries/i);
+      // 409: the refusal is about the resource's current state, not the
+      // request's shape - nothing about the request could be corrected.
+      expect(res.status).toBe(409);
+      expect(res.body.error).toMatch(/time logged/i);
     });
 
     it("refuses an analyst any project management", async () => {
