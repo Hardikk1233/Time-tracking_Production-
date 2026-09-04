@@ -1483,6 +1483,105 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
 
+  /projects/{projectId}/task-assignments:
+    get:
+      operationId: listProjectTaskAssignments
+      tags: [tasks]
+      summary: Who is doing what on a project
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProjectTaskAssignment"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: assignProjectTask
+      tags: [tasks]
+      summary: Assign a task to somebody (analysts may assign only themselves)
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectTaskAssignmentInput"
+      responses:
+        "201":
+          description: Assigned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectTaskAssignmentRecord"
+        "400":
+          description: Task not enabled here, or the person is not on the project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: An analyst tried to assign somebody else
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Already assigned to that person
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /task-assignments/{assignmentId}:
+    delete:
+      operationId: deleteProjectTaskAssignment
+      tags: [tasks]
+      summary: Withdraw an assignment (analysts may drop their own)
+      parameters:
+        - $ref: "#/components/parameters/AssignmentId"
+      responses:
+        "204":
+          description: Withdrawn
+        "403":
+          description: An analyst tried to drop somebody else's work
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /my-task-assignments:
+    get:
+      operationId: listMyTaskAssignments
+      tags: [tasks]
+      summary: What the caller has been asked to do
+      responses:
+        "200":
+          description: Assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MyTaskAssignment"
+
+
 components:
   parameters:
     UserId:
@@ -1828,6 +1927,83 @@ components:
           minLength: 1
         description:
           type: ["string", "null"]
+
+    ProjectTaskAssignment:
+      type: object
+      required: [id, taskId, taskName, assigneeUserId, assigneeName, assigneeRole, assignedById, assignedAt]
+      properties:
+        id:
+          type: integer
+        taskId:
+          type: integer
+        taskName:
+          type: string
+        assigneeUserId:
+          type: integer
+        assigneeName:
+          type: string
+        assigneeRole:
+          type: string
+          enum: [analyst, associate, avp, md]
+        assignedById:
+          type: integer
+        assignedAt:
+          type: string
+          format: date-time
+
+    ProjectTaskAssignmentRecord:
+      type: object
+      required: [id, projectId, taskId, assigneeUserId, assignedById, assignedAt]
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: integer
+        taskId:
+          type: integer
+        assigneeUserId:
+          type: integer
+        assignedById:
+          type: integer
+        assignedAt:
+          type: string
+          format: date-time
+
+    ProjectTaskAssignmentInput:
+      type: object
+      required: [taskId]
+      properties:
+        taskId:
+          type: integer
+        assigneeUserId:
+          type: integer
+          description: "Omit to assign the task to yourself."
+
+    MyTaskAssignment:
+      type: object
+      required: [id, taskId, taskName, projectId, projectName, clientId, clientName, assignedById, assignedAt]
+      properties:
+        id:
+          type: integer
+        taskId:
+          type: integer
+        taskName:
+          type: string
+        taskDescription:
+          type: ["string", "null"]
+        projectId:
+          type: integer
+        projectName:
+          type: string
+        clientId:
+          type: integer
+        clientName:
+          type: string
+        assignedById:
+          type: integer
+        assignedAt:
+          type: string
+          format: date-time
 
     # ─── Engagements ──────────────────────────────────────────────────────
     EngagementType:

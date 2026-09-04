@@ -1590,3 +1590,73 @@ export const DeleteHourBlockParams = zod.object({
 export const DeleteHourBlockResponse = zod.void()
 
 
+/**
+ * @summary Who is doing what on a project
+ */
+export const ListProjectTaskAssignmentsParams = zod.object({
+  "projectId": zod.coerce.number().int()
+})
+
+export const ListProjectTaskAssignmentsResponseItem = zod.object({
+  "id": zod.int(),
+  "taskId": zod.int(),
+  "taskName": zod.string(),
+  "assigneeUserId": zod.int(),
+  "assigneeName": zod.string(),
+  "assigneeRole": zod.enum(['analyst', 'associate', 'avp', 'md']),
+  "assignedById": zod.int(),
+  "assignedAt": zod.coerce.date()
+})
+export const ListProjectTaskAssignmentsResponse = zod.array(ListProjectTaskAssignmentsResponseItem)
+
+
+/**
+ * @summary Assign a task to somebody (analysts may assign only themselves)
+ */
+export const AssignProjectTaskParams = zod.object({
+  "projectId": zod.coerce.number().int()
+})
+
+export const AssignProjectTaskBody = zod.object({
+  "taskId": zod.int(),
+  "assigneeUserId": zod.int().optional().describe('Omit to assign the task to yourself.')
+})
+
+export const AssignProjectTaskResponse = zod.object({
+  "id": zod.int(),
+  "projectId": zod.int(),
+  "taskId": zod.int(),
+  "assigneeUserId": zod.int(),
+  "assignedById": zod.int(),
+  "assignedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Withdraw an assignment (analysts may drop their own)
+ */
+export const DeleteProjectTaskAssignmentParams = zod.object({
+  "assignmentId": zod.coerce.number().int()
+})
+
+export const DeleteProjectTaskAssignmentResponse = zod.void()
+
+
+/**
+ * @summary What the caller has been asked to do
+ */
+export const ListMyTaskAssignmentsResponseItem = zod.object({
+  "id": zod.int(),
+  "taskId": zod.int(),
+  "taskName": zod.string(),
+  "taskDescription": zod.string().nullish(),
+  "projectId": zod.int(),
+  "projectName": zod.string(),
+  "clientId": zod.int(),
+  "clientName": zod.string(),
+  "assignedById": zod.int(),
+  "assignedAt": zod.coerce.date()
+})
+export const ListMyTaskAssignmentsResponse = zod.array(ListMyTaskAssignmentsResponseItem)
+
+

@@ -1,17 +1,9 @@
 import { Router, type IRouter } from "express";
-import { principal } from "../middlewares/auth";
+import { principal, requireRole } from "../middlewares/auth";
 import { eq } from "drizzle-orm";
 import { db, tasksTable, projectTasksTable, usersTable } from "@workspace/db";
 
 const router: IRouter = Router();
-
-async function getCurrentUserRole(userId: number) {
-  const [u] = await db
-    .select({ role: usersTable.role })
-    .from(usersTable)
-    .where(eq(usersTable.id, userId));
-  return u?.role ?? "analyst";
-}
 
 // ─── Global task catalog ───────────────────────────────────────────────────
 
@@ -40,13 +32,7 @@ router.get("/tasks", async (req, res): Promise<void> => {
   res.json(rows);
 });
 
-router.post("/tasks", async (req, res): Promise<void> => {
-  const role = await getCurrentUserRole(principal(req).id);
-  if (!["avp", "md"].includes(role)) {
-    res.status(403).json({ error: "Only AVPs and MDs can add tasks to the catalog" });
-    return;
-  }
-
+router.post("/tasks", requireRole("associate"), async (req, res): Promise<void> => {
   const { name, description } = req.body as {
     name?: string;
     description?: string;
@@ -95,19 +81,13 @@ router.get("/tasks/:taskId", async (req, res): Promise<void> => {
   res.json(row);
 });
 
-router.patch("/tasks/:taskId", async (req, res): Promise<void> => {
+router.patch("/tasks/:taskId", requireRole("associate"), async (req, res): Promise<void> => {
   const taskId = parseInt(
     Array.isArray(req.params.taskId) ? req.params.taskId[0] : req.params.taskId,
     10,
   );
   if (isNaN(taskId)) {
     res.status(400).json({ error: "Invalid task ID" });
-    return;
-  }
-
-  const role = await getCurrentUserRole(principal(req).id);
-  if (!["avp", "md"].includes(role)) {
-    res.status(403).json({ error: "Only AVPs and MDs can edit tasks" });
     return;
   }
 
@@ -147,19 +127,13 @@ router.patch("/tasks/:taskId", async (req, res): Promise<void> => {
   }
 });
 
-router.delete("/tasks/:taskId", async (req, res): Promise<void> => {
+router.delete("/tasks/:taskId", requireRole("avp"), async (req, res): Promise<void> => {
   const taskId = parseInt(
     Array.isArray(req.params.taskId) ? req.params.taskId[0] : req.params.taskId,
     10,
   );
   if (isNaN(taskId)) {
     res.status(400).json({ error: "Invalid task ID" });
-    return;
-  }
-
-  const role = await getCurrentUserRole(principal(req).id);
-  if (!["avp", "md"].includes(role)) {
-    res.status(403).json({ error: "Only AVPs and MDs can delete tasks" });
     return;
   }
 

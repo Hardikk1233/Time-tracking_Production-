@@ -6,6 +6,7 @@ export * from "./products";
 export * from "./projects";
 export * from "./assignments";
 export * from "./tasks";
+export * from "./projectTaskAssignments";
 export * from "./projectTasks";
 export * from "./timeEntries";
 export * from "./timeEntryEvents";

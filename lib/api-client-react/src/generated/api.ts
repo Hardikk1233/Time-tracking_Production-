@@ -56,6 +56,7 @@ import type {
   MessageResponse,
   MyProductAssignment,
   MyReport,
+  MyTaskAssignment,
   Product,
   ProductAssignment,
   ProductAssignmentInput,
@@ -63,6 +64,9 @@ import type {
   ProductUpdate,
   Project,
   ProjectInput,
+  ProjectTaskAssignment,
+  ProjectTaskAssignmentInput,
+  ProjectTaskAssignmentRecord,
   ProjectUpdate,
   PublicHoliday,
   PublicHolidayInput,
@@ -5524,4 +5528,301 @@ export const useDeleteHourBlock = <TError = ErrorType<ErrorResponse>,
       > => {
       return useMutation(getDeleteHourBlockMutationOptions(options));
     }
+
+export const getListProjectTaskAssignmentsUrl = (projectId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/task-assignments`
+}
+
+/**
+ * @summary Who is doing what on a project
+ */
+export const listProjectTaskAssignments = async (projectId: number, options?: Parameters<typeof customFetch>[1]): Promise<ProjectTaskAssignment[]> => {
+
+  return customFetch<ProjectTaskAssignment[]>(getListProjectTaskAssignmentsUrl(projectId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListProjectTaskAssignmentsQueryKey = (projectId: number,) => {
+    return [
+    `/api/projects/${projectId}/task-assignments`
+    ] as const;
+    }
+
+
+export const getListProjectTaskAssignmentsQueryOptions = <TData = Awaited<ReturnType<typeof listProjectTaskAssignments>>, TError = ErrorType<ErrorResponse>>(projectId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProjectTaskAssignments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListProjectTaskAssignmentsQueryKey(projectId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listProjectTaskAssignments>>> = ({ signal }) => listProjectTaskAssignments(projectId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listProjectTaskAssignments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListProjectTaskAssignmentsQueryResult = NonNullable<Awaited<ReturnType<typeof listProjectTaskAssignments>>>
+export type ListProjectTaskAssignmentsQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Who is doing what on a project
+ */
+
+export function useListProjectTaskAssignments<TData = Awaited<ReturnType<typeof listProjectTaskAssignments>>, TError = ErrorType<ErrorResponse>>(
+ projectId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProjectTaskAssignments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListProjectTaskAssignmentsQueryOptions(projectId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAssignProjectTaskUrl = (projectId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/task-assignments`
+}
+
+/**
+ * @summary Assign a task to somebody (analysts may assign only themselves)
+ */
+export const assignProjectTask = async (projectId: number,
+    projectTaskAssignmentInput: ProjectTaskAssignmentInput, options?: Parameters<typeof customFetch>[1]): Promise<ProjectTaskAssignmentRecord> => {
+
+  return customFetch<ProjectTaskAssignmentRecord>(getAssignProjectTaskUrl(projectId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(projectTaskAssignmentInput)
+  }
+);}
+
+
+
+
+
+export const getAssignProjectTaskMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignProjectTask>>, TError,{projectId: number;data: BodyType<ProjectTaskAssignmentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof assignProjectTask>>, TError,{projectId: number;data: BodyType<ProjectTaskAssignmentInput>}, TContext> => {
+
+const mutationKey = ['assignProjectTask'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof assignProjectTask>>, {projectId: number;data: BodyType<ProjectTaskAssignmentInput>}> = (props) => {
+          const {projectId,data} = props ?? {};
+
+          return  assignProjectTask(projectId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AssignProjectTaskMutationResult = NonNullable<Awaited<ReturnType<typeof assignProjectTask>>>
+    export type AssignProjectTaskMutationBody = BodyType<ProjectTaskAssignmentInput>
+    export type AssignProjectTaskMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Assign a task to somebody (analysts may assign only themselves)
+ */
+export const useAssignProjectTask = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignProjectTask>>, TError,{projectId: number;data: BodyType<ProjectTaskAssignmentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof assignProjectTask>>,
+        TError,
+        {projectId: number;data: BodyType<ProjectTaskAssignmentInput>},
+        TContext
+      > => {
+      return useMutation(getAssignProjectTaskMutationOptions(options));
+    }
+
+export const getDeleteProjectTaskAssignmentUrl = (assignmentId: number,) => {
+
+
+
+
+  return `/api/task-assignments/${assignmentId}`
+}
+
+/**
+ * @summary Withdraw an assignment (analysts may drop their own)
+ */
+export const deleteProjectTaskAssignment = async (assignmentId: number, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteProjectTaskAssignmentUrl(assignmentId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteProjectTaskAssignmentMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProjectTaskAssignment>>, TError,{assignmentId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteProjectTaskAssignment>>, TError,{assignmentId: number}, TContext> => {
+
+const mutationKey = ['deleteProjectTaskAssignment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteProjectTaskAssignment>>, {assignmentId: number}> = (props) => {
+          const {assignmentId} = props ?? {};
+
+          return  deleteProjectTaskAssignment(assignmentId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteProjectTaskAssignmentMutationResult = NonNullable<Awaited<ReturnType<typeof deleteProjectTaskAssignment>>>
+
+    export type DeleteProjectTaskAssignmentMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Withdraw an assignment (analysts may drop their own)
+ */
+export const useDeleteProjectTaskAssignment = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProjectTaskAssignment>>, TError,{assignmentId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteProjectTaskAssignment>>,
+        TError,
+        {assignmentId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteProjectTaskAssignmentMutationOptions(options));
+    }
+
+export const getListMyTaskAssignmentsUrl = () => {
+
+
+
+
+  return `/api/my-task-assignments`
+}
+
+/**
+ * @summary What the caller has been asked to do
+ */
+export const listMyTaskAssignments = async ( options?: Parameters<typeof customFetch>[1]): Promise<MyTaskAssignment[]> => {
+
+  return customFetch<MyTaskAssignment[]>(getListMyTaskAssignmentsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMyTaskAssignmentsQueryKey = () => {
+    return [
+    `/api/my-task-assignments`
+    ] as const;
+    }
+
+
+export const getListMyTaskAssignmentsQueryOptions = <TData = Awaited<ReturnType<typeof listMyTaskAssignments>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMyTaskAssignments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMyTaskAssignmentsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMyTaskAssignments>>> = ({ signal }) => listMyTaskAssignments({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMyTaskAssignments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMyTaskAssignmentsQueryResult = NonNullable<Awaited<ReturnType<typeof listMyTaskAssignments>>>
+export type ListMyTaskAssignmentsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary What the caller has been asked to do
+ */
+
+export function useListMyTaskAssignments<TData = Awaited<ReturnType<typeof listMyTaskAssignments>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMyTaskAssignments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMyTaskAssignmentsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 

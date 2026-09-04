@@ -6,6 +6,7 @@ import {
   useGetRecentActivity,
   useGetPendingApprovals,
   useListClients,
+  useListMyTaskAssignments,
 } from '@workspace/api-client-react';
 import { useAuth } from '@/lib/auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,7 +17,7 @@ import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer, Legend,
 } from 'recharts';
-import { Clock, Briefcase, AlertCircle, Activity, User, BarChart2, CalendarOff } from 'lucide-react';
+import { Clock, Briefcase, AlertCircle, Activity, User, BarChart2, CalendarOff, CheckSquare } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format, startOfMonth, differenceInCalendarDays } from 'date-fns';
 import { Link } from 'wouter';
@@ -60,6 +61,7 @@ export default function Dashboard() {
   const { data: teamUtil, isLoading: isLoadingTeam } = useGetTeamUtilization({ startDate, endDate: safeEnd });
   const { data: activity, isLoading: isLoadingActivity } = useGetRecentActivity({ limit: 5 });
   const { data: pendingApprovals, isLoading: isLoadingPending } = useGetPendingApprovals();
+  const { data: myWork } = useListMyTaskAssignments();
 
   const canApprove = ['associate', 'avp', 'md'].includes(user?.role || '');
 
@@ -130,6 +132,40 @@ export default function Dashboard() {
           </Link>
         </div>
       </div>
+
+      {/* What has been asked of you. Above the numbers on purpose: for an
+          analyst this is the actionable part of the page, and it stays hidden
+          entirely when nothing is assigned rather than sitting there empty. */}
+      {myWork && myWork.length > 0 && (
+        <Card className="shadow-sm border-primary/30 bg-primary/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <CheckSquare className="w-4 h-4 text-primary" />
+              Assigned to you
+              <Badge variant="secondary" className="font-mono text-[10px]">{myWork.length}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="flex flex-col divide-y divide-border/40">
+              {myWork.map(w => (
+                <div key={w.id} className="flex items-center justify-between gap-3 py-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{w.taskName}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {w.clientName} · {w.projectName}
+                    </p>
+                  </div>
+                  <Link href={`/projects/${w.projectId}`}>
+                    <Button variant="ghost" size="sm" className="h-7 shrink-0 text-xs text-primary hover:bg-primary/10">
+                      Open
+                    </Button>
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Summary Cards — always your own numbers */}
       <div>

@@ -9,6 +9,7 @@ import {
   useListUsers,
   useListTasks,
   useListProjectTasks,
+  useListProjectTaskAssignments,
   useAssignTaskToProject,
   useRemoveTaskFromProject,
   getListProjectAssignmentsQueryKey,
@@ -24,6 +25,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, FolderKanban, Users, CheckSquare, UserPlus, UserMinus, ShieldCheck } from 'lucide-react';
 import { Link } from 'wouter';
+import { TaskAssignees } from '@/components/task-assignees';
 import { format } from 'date-fns';
 
 const ROLE_ORDER = ['md', 'avp', 'associate', 'analyst'] as const;
@@ -45,6 +47,7 @@ export default function ProjectDetail() {
   const { data: allUsers } = useListUsers();
   const { data: tasks, isLoading: isLoadingTasks } = useListProjectTasks(projectId);
   const { data: allTasks } = useListTasks();
+  const { data: taskAssignments } = useListProjectTaskAssignments(projectId);
 
   const assignMutation = useAssignUserToProject();
   const removeMutation = useRemoveUserFromProject();
@@ -219,12 +222,22 @@ export default function ProjectDetail() {
             ) : tasks && tasks.length > 0 ? (
               <div className="space-y-2">
                 {tasks.map(t => (
-                  <div key={t.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-md group">
-                    <div className="flex items-center gap-3">
-                      <CheckSquare className="w-4 h-4 text-primary/50 shrink-0" />
-                      <div>
+                  <div key={t.id} className="flex items-start justify-between gap-3 p-3 bg-muted/30 rounded-md group">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <CheckSquare className="w-4 h-4 text-primary/50 shrink-0 mt-0.5" />
+                      <div className="min-w-0">
                         <p className="text-sm font-medium text-foreground">{t.name}</p>
                         {t.description && <p className="text-xs text-muted-foreground">{t.description}</p>}
+                        {/* Who is expected to do this. Not a restriction on who
+                            may log against it — anyone on the project still can. */}
+                        <TaskAssignees
+                          projectId={projectId}
+                          taskId={t.id}
+                          assignments={taskAssignments || []}
+                          members={assignments || []}
+                          myUserId={user?.id ?? 0}
+                          myRole={user?.role ?? 'analyst'}
+                        />
                       </div>
                     </div>
                     {isManager && (

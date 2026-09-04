@@ -229,6 +229,56 @@ export interface TaskUpdate {
   description?: string | null;
 }
 
+export type ProjectTaskAssignmentAssigneeRole = typeof ProjectTaskAssignmentAssigneeRole[keyof typeof ProjectTaskAssignmentAssigneeRole];
+
+
+export const ProjectTaskAssignmentAssigneeRole = {
+  analyst: 'analyst',
+  associate: 'associate',
+  avp: 'avp',
+  md: 'md',
+} as const;
+
+export interface ProjectTaskAssignment {
+  id: number;
+  taskId: number;
+  taskName: string;
+  assigneeUserId: number;
+  assigneeName: string;
+  assigneeRole: ProjectTaskAssignmentAssigneeRole;
+  assignedById: number;
+  assignedAt: string;
+}
+
+export interface ProjectTaskAssignmentRecord {
+  id: number;
+  projectId: number;
+  taskId: number;
+  assigneeUserId: number;
+  assignedById: number;
+  assignedAt: string;
+}
+
+export interface ProjectTaskAssignmentInput {
+  taskId: number;
+  /** Omit to assign the task to yourself. */
+  assigneeUserId?: number;
+}
+
+export interface MyTaskAssignment {
+  id: number;
+  taskId: number;
+  taskName: string;
+  /** @nullable */
+  taskDescription?: string | null;
+  projectId: number;
+  projectName: string;
+  clientId: number;
+  clientName: string;
+  assignedById: number;
+  assignedAt: string;
+}
+
 export interface Product {
   id: number;
   name: string;

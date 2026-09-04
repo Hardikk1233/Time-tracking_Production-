@@ -50,6 +50,13 @@
       "when": 1787824444614,
       "tag": "0006_quick_jimmy_woo",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788505547763,
+      "tag": "0007_dashing_wilson_fisk",
+      "breakpoints": true
     }
   ]
 }
