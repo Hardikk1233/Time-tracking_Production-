@@ -13,6 +13,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useToast } from '@/hooks/use-toast';
 import { Clock } from 'lucide-react';
 import logo from '@/assets/logo.svg';
+import { errorMessage } from '@/lib/errors';
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -84,7 +85,7 @@ export default function Login() {
         toast({
           variant: 'destructive',
           title: 'Login failed',
-          description: error.error || 'Please check your credentials and try again.',
+          description: errorMessage(error, 'Please check your credentials and try again.'),
         });
       }
     });

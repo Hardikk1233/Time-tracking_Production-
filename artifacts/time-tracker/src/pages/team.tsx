@@ -25,6 +25,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Skeleton } from '@/components/ui/skeleton';
 import { Plus, Trash2, ShieldCheck, Mail, PowerOff, Power } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { errorMessage } from '@/lib/errors';
 
 const userSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -60,7 +61,7 @@ export default function Team() {
           queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() });
         },
         onError: (err: any) => {
-          toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to delete user.' });
+          toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to delete user.') });
         }
       });
     }
@@ -75,7 +76,7 @@ export default function Team() {
           queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() });
         },
         onError: (err: any) => {
-          toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to update user.' });
+          toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to update user.') });
         }
       }
     );
@@ -220,7 +221,7 @@ function CreateUserDialog({ open, onOpenChange, users }: { open: boolean, onOpen
         onOpenChange(false);
       },
       onError: (err: any) => {
-        toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to create user.' });
+        toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to create user.') });
       }
     });
   };

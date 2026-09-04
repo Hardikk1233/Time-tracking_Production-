@@ -26,6 +26,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Trash2, Building2, ChevronRight, Users, PowerOff, Power, Clock, Package } from 'lucide-react';
+import { errorMessage } from '@/lib/errors';
 
 const clientSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -71,7 +72,7 @@ export default function Clients() {
           queryClient.invalidateQueries({ queryKey: getListClientsQueryKey() });
         },
         onError: (err: any) => {
-          toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to delete client.' });
+          toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to delete client.') });
         }
       });
     }
@@ -86,7 +87,7 @@ export default function Clients() {
           queryClient.invalidateQueries({ queryKey: getListClientsQueryKey() });
         },
         onError: (err: any) => {
-          toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to update client.' });
+          toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to update client.') });
         }
       }
     );
@@ -249,7 +250,7 @@ function CreateClientDialog({ open, onOpenChange }: { open: boolean, onOpenChang
           onOpenChange(false);
         },
         onError: (err: any) => {
-          toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to create client.' });
+          toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to create client.') });
         }
       }
     );

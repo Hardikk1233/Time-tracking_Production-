@@ -354,10 +354,14 @@ router.get("/client-report", async (req, res): Promise<void> => {
         entryConds.push(inArray(timeEntriesTable.userId, scopedUserIds) as any);
       }
 
-      // Use a string literal for the TO_CHAR expression so SELECT and GROUP BY
+      // Use a string literal for the expression so SELECT and GROUP BY
       // generate byte-for-byte identical SQL (avoiding Drizzle's context-dependent
       // table-prefix behaviour which makes PostgreSQL reject the GROUP BY).
-      const monthExpr = sql<string>`TO_CHAR("time_entries"."date", 'YYYY-MM')`;
+      //
+      // substr, not TO_CHAR: the date column is text in YYYY-MM-DD form, and
+      // to_char(text, unknown) does not exist — every call to this report was
+      // answering 500. The first seven characters are the month already.
+      const monthExpr = sql<string>`substr("time_entries"."date", 1, 7)`;
 
       const monthlyRows = await db
         .select({

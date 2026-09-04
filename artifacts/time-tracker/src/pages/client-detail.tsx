@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'wouter';
 import { format, parseISO } from 'date-fns';
+import { errorMessage } from '@/lib/errors';
 
 // ─── FTE History form schema ──────────────────────────────────────────────────
 const fteSchema = z.object({
@@ -84,7 +85,7 @@ export default function ClientDetail() {
           queryClient.invalidateQueries({ queryKey: getListClientAssignmentsQueryKey(clientId) });
           setSelectedUserId('');
         },
-        onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to assign user.' }),
+        onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to assign user.') }),
       }
     );
   };
@@ -97,7 +98,7 @@ export default function ClientDetail() {
           toast({ title: 'User removed from client' });
           queryClient.invalidateQueries({ queryKey: getListClientAssignmentsQueryKey(clientId) });
         },
-        onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to remove user.' }),
+        onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to remove user.') }),
       }
     );
   };
@@ -111,7 +112,7 @@ export default function ClientDetail() {
           toast({ title: 'FTE period deleted' });
           queryClient.invalidateQueries({ queryKey: getListClientFteHistoryQueryKey(clientId) });
         },
-        onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to delete.' }),
+        onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to delete.') }),
       }
     );
   };
@@ -445,7 +446,7 @@ function AddFtePeriodDialog({ open, onOpenChange, clientId }: { open: boolean; o
           onOpenChange(false);
         },
         onError: (err: any) => {
-          toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to add FTE period.' });
+          toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to add FTE period.') });
         },
       }
     );

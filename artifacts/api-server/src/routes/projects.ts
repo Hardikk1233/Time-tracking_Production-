@@ -270,9 +270,12 @@ router.delete(
         (err as { code?: string; cause?: { code?: string } })?.code ??
         (err as { cause?: { code?: string } })?.cause?.code;
       if (pgCode === "23503") {
-        res.status(400).json({
+        // The old text said "deactivate it instead" — a feature projects do
+        // not have. An error that points at a control that does not exist is
+        // worse than no advice at all.
+        res.status(409).json({
           error:
-            "Cannot delete a project that has time entries logged against it. Deactivate it instead.",
+            "This project has time logged against it, and those entries are billing records. Delete or move its time entries first, or leave the project in place.",
         });
         return;
       }

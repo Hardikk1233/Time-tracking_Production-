@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { UserPlus, X } from 'lucide-react';
+import { errorMessage } from '@/lib/errors';
 
 interface Assignment {
   id: number;
@@ -86,7 +87,7 @@ export function TaskAssignees({
           toast({
             variant: 'destructive',
             title: 'Could not assign',
-            description: err?.error || 'Please try again.',
+            description: errorMessage(err, 'Please try again.'),
           });
         },
       },
@@ -100,7 +101,7 @@ export function TaskAssignees({
         toast({
           variant: 'destructive',
           title: 'Could not withdraw',
-          description: err?.error || 'Please try again.',
+          description: errorMessage(err, 'Please try again.'),
         });
       },
     });

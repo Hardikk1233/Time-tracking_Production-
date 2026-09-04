@@ -20,6 +20,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Plus, Trash2, CheckSquare } from 'lucide-react';
+import { errorMessage } from '@/lib/errors';
 
 const taskSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -51,7 +52,7 @@ export default function Tasks() {
           queryClient.invalidateQueries({ queryKey: getListTasksQueryKey() });
         },
         onError: (err: any) => {
-          toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to delete task.' });
+          toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to delete task.') });
         },
       });
     }
@@ -152,7 +153,7 @@ function CreateTaskDialog({ open, onOpenChange }: { open: boolean, onOpenChange:
         onOpenChange(false);
       },
       onError: (err: any) => {
-        toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to create task.' });
+        toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to create task.') });
       },
     });
   };

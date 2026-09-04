@@ -28,6 +28,7 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, FolderKanban, ChevronRight, Check, PowerOff, Power } from 'lucide-react';
+import { errorMessage } from '@/lib/errors';
 
 const projectSchema = z.object({
   clientId: z.coerce.number().min(1, 'Client is required'),
@@ -63,7 +64,7 @@ export default function Projects() {
           queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
         },
         onError: (err: any) => {
-          toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to delete.' });
+          toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to delete.') });
         }
       });
     }
@@ -78,7 +79,7 @@ export default function Projects() {
           queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
         },
         onError: (err: any) => {
-          toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to update.' });
+          toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to update.') });
         }
       }
     );
@@ -258,7 +259,7 @@ function CreateProjectDialog({ open, onOpenChange, clients }: { open: boolean; o
         onOpenChange(false);
       },
       onError: (err: any) => {
-        toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to create project.' });
+        toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to create project.') });
       }
     });
   };

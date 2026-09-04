@@ -22,6 +22,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, Package } from 'lucide-react';
+import { errorMessage } from '@/lib/errors';
 
 const productSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -56,7 +57,7 @@ export default function Products() {
           queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
         },
         onError: (err: any) => {
-          toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to delete product.' });
+          toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to delete product.') });
         },
       });
     }
@@ -188,7 +189,7 @@ function CreateProductDialog({ open, onOpenChange }: { open: boolean, onOpenChan
         onOpenChange(false);
       },
       onError: (err: any) => {
-        toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to create product.' });
+        toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to create product.') });
       },
     });
   };

@@ -41,6 +41,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '@/components/ui/command';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Plus, Check, X, Filter, Scissors, CalendarOff, Trash2, Pencil, ChevronsUpDown, CheckSquare } from 'lucide-react';
+import { errorMessage } from '@/lib/errors';
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -516,7 +517,7 @@ function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
           setNote('');
         },
         onError: (err: any) => {
-          toast({ variant: 'destructive', title: 'Failed to log leave', description: err?.error || 'An error occurred.' });
+          toast({ variant: 'destructive', title: 'Failed to log leave', description: errorMessage(err, 'An error occurred.') });
         },
       }
     );
@@ -686,7 +687,7 @@ function LogTimeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
           onOpenChange(false);
         },
         onError: (err: any) => {
-          toast({ variant: 'destructive', title: 'Failed to log time', description: err?.error || 'An error occurred.' });
+          toast({ variant: 'destructive', title: 'Failed to log time', description: errorMessage(err, 'An error occurred.') });
         },
       }
     );
@@ -893,7 +894,7 @@ function EditTimeEntryDialog({
           onOpenChange(false);
         },
         onError: (err: any) => {
-          toast({ variant: 'destructive', title: 'Failed to update', description: err?.error || 'An error occurred.' });
+          toast({ variant: 'destructive', title: 'Failed to update', description: errorMessage(err, 'An error occurred.') });
         },
       }
     );
@@ -1059,7 +1060,7 @@ function SplitHoursDialog({
           onOpenChange(false);
         },
         onError: (err: any) => {
-          toast({ variant: 'destructive', title: 'Error', description: err?.error || 'Failed to split.' });
+          toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to split.') });
         },
       }
     );

@@ -21,6 +21,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { CalendarDays, Plus, Trash2, ShieldAlert } from 'lucide-react';
+import { errorMessage } from '@/lib/errors';
 
 const holidaySchema = z.object({
   date: z.string().min(1, 'Date is required'),
@@ -48,7 +49,7 @@ export default function Holidays() {
         queryClient.invalidateQueries({ queryKey: getListPublicHolidaysQueryKey() });
       },
       onError: (err: any) => {
-        toast({ variant: 'destructive', title: 'Error', description: err?.error || 'Failed to remove holiday.' });
+        toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to remove holiday.') });
       },
     });
   };
@@ -168,7 +169,7 @@ function CreateHolidayDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           onOpenChange(false);
         },
         onError: (err: any) => {
-          toast({ variant: 'destructive', title: 'Failed to add holiday', description: err?.error || 'An error occurred.' });
+          toast({ variant: 'destructive', title: 'Failed to add holiday', description: errorMessage(err, 'An error occurred.') });
         },
       }
     );

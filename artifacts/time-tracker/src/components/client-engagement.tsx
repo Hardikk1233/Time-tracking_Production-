@@ -28,6 +28,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, Clock, Package } from 'lucide-react';
+import { errorMessage } from '@/lib/errors';
 
 /**
  * The two engagement panels on a client page.
@@ -80,7 +81,7 @@ export function HourBlocksCard({ clientId, canManage }: { clientId: number; canM
           queryClient.invalidateQueries({ queryKey: getGetClientHourBlocksQueryKey(clientId) });
         },
         onError: (err: any) => {
-          toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to remove block.' });
+          toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to remove block.') });
         },
       });
     }
@@ -201,7 +202,7 @@ function AddHourBlockDialog({ open, onOpenChange, clientId }: { open: boolean; o
         onOpenChange(false);
       },
       onError: (err: any) => {
-        toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to record purchase.' });
+        toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to record purchase.') });
       },
     });
   };
@@ -289,7 +290,7 @@ export function ProductAllocationCard({ clientId, canManage }: { clientId: numbe
           invalidate();
         },
         onError: (err: any) => {
-          toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to allocate product.' });
+          toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to allocate product.') });
         },
       },
     );
@@ -299,7 +300,7 @@ export function ProductAllocationCard({ clientId, canManage }: { clientId: numbe
     removeMutation.mutate({ assignmentId: id }, {
       onSuccess: () => { toast({ title: 'Allocation withdrawn' }); invalidate(); },
       onError: (err: any) => {
-        toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to withdraw allocation.' });
+        toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to withdraw allocation.') });
       },
     });
   };

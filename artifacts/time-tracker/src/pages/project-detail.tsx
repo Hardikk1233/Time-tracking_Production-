@@ -30,6 +30,7 @@ import { ArrowLeft, FolderKanban, Users, CheckSquare, UserPlus, UserMinus, Shiel
 import { Link } from 'wouter';
 import { TaskAssignees } from '@/components/task-assignees';
 import { format } from 'date-fns';
+import { errorMessage } from '@/lib/errors';
 
 const ROLE_ORDER = ['md', 'avp', 'associate', 'analyst'] as const;
 const ROLE_LABELS: Record<string, string> = { md: 'Managing Directors', avp: 'AVPs', associate: 'Associates', analyst: 'Analysts' };
@@ -84,7 +85,7 @@ export default function ProjectDetail() {
           queryClient.invalidateQueries({ queryKey: getListProjectAssignmentsQueryKey(projectId) });
           setSelectedUserId('');
         },
-        onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to assign.' }),
+        onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to assign.') }),
       }
     );
   };
@@ -97,7 +98,7 @@ export default function ProjectDetail() {
           toast({ title: 'User removed from project' });
           queryClient.invalidateQueries({ queryKey: getListProjectAssignmentsQueryKey(projectId) });
         },
-        onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to remove.' }),
+        onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to remove.') }),
       }
     );
   };
@@ -128,7 +129,7 @@ export default function ProjectDetail() {
             queryClient.invalidateQueries({ queryKey: getListTasksQueryKey() });
           },
           onError: (err: any) =>
-            toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to enable task.' }),
+            toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to enable task.') }),
         },
       );
     };
@@ -143,7 +144,7 @@ export default function ProjectDetail() {
       {
         onSuccess: created => enable(created.id),
         onError: (err: any) =>
-          toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to create task.' }),
+          toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to create task.') }),
       },
     );
   };
@@ -158,7 +159,7 @@ export default function ProjectDetail() {
           queryClient.invalidateQueries({ queryKey: getListProjectTasksQueryKey(projectId) });
           setSelectedTaskId('');
         },
-        onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to enable task.' }),
+        onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to enable task.') }),
       }
     );
   };
@@ -172,7 +173,7 @@ export default function ProjectDetail() {
             toast({ title: 'Task removed from project' });
             queryClient.invalidateQueries({ queryKey: getListProjectTasksQueryKey(projectId) });
           },
-          onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to remove task.' }),
+          onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to remove task.') }),
         }
       );
     }
