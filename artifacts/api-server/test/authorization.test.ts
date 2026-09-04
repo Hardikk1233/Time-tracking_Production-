@@ -182,8 +182,18 @@ describe("authorization", () => {
 
   describe("clients", () => {
     it("hides staffing and commercial data from an unrelated colleague", async () => {
-      expect((await associate.get(`/api/clients/${f.acmeId}/assignments`)).status).toBe(404);
-      expect((await analyst.get(`/api/clients/${f.acmeId}/assignments`)).status).toBe(404);
+      // The fixture associate and analyst sit on Acme's own audit project, so
+      // they stopped being "unrelated" the moment client visibility began to
+      // count project membership. otherAssociate works on Beta alone.
+      expect((await otherAssociate.get(`/api/clients/${f.acmeId}/assignments`)).status).toBe(404);
+    });
+
+    it("shows the client team to the people working on its projects", async () => {
+      // Reaching a client through one of its projects is one of the two routes
+      // visibleClientIds counts — the fix for the analyst whose Log Time dialog
+      // offered no clients at all.
+      expect((await associate.get(`/api/clients/${f.acmeId}/assignments`)).status).toBe(200);
+      expect((await analyst.get(`/api/clients/${f.acmeId}/assignments`)).status).toBe(200);
     });
 
     it("keeps FTE history to AVP and above", async () => {
