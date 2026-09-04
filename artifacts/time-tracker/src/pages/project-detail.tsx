@@ -11,9 +11,11 @@ import {
   useListProjectTasks,
   useListProjectTaskAssignments,
   useAssignTaskToProject,
+  useCreateTask,
   useRemoveTaskFromProject,
   getListProjectAssignmentsQueryKey,
   getListProjectTasksQueryKey,
+  getListTasksQueryKey,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
@@ -21,9 +23,10 @@ import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, FolderKanban, Users, CheckSquare, UserPlus, UserMinus, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, FolderKanban, Users, CheckSquare, UserPlus, UserMinus, ShieldCheck, Plus } from 'lucide-react';
 import { Link } from 'wouter';
 import { TaskAssignees } from '@/components/task-assignees';
 import { format } from 'date-fns';
@@ -41,6 +44,7 @@ export default function ProjectDetail() {
   const projectId = parseInt(params?.id || '0', 10);
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [selectedTaskId, setSelectedTaskId] = useState<string>('');
+  const [newTaskName, setNewTaskName] = useState('');
 
   const { data: project, isLoading: isLoadingProject } = useGetProject(projectId);
   const { data: assignments, isLoading: isLoadingAssignments } = useListProjectAssignments(projectId);
@@ -53,6 +57,7 @@ export default function ProjectDetail() {
   const removeMutation = useRemoveUserFromProject();
   const assignTaskMutation = useAssignTaskToProject();
   const removeTaskMutation = useRemoveTaskFromProject();
+  const createTaskMutation = useCreateTask();
 
   // Associates and above can manage a project's team and tasks
   const isManager = ['associate', 'avp', 'md'].includes(user?.role || '');
@@ -94,6 +99,52 @@ export default function ProjectDetail() {
         },
         onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to remove.' }),
       }
+    );
+  };
+
+  /**
+   * Define a task and switch it on for this project in one go.
+   *
+   * A name already in the catalog is reused rather than rejected: the catalog
+   * is firm-wide and unique on name, so "Research" typed on a second project
+   * should enable the existing one, not fail with a conflict the person cannot
+   * act on.
+   */
+  const handleCreateAndEnableTask = () => {
+    const name = newTaskName.trim();
+    if (!name) return;
+
+    const existing = (allTasks || []).find(
+      t => t.name.trim().toLowerCase() === name.toLowerCase(),
+    );
+
+    const enable = (taskId: number) => {
+      assignTaskMutation.mutate(
+        { projectId, data: { taskId } },
+        {
+          onSuccess: () => {
+            setNewTaskName('');
+            queryClient.invalidateQueries({ queryKey: getListProjectTasksQueryKey(projectId) });
+            queryClient.invalidateQueries({ queryKey: getListTasksQueryKey() });
+          },
+          onError: (err: any) =>
+            toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to enable task.' }),
+        },
+      );
+    };
+
+    if (existing) {
+      enable(existing.id);
+      return;
+    }
+
+    createTaskMutation.mutate(
+      { data: { name } },
+      {
+        onSuccess: created => enable(created.id),
+        onError: (err: any) =>
+          toast({ variant: 'destructive', title: 'Error', description: err.error || 'Failed to create task.' }),
+      },
     );
   };
 
@@ -196,24 +247,52 @@ export default function ProjectDetail() {
           </CardHeader>
           <CardContent className="pt-4 space-y-4">
             {isManager && (
-              <div className="flex gap-2">
-                <Select value={selectedTaskId} onValueChange={setSelectedTaskId}>
-                  <SelectTrigger className="flex-1 bg-background">
-                    <SelectValue placeholder="Enable a task from the catalog..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {unassignedTasks.length === 0 ? (
-                      <div className="p-2 text-sm text-muted-foreground text-center">All catalog tasks enabled</div>
-                    ) : (
-                      unassignedTasks.map(t => (
-                        <SelectItem key={t.id} value={t.id.toString()}>{t.name}</SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-                <Button size="sm" onClick={handleAssignTask} disabled={!selectedTaskId || assignTaskMutation.isPending} className="shrink-0">
-                  <CheckSquare className="w-4 h-4" />
-                </Button>
+              <div className="space-y-2">
+                {/* Naming a task and enabling it are one action here. Sending
+                    somebody to the catalog to define it first, then back to the
+                    project to switch it on, is the round trip that made this
+                    panel look broken when the catalog was empty. */}
+                <div className="flex gap-2">
+                  <Input
+                    value={newTaskName}
+                    onChange={e => setNewTaskName(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleCreateAndEnableTask();
+                      }
+                    }}
+                    placeholder="Add a task — e.g. Investment Memo"
+                    className="flex-1 bg-background"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={handleCreateAndEnableTask}
+                    disabled={!newTaskName.trim() || createTaskMutation.isPending || assignTaskMutation.isPending}
+                    className="shrink-0"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+
+                {/* Only worth offering once something exists to reuse. */}
+                {unassignedTasks.length > 0 && (
+                  <div className="flex gap-2">
+                    <Select value={selectedTaskId} onValueChange={setSelectedTaskId}>
+                      <SelectTrigger className="flex-1 bg-background">
+                        <SelectValue placeholder="…or reuse one from the catalog" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {unassignedTasks.map(t => (
+                          <SelectItem key={t.id} value={t.id.toString()}>{t.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button size="sm" variant="outline" onClick={handleAssignTask} disabled={!selectedTaskId || assignTaskMutation.isPending} className="shrink-0">
+                      <CheckSquare className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
 

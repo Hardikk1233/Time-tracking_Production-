@@ -70,10 +70,13 @@ export function Sidebar() {
     ...(isAssociateOrAbove ? [
       { name: 'Approvals', path: '/approvals', icon: CheckSquare },
       { name: 'Projects', path: '/projects', icon: FolderKanban },
+      // Associates define the tasks they enable on their own projects, so
+      // hiding the catalog from them left the project picker with nothing to
+      // offer and no way to fix it.
+      { name: 'Tasks', path: '/tasks', icon: CheckSquare },
     ] : []),
     ...(isAvpOrAbove ? [
       { name: 'Clients', path: '/clients', icon: Briefcase },
-      { name: 'Tasks', path: '/tasks', icon: CheckSquare },
       { name: 'Team', path: '/team', icon: Users },
     ] : []),
     { name: 'Reports', path: '/reports', icon: BarChart2 },

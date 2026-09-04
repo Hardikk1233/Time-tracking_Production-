@@ -37,7 +37,11 @@ export default function Tasks() {
   const deleteMutation = useDeleteTask();
 
   // Global task catalog: only AVPs and MDs can add/remove entries
-  const isManager = ['avp', 'md'].includes(user?.role || '');
+  // Associates define the tasks they enable on their projects. Deleting stays
+  // with AVPs: a task with time logged against it cannot be removed, and that
+  // refusal is a poor thing to hand somebody mid-flow.
+  const canAdd = ['associate', 'avp', 'md'].includes(user?.role || '');
+  const canDelete = ['avp', 'md'].includes(user?.role || '');
 
   const handleDelete = (id: number) => {
     if (confirm('Are you sure you want to delete this task from the catalog?')) {
@@ -61,7 +65,7 @@ export default function Tasks() {
           <p className="text-muted-foreground font-mono text-sm mt-1">Firm-wide catalog of billable work types</p>
         </div>
         
-        {isManager && (
+        {canAdd && (
           <CreateTaskDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} />
         )}
       </div>
@@ -74,7 +78,7 @@ export default function Tasks() {
                 <th className="px-6 py-4 font-medium">Task Name</th>
                 <th className="px-6 py-4 font-medium">Description</th>
                 <th className="px-6 py-4 font-medium">Created</th>
-                {isManager && <th className="px-6 py-4 font-medium text-right">Actions</th>}
+                {canDelete && <th className="px-6 py-4 font-medium text-right">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
@@ -84,7 +88,7 @@ export default function Tasks() {
                     <td className="px-6 py-4"><Skeleton className="h-4 w-48" /></td>
                     <td className="px-6 py-4"><Skeleton className="h-4 w-32" /></td>
                     <td className="px-6 py-4"><Skeleton className="h-4 w-20" /></td>
-                    {isManager && <td className="px-6 py-4"><Skeleton className="h-8 w-8 ml-auto" /></td>}
+                    {canDelete && <td className="px-6 py-4"><Skeleton className="h-8 w-8 ml-auto" /></td>}
                   </tr>
                 ))
               ) : tasks && tasks.length > 0 ? (
@@ -100,7 +104,7 @@ export default function Tasks() {
                     <td className="px-6 py-4 font-mono text-xs text-muted-foreground">
                       {format(new Date(task.createdAt), 'MMM dd, yyyy')}
                     </td>
-                    {isManager && (
+                    {canDelete && (
                       <td className="px-6 py-4 text-right">
                         <Button 
                           variant="ghost" 
@@ -116,7 +120,7 @@ export default function Tasks() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={isManager ? 4 : 3} className="px-6 py-12 text-center text-muted-foreground font-mono text-sm border-b-0">
+                  <td colSpan={canDelete ? 4 : 3} className="px-6 py-12 text-center text-muted-foreground font-mono text-sm border-b-0">
                     NO TASKS FOUND
                   </td>
                 </tr>
