@@ -8,6 +8,7 @@ import {
   usersTable,
 } from "@workspace/db";
 import { principal, requireRole, type Principal } from "../middlewares/auth";
+import { visibleClientIds } from "../lib/scope";
 import { parseId } from "../lib/validation";
 
 const router: IRouter = Router();
@@ -40,16 +41,13 @@ function isEngagementType(value: unknown): value is EngagementType {
   );
 }
 
-async function managedClientIds(me: Principal): Promise<number[] | null> {
-  if (me.role === "md") return null;
-
-  const rows = await db
-    .select({ clientId: clientUsersTable.clientId })
-    .from(clientUsersTable)
-    .where(eq(clientUsersTable.userId, me.id));
-
-  return rows.map((r) => r.clientId);
-}
+// Which clients the caller may see is answered by visibleClientIds in
+// lib/scope, and only there. This file used to keep its own copy that counted
+// client assignments alone, and the two answers drifting apart produced a bug
+// in each direction: first an associate who could list a client but not create
+// its first project, then an analyst on a project team whose Log Time dialog
+// offered no clients at all. Write access is unaffected - every mutating route
+// here is gated at requireRole("avp") regardless of visibility.
 
 /**
  * Resolves the client id and confirms the caller is entitled to it, answering
@@ -70,7 +68,7 @@ async function resolveClient(
     return null;
   }
 
-  const allowed = await managedClientIds(principal(req));
+  const allowed = await visibleClientIds(principal(req));
   if (allowed !== null && !allowed.includes(clientId)) {
     // 404 rather than 403 — existence is not something to disclose.
     res.status(404).json({ error: "Client not found" });
@@ -82,7 +80,7 @@ async function resolveClient(
 // ─── Clients ─────────────────────────────────────────────────────────────────
 
 router.get("/clients", async (req, res): Promise<void> => {
-  const visibleIds = await managedClientIds(principal(req));
+  const visibleIds = await visibleClientIds(principal(req));
 
   type ClientRow = typeof clientsTable.$inferSelect;
   let clients: ClientRow[];
