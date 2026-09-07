@@ -62,6 +62,8 @@ export default function ProjectDetail() {
 
   // Associates and above can manage a project's team and tasks
   const isManager = ['associate', 'avp', 'md'].includes(user?.role || '');
+  // Minting a catalog task went back to AVP-only on 2026-09-07.
+  const canCreateTask = ['avp', 'md'].includes(user?.role || '');
 
   const assignedIds = new Set((assignments || []).map(u => u.id));
   const unassignedUsers = (allUsers || []).filter(u => !assignedIds.has(u.id));
@@ -249,10 +251,11 @@ export default function ProjectDetail() {
           <CardContent className="pt-4 space-y-4">
             {isManager && (
               <div className="space-y-2">
-                {/* Naming a task and enabling it are one action here. Sending
-                    somebody to the catalog to define it first, then back to the
-                    project to switch it on, is the round trip that made this
-                    panel look broken when the catalog was empty. */}
+                {/* Defining a catalog task went back to AVP-only after a week of
+                    associate-created one-offs; associates keep the reuse picker
+                    below, which enables an existing task rather than minting a
+                    new one. */}
+                {canCreateTask && (
                 <div className="flex gap-2">
                   <Input
                     value={newTaskName}
@@ -275,13 +278,14 @@ export default function ProjectDetail() {
                     <Plus className="w-4 h-4" />
                   </Button>
                 </div>
+                )}
 
                 {/* Only worth offering once something exists to reuse. */}
                 {unassignedTasks.length > 0 && (
                   <div className="flex gap-2">
                     <Select value={selectedTaskId} onValueChange={setSelectedTaskId}>
                       <SelectTrigger className="flex-1 bg-background">
-                        <SelectValue placeholder="…or reuse one from the catalog" />
+                        <SelectValue placeholder={canCreateTask ? '…or reuse one from the catalog' : 'Enable a task from the catalog'} />
                       </SelectTrigger>
                       <SelectContent>
                         {unassignedTasks.map(t => (

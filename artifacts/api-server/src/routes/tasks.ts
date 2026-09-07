@@ -32,7 +32,7 @@ router.get("/tasks", async (req, res): Promise<void> => {
   res.json(rows);
 });
 
-router.post("/tasks", requireRole("associate"), async (req, res): Promise<void> => {
+router.post("/tasks", requireRole("avp"), async (req, res): Promise<void> => {
   const { name, description } = req.body as {
     name?: string;
     description?: string;
@@ -81,7 +81,7 @@ router.get("/tasks/:taskId", async (req, res): Promise<void> => {
   res.json(row);
 });
 
-router.patch("/tasks/:taskId", requireRole("associate"), async (req, res): Promise<void> => {
+router.patch("/tasks/:taskId", requireRole("avp"), async (req, res): Promise<void> => {
   const taskId = parseInt(
     Array.isArray(req.params.taskId) ? req.params.taskId[0] : req.params.taskId,
     10,

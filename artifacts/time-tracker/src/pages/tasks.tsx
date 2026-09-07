@@ -38,10 +38,10 @@ export default function Tasks() {
   const deleteMutation = useDeleteTask();
 
   // Global task catalog: only AVPs and MDs can add/remove entries
-  // Associates define the tasks they enable on their projects. Deleting stays
-  // with AVPs: a task with time logged against it cannot be removed, and that
-  // refusal is a poor thing to hand somebody mid-flow.
-  const canAdd = ['associate', 'avp', 'md'].includes(user?.role || '');
+  // The catalog is AVP-curated. A week of associate-created tasks filled it
+  // with one-off project names, so definition went back up a rank on
+  // 2026-09-07; associates still browse it and enable tasks on their projects.
+  const canAdd = ['avp', 'md'].includes(user?.role || '');
   const canDelete = ['avp', 'md'].includes(user?.role || '');
 
   const handleDelete = (id: number) => {
