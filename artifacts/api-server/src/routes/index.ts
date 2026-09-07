@@ -26,7 +26,16 @@ router.use(authRouter);
 // Crash reports are taken before authentication on purpose: a browser that
 // failed to sign in is exactly the case worth capturing, and demanding a valid
 // token would discard the evidence for the bug being reported.
-router.use(devIngestLimiter, devIngestRouter);
+//
+// The limiter is bound to that one path. Passed to router.use without a path
+// it applied to every request through this router instead, so the whole API
+// ran on the crash-report budget of 30 a minute per address - and with the
+// office behind one address, that was 30 a minute for the firm. A dashboard
+// load is roughly eight calls, so ordinary use exhausted it in seconds and the
+// client's retries kept it exhausted: the "too many requests" toasts and the
+// app feeling frozen were both this line.
+router.use("/dev/client-events", devIngestLimiter);
+router.use(devIngestRouter);
 
 // All routes below require authentication
 router.use(requireAuth);
