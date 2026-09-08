@@ -15,10 +15,25 @@ import { usersTable } from "./users";
 /**
  * Who is doing which task on which project.
  *
- * Records an intention, not a permission: anyone on a project may still log
- * time against any task enabled there. Gating time entry on an assignment
- * would turn every unplanned piece of work into a permission error, which is
- * not what a timesheet is for.
+ * NOT IN USE. The routes and UI that read this were withdrawn on 2026-09-08 at
+ * Kashif's instruction; the table is kept on purpose, and deliberately not
+ * dropped:
+ *
+ *   - it holds the pilot's assignment history, and there is one environment,
+ *     so a drop is irreversible;
+ *   - migration 0007 is already recorded as applied in production, so deleting
+ *     it from the journal would put the schema out of step with the database.
+ *     Retiring the table properly means a new migration that drops it, not an
+ *     edit to the old one.
+ *
+ * Keep this file as long as the table exists. Deleting it makes the next
+ * `drizzle-kit generate` emit a DROP TABLE, which is exactly what the two
+ * points above are avoiding.
+ *
+ * Retained below for whoever brings it back: the record is an intention, not a
+ * permission — anyone on a project could still log time against any task
+ * enabled there. Gating time entry on an assignment would turn every unplanned
+ * piece of work into a permission error, which is not what a timesheet is for.
  *
  * Composite foreign key to project_tasks rather than to projects and tasks
  * separately, so a task cannot be assigned on a project where it was never
