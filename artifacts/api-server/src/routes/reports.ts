@@ -1,8 +1,9 @@
 import { Router, type IRouter } from "express";
-import { principal } from "../middlewares/auth";
+import { principal, type Principal } from "../middlewares/auth";
 import { eq, and, gte, lte, sql, inArray, isNull, or } from "drizzle-orm";
 import { format, subMonths, startOfMonth, endOfMonth, eachMonthOfInterval } from "date-fns";
 import { productivity, percent, HOURS_PER_DAY } from "../lib/metrics";
+import { visibleClientIds, visibleUserIds } from "../lib/scope";
 import {
   db,
   timeEntriesTable,
@@ -11,7 +12,6 @@ import {
   clientsTable,
   publicHolidaysTable,
   leavesTable,
-  clientUsersTable,
   clientFteHistoryTable,
   tasksTable,
 } from "@workspace/db";
@@ -62,32 +62,28 @@ function intersect(scopedIds: number[] | null, filterIds: number[] | null): numb
   return scopedIds.filter((id) => set.has(id));
 }
 
-async function getSubordinateUserIds(avpId: number): Promise<number[]> {
-  const direct = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.reportingToId, avpId));
-  const directIds = direct.map((r) => r.id);
-  let indirectIds: number[] = [];
-  if (directIds.length > 0) {
-    const indirect = await db.select({ id: usersTable.id }).from(usersTable).where(inArray(usersTable.reportingToId, directIds));
-    indirectIds = indirect.map((r) => r.id);
-  }
-  return [avpId, ...directIds, ...indirectIds];
-}
-
-async function getUserClientIds(userId: number): Promise<number[]> {
-  const rows = await db.selectDistinct({ clientId: clientUsersTable.clientId }).from(clientUsersTable).where(eq(clientUsersTable.userId, userId));
-  return rows.map((r) => r.clientId);
-}
-
 type Scope = { scopedUserIds: number[] | null; scopedClientIds: number[] | null };
 
-async function resolveScope(currentUserId: number, currentRole: string): Promise<Scope> {
-  if (currentRole === "md") return { scopedUserIds: null, scopedClientIds: null };
-  if (currentRole === "avp") {
-    const [subIds, clientIds] = await Promise.all([getSubordinateUserIds(currentUserId), getUserClientIds(currentUserId)]);
-    return { scopedUserIds: subIds, scopedClientIds: clientIds };
-  }
-  const clientIds = await getUserClientIds(currentUserId);
-  return { scopedUserIds: [currentUserId], scopedClientIds: clientIds };
+/**
+ * Who this report may cover. `null` on either field means unrestricted.
+ *
+ * Delegates to lib/scope, which is the one answer the rest of the app uses.
+ * This module used to decide an AVP's team from users.reporting_to_id - the
+ * org chart - while every other route reached it through the projects under
+ * that AVP's clients. Nothing populates reporting_to_id on Entra sign-in, and
+ * the Team page only offers the field when a person is typed in by hand, so
+ * for the whole pilot it was null: Team Reports asked who reported to the AVP,
+ * got nobody, and showed them their own hours under a team heading.
+ *
+ * That was the fourth private copy of this question in the codebase. The other
+ * three each produced a live bug before being folded into lib/scope.
+ */
+async function resolveScope(me: Principal): Promise<Scope> {
+  const [scopedUserIds, scopedClientIds] = await Promise.all([
+    visibleUserIds(me),
+    visibleClientIds(me),
+  ]);
+  return { scopedUserIds, scopedClientIds };
 }
 
 /** Sum billable hours per clientId for a time window. */
@@ -198,23 +194,25 @@ function buildPeriodStats(billable: number, contracted: number) {
   };
 }
 
-// ─── Auth middleware (all roles) ───────────────────────────────────────────────
+// ─── Caller still on the roster (all roles) ────────────────────────────────────
 
+// The role and id come off the principal now, so nothing is stashed on the
+// request. What remains is the check that the caller still has a row: a token
+// stays valid for its lifetime after somebody is removed, and a report is a
+// poor thing to keep serving them.
 router.use(async (req, res, next) => {
-  const userId = principal(req).id;
-  const [user] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, userId));
+  const [user] = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(eq(usersTable.id, principal(req).id));
   if (!user) { res.status(403).json({ error: "User not found" }); return; }
-  (req as any)._reporterRole = user.role;
-  (req as any)._reporterUserId = userId;
   next();
 });
 
 // ─── GET /filter-options ──────────────────────────────────────────────────────
 
 router.get("/filter-options", async (req, res): Promise<void> => {
-  const currentRole = (req as any)._reporterRole as string;
-  const currentUserId = (req as any)._reporterUserId as number;
-  const { scopedUserIds, scopedClientIds } = await resolveScope(currentUserId, currentRole);
+  const { scopedUserIds, scopedClientIds } = await resolveScope(principal(req));
 
   const [usersResult, clientsResult] = await Promise.all([
     scopedUserIds === null
@@ -248,14 +246,12 @@ router.get("/filter-options", async (req, res): Promise<void> => {
 //   - monthlySummary: monthly chart for selected client — when clientId given
 
 router.get("/client-report", async (req, res): Promise<void> => {
-  const currentRole = (req as any)._reporterRole as string;
-  const currentUserId = (req as any)._reporterUserId as number;
 
   const { startDate, endDate, clientId: rawClientId } = req.query as Record<string, string | undefined>;
   const focusClientId = rawClientId ? parseInt(rawClientId, 10) : null;
   const { start, end } = resolveRange(startDate, endDate);
 
-  const { scopedUserIds, scopedClientIds } = await resolveScope(currentUserId, currentRole);
+  const { scopedUserIds, scopedClientIds } = await resolveScope(principal(req));
 
   if (scopedUserIds !== null && scopedUserIds.length === 0) {
     res.json({ clientSummary: [], monthlySummary: null });
@@ -410,8 +406,6 @@ router.get("/client-report", async (req, res): Promise<void> => {
 // Hours by User → Client → Project → Task
 
 router.get("/team-report", async (req, res): Promise<void> => {
-  const currentRole = (req as any)._reporterRole as string;
-  const currentUserId = (req as any)._reporterUserId as number;
 
   const { startDate, endDate, userIds: rawUserIds, clientIds: rawClientIds } =
     req.query as Record<string, string | string[] | undefined>;
@@ -420,7 +414,7 @@ router.get("/team-report", async (req, res): Promise<void> => {
   const filterUserIds   = parseIds(rawUserIds as string | undefined);
   const filterClientIds = parseIds(rawClientIds as string | undefined);
 
-  const { scopedUserIds, scopedClientIds } = await resolveScope(currentUserId, currentRole);
+  const { scopedUserIds, scopedClientIds } = await resolveScope(principal(req));
 
   const effectiveUserIds   = intersect(scopedUserIds, filterUserIds);
   const effectiveClientIds = intersect(scopedClientIds, filterClientIds);
@@ -489,7 +483,7 @@ router.get("/team-report", async (req, res): Promise<void> => {
 // ─── GET /my-report ───────────────────────────────────────────────────────────
 
 router.get("/my-report", async (req, res): Promise<void> => {
-  const currentUserId = (req as any)._reporterUserId as number;
+  const currentUserId = principal(req).id;
   const { startDate, endDate } = req.query as Record<string, string | undefined>;
   const { start, end } = resolveRange(startDate, endDate);
 
