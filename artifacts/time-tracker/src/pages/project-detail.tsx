@@ -9,6 +9,7 @@ import {
   useListUsers,
   useListTasks,
   useListProjectTasks,
+  useListProjectTaskAssignments,
   useAssignTaskToProject,
   useCreateTask,
   useRemoveTaskFromProject,
@@ -27,6 +28,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, FolderKanban, Users, CheckSquare, UserPlus, UserMinus, ShieldCheck, Plus } from 'lucide-react';
 import { Link } from 'wouter';
+import { TaskAssignees } from '@/components/task-assignees';
 import { format } from 'date-fns';
 import { errorMessage } from '@/lib/errors';
 
@@ -50,6 +52,7 @@ export default function ProjectDetail() {
   const { data: allUsers } = useListUsers();
   const { data: tasks, isLoading: isLoadingTasks } = useListProjectTasks(projectId);
   const { data: allTasks } = useListTasks();
+  const { data: taskAssignments } = useListProjectTaskAssignments(projectId);
 
   const assignMutation = useAssignUserToProject();
   const removeMutation = useRemoveUserFromProject();
@@ -309,6 +312,15 @@ export default function ProjectDetail() {
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-foreground">{t.name}</p>
                         {t.description && <p className="text-xs text-muted-foreground">{t.description}</p>}
+                        {/* Who is expected to do this. Not a restriction on who
+                            may log against it — anyone on the project still can. */}
+                        <TaskAssignees
+                          projectId={projectId}
+                          taskId={t.id}
+                          assignments={taskAssignments || []}
+                          members={assignments || []}
+                          myRole={user?.role ?? 'analyst'}
+                        />
                       </div>
                     </div>
                     {isManager && (
