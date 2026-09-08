@@ -70,9 +70,10 @@ export function Sidebar() {
     ...(isAssociateOrAbove ? [
       { name: 'Approvals', path: '/approvals', icon: CheckSquare },
       { name: 'Projects', path: '/projects', icon: FolderKanban },
-      // Associates define the tasks they enable on their own projects, so
-      // hiding the catalog from them left the project picker with nothing to
-      // offer and no way to fix it.
+      // Associates no longer define catalog tasks - that went back to AVP on
+      // 2026-09-07 - but they still choose which of them to enable on their
+      // own projects, so they need to see what the catalog holds. The page
+      // renders read-only for them: no New Task button, no delete column.
       { name: 'Tasks', path: '/tasks', icon: CheckSquare },
     ] : []),
     ...(isAvpOrAbove ? [
