@@ -187,20 +187,34 @@ describe("approval integrity", () => {
       expect(res.body.approvedAt).toBeTruthy();
     });
 
-    it("refuses self-approval at any rank", async () => {
+    // Self-approval was refused at every rank until 2026-09-09, when Tristone
+    // asked for it: an associate could not clear their own queue, and bulk
+    // approve failed silently on anything outside the narrower remit. The
+    // ledger still names who signed off, so it stays visible after the fact.
+    it("allows self-approval, and still records who signed off", async () => {
       const ownEntry = await seedEntry({
         userId: f.associate,
         projectId: f.auditProjectId,
         taskId: f.taskId,
       });
-      expect((await associate.post(`/api/time-entries/${ownEntry}/approve`)).status).toBe(403);
+      const res = await associate.post(`/api/time-entries/${ownEntry}/approve`);
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe("approved");
+      expect(res.body.approvedByName).toBe("Asha Rao");
 
       const mdEntry = await seedEntry({
         userId: f.md,
         projectId: f.auditProjectId,
         taskId: f.taskId,
       });
-      expect((await md.post(`/api/time-entries/${mdEntry}/approve`)).status).toBe(403);
+      expect((await md.post(`/api/time-entries/${mdEntry}/approve`)).status).toBe(200);
+    });
+
+    // The widened rule is the queue, not the whole firm: Otto is in the Beta
+    // silo and Ana's Acme entry never reaches his list.
+    it("still refuses an entry the caller cannot see", async () => {
+      const res = await otherAssociate.post(`/api/time-entries/${entryId}/reject`);
+      expect(res.status).toBe(403);
     });
 
     it("defaults unreviewed hours to fully billable on approval", async () => {

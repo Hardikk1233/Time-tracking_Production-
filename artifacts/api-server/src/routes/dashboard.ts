@@ -8,8 +8,6 @@ import {
   tasksTable,
   projectsTable,
   clientsTable,
-  clientUsersTable,
-  projectUsersTable,
   publicHolidaysTable,
   leavesTable,
 } from "@workspace/db";
@@ -538,61 +536,39 @@ router.get("/dashboard/recent-activity", async (req, res): Promise<void> => {
 });
 
 // ─── Pending approvals ────────────────────────────────────────────────────────
-// Scoped by the approver's role:
-//   MD         → all pending entries across all clients
-//   AVP        → pending entries only for clients the AVP is assigned to
-//   Associate  → pending entries only for projects the Associate is assigned to
-// Entries logged by the approver themselves are excluded (can't self-approve).
+// The queue holds every pending entry the caller may decide, which since
+// 2026-09-09 means everyone they can see, themselves included.
+//
+// It asks visibleUserIds - the same rule assertCanDecide applies on the write
+// side - so the badge and the page agree by construction. This route used to
+// keep its own copy: an AVP scope through client assignments, an associate
+// scope through project membership, a `?? "analyst"` fallback, and a clause
+// subtracting the caller's own entries. Every one of those could drift from
+// what the approve endpoint would actually accept, and the self-exclusion now
+// simply undercounted.
 
 router.get("/dashboard/pending-approvals", async (req, res): Promise<void> => {
-  const currentUserId = principal(req).id;
-  const [currentUser] = await db
-    .select({ role: usersTable.role })
-    .from(usersTable)
-    .where(eq(usersTable.id, currentUserId));
+  const me = principal(req);
 
-  const role = currentUser?.role ?? "analyst";
-
-  // Build scope condition based on role
-  let scopeCondition: ReturnType<typeof eq> | undefined;
-
-  if (role === "avp") {
-    // Only entries whose project belongs to a client the AVP manages
-    const myClients = await db
-      .selectDistinct({ clientId: clientUsersTable.clientId })
-      .from(clientUsersTable)
-      .where(eq(clientUsersTable.userId, currentUserId));
-    const myClientIds = myClients.map((r) => r.clientId);
-    if (myClientIds.length === 0) {
-      res.json([]);
-      return;
-    }
-    scopeCondition = inArray(projectsTable.clientId, myClientIds) as any;
-  } else if (role === "associate") {
-    // Only entries whose project the Associate is assigned to
-    const myProjects = await db
-      .selectDistinct({ projectId: projectUsersTable.projectId })
-      .from(projectUsersTable)
-      .where(eq(projectUsersTable.userId, currentUserId));
-    const myProjectIds = myProjects.map((r) => r.projectId);
-    if (myProjectIds.length === 0) {
-      res.json([]);
-      return;
-    }
-    scopeCondition = inArray(timeEntriesTable.projectId, myProjectIds) as any;
-  } else if (role !== "md") {
-    // Analyst (or unknown) — no approval access
+  // An analyst decides nothing, so their queue is empty by definition rather
+  // than by filter.
+  if (me.role === "analyst") {
     res.json([]);
     return;
   }
-  // MD: scopeCondition stays undefined → no extra filter → sees everything
+
+  const visible = await visibleUserIds(me);
 
   const conditions: ReturnType<typeof eq>[] = [
     eq(timeEntriesTable.status, "pending") as any,
-    // Exclude the approver's own entries
-    sql`${timeEntriesTable.userId} != ${currentUserId}` as any,
   ];
-  if (scopeCondition) conditions.push(scopeCondition);
+  if (visible !== null) {
+    if (visible.length === 0) {
+      res.json([]);
+      return;
+    }
+    conditions.push(inArray(timeEntriesTable.userId, visible) as any);
+  }
 
   const rows = await db
     .select({

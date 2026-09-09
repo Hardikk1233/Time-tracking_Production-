@@ -495,7 +495,11 @@ router.post(
       return;
     }
 
-    if (!(await isInApprovalScope(me, entry))) {
+    // Same reach as approving. The split decides what the client is billed, so
+    // it is half of the same decision - somebody able to sign an entry off but
+    // not adjust its billable hours could only ever approve it at full rate.
+    const visible = await visibleUserIds(me);
+    if (visible !== null && !visible.includes(entry.userId)) {
       res.status(403).json({ error: "This entry is outside your remit" });
       return;
     }
@@ -527,7 +531,25 @@ router.post(
 
 // ─── Approve / reject / reopen ───────────────────────────────────────────────
 
-/** Shared guard: Associate+, in scope, never your own, only from pending. */
+/**
+ * Shared guard for approve, reject and split: Associate+, still pending, and
+ * within what the caller can see.
+ *
+ * Whatever reaches somebody's queue is theirs to decide, their own hours
+ * included. Tristone chose that on 2026-09-09, replacing two narrower rules:
+ * a flat refusal of self-approval, and an approval remit (isInApprovalScope)
+ * tighter than the queue itself, which made "Approve all" fail silently on
+ * every teammate entry the caller could see but not decide.
+ *
+ * The trade is deliberate and worth restating where the code enforces it:
+ * there is no longer a second pair of eyes on an Associate's own billable
+ * hours, and an approved entry freezes - only an MD can reopen one. The audit
+ * ledger still records who signed off, so a self-approval is visible after the
+ * fact even though nothing blocks it.
+ *
+ * Visibility is checked before status so the reply cannot confirm the state of
+ * an entry the caller was never allowed to see.
+ */
 async function assertCanDecide(
   req: Parameters<Parameters<IRouter["post"]>[1]>[0],
   res: Parameters<Parameters<IRouter["post"]>[1]>[1],
@@ -545,10 +567,9 @@ async function assertCanDecide(
     return null;
   }
 
-  // Approving your own hours defeats the point of an approval step. This was
-  // previously only filtered out of the queue's *display*, never enforced.
-  if (entry.userId === me.id) {
-    res.status(403).json({ error: "You cannot decide on your own time entry" });
+  const visible = await visibleUserIds(me);
+  if (visible !== null && !visible.includes(entry.userId)) {
+    res.status(403).json({ error: "This entry is outside your remit" });
     return null;
   }
 
@@ -556,11 +577,6 @@ async function assertCanDecide(
     res.status(409).json({
       error: `This entry is already ${entry.status} and cannot be decided again.`,
     });
-    return null;
-  }
-
-  if (!(await isInApprovalScope(me, entry))) {
-    res.status(403).json({ error: "This entry is outside your remit" });
     return null;
   }
 

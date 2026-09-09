@@ -147,7 +147,10 @@ export default function TimeEntries() {
   const isAssociateOrAbove = ['associate', 'avp', 'md'].includes(user?.role ?? '');
   const isAvpOrAbove = ['avp', 'md'].includes(user?.role ?? '');
 
-  // Associates and above can approve any pending entry, including their own
+  // Associates and above may decide any pending entry they can see, their own
+  // included. The list is already scoped to what the caller may see, so
+  // everything pending in it is decidable - which is what makes Approve all
+  // able to finish rather than 403 partway.
   const approvableEntries = useMemo(
     () => (entries ?? []).filter(e => e.status === 'pending' && isAssociateOrAbove),
     [entries, isAssociateOrAbove],
@@ -162,6 +165,9 @@ export default function TimeEntries() {
         queryClient.invalidateQueries({ queryKey: getListTimeEntriesQueryKey() });
         setSelectedIds(prev => { const next = new Set(prev); next.delete(id); return next; });
       },
+      onError: (err: any) => {
+        toast({ variant: 'destructive', title: 'Could not approve', description: errorMessage(err, 'Please try again.') });
+      },
     });
   };
 
@@ -172,6 +178,9 @@ export default function TimeEntries() {
         queryClient.invalidateQueries({ queryKey: getListTimeEntriesQueryKey() });
         setSelectedIds(prev => { const next = new Set(prev); next.delete(id); return next; });
       },
+      onError: (err: any) => {
+        toast({ variant: 'destructive', title: 'Could not reject', description: errorMessage(err, 'Please try again.') });
+      },
     });
   };
 
@@ -180,17 +189,32 @@ export default function TimeEntries() {
     const ids = [...selectedIds].filter(id => approvableIds.has(id));
     if (ids.length === 0) return;
     let approved = 0;
+    let firstRefusal: string | null = null;
     await Promise.all(
       ids.map(id =>
         new Promise<void>(resolve => {
           approveMutation.mutate({ entryId: id }, {
             onSuccess: () => { approved++; resolve(); },
-            onError: () => resolve(),
+            onError: (err: any) => {
+              // Every refusal used to be discarded here, so a run that
+              // approved nothing still reported a count and no reason.
+              firstRefusal ??= errorMessage(err, 'The server refused it.');
+              resolve();
+            },
           });
         }),
       ),
     );
-    toast({ title: `${approved} entr${approved !== 1 ? 'ies' : 'y'} approved` });
+    const refused = ids.length - approved;
+    if (refused > 0) {
+      toast({
+        variant: approved === 0 ? 'destructive' : 'default',
+        title: `${approved} of ${ids.length} approved`,
+        description: `${refused} could not be: ${firstRefusal}`,
+      });
+    } else {
+      toast({ title: `${approved} entr${approved !== 1 ? 'ies' : 'y'} approved` });
+    }
     queryClient.invalidateQueries({ queryKey: getListTimeEntriesQueryKey() });
     setSelectedIds(new Set());
   };
