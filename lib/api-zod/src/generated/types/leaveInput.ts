@@ -8,5 +8,7 @@
 
 export interface LeaveInput {
   date: Date;
+  /** Take half the working day rather than all of it. Defaults to false. */
+  halfDay?: boolean;
   note?: string;
 }

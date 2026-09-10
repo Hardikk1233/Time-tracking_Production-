@@ -151,8 +151,10 @@ export default function TimePolicy() {
               balance that ignored them would read high for as long as review lags.
             </Rule>
             <Rule label="Product">
-              The client buys defined deliverables, each allocated to whoever produces
-              it.
+              The client buys defined deliverables rather than capacity. Hours are
+              logged against the work as normal, but reports show no utilisation
+              percentage for these clients — there is no hours commitment to measure
+              against, and a figure calculated as though there were would be wrong.
             </Rule>
           </div>
         </Section>

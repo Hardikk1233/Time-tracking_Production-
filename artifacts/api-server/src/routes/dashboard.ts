@@ -89,7 +89,7 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
   const [holidaySet, leaveRows] = await Promise.all([
     fetchHolidaySet(startDate, endDate),
     db
-      .select({ date: leavesTable.date })
+      .select({ date: leavesTable.date, portion: leavesTable.portion })
       .from(leavesTable)
       .where(
         and(
@@ -100,11 +100,12 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
       ),
   ]);
 
-  // Count leave days that fall on effective working days (non-holiday weekdays)
-  const leaveDays = leaveRows.filter((l) => {
+  // Leave that falls on an effective working day (non-holiday weekday). Summed
+  // over `portion`, not counted, so a half day costs half a day of capacity.
+  const leaveDays = leaveRows.reduce((sum, l) => {
     const d = new Date(l.date).getDay();
-    return d > 0 && d < 6 && !holidaySet.has(l.date);
-  }).length;
+    return d > 0 && d < 6 && !holidaySet.has(l.date) ? sum + l.portion : sum;
+  }, 0);
 
   const now = new Date();
   const resolvedStart =
@@ -424,15 +425,16 @@ router.get("/dashboard/utilization", async (req, res): Promise<void> => {
     if (endDate) leaveConditions.push(lte(leavesTable.date, endDate));
 
     const leaveRows = await db
-      .select({ userId: leavesTable.userId, date: leavesTable.date })
+      .select({ userId: leavesTable.userId, date: leavesTable.date, portion: leavesTable.portion })
       .from(leavesTable)
       .where(and(...leaveConditions));
 
-    // Count leave days that are effective working days (non-holiday weekdays)
+    // Leave on effective working days, summed over `portion` so a half day
+    // costs half a day of capacity rather than a whole one.
     leavesByUser = leaveRows.reduce<Record<number, number>>((acc, l) => {
       const d = new Date(l.date).getDay();
       if (d > 0 && d < 6 && !holidaySet.has(l.date)) {
-        acc[l.userId] = (acc[l.userId] ?? 0) + 1;
+        acc[l.userId] = (acc[l.userId] ?? 0) + l.portion;
       }
       return acc;
     }, {});

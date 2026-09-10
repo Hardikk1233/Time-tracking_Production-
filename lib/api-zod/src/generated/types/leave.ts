@@ -12,6 +12,8 @@ export interface Leave {
   userName: string;
   userRole: string;
   date: Date;
+  /** How much of the working day was taken: 1 for a full day, 0.5 for a half. */
+  portion?: number;
   /** @nullable */
   note?: string | null;
   createdAt: Date;

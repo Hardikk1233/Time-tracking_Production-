@@ -126,9 +126,16 @@ describe("approval integrity", () => {
       );
     });
 
-    it("can only be reopened by an MD", async () => {
-      expect((await avp.post(`/api/time-entries/${entryId}/reopen`)).status).toBe(403);
+    // Reopening opened up to AVPs on 2026-09-10 so they can correct or reverse
+    // a sign-off on their own clients without routing it through the MD. It
+    // stops at AVP: an associate can approve, so letting them also undo it
+    // would leave nobody above the decision.
+    it("can be reopened by an AVP, but not an associate", async () => {
       expect((await associate.post(`/api/time-entries/${entryId}/reopen`)).status).toBe(403);
+      expect((await avp.post(`/api/time-entries/${entryId}/reopen`)).status).toBe(200);
+    });
+
+    it("can be reopened by an MD", async () => {
       expect((await md.post(`/api/time-entries/${entryId}/reopen`)).status).toBe(200);
     });
 

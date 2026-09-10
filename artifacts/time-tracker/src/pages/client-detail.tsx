@@ -28,7 +28,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { HourBlocksCard, ProductAllocationCard } from '@/components/client-engagement';
+import { HourBlocksCard } from '@/components/client-engagement';
 import {
   ArrowLeft, Building2, Users, FolderKanban, UserPlus, UserMinus,
   ChevronRight, TrendingUp, Plus, Trash2, Calendar,
@@ -308,9 +308,9 @@ export default function ClientDetail() {
       {engagementType === 'block_hours' && (
         <HourBlocksCard clientId={clientId} canManage={canAllocate} />
       )}
-      {engagementType === 'product' && (
-        <ProductAllocationCard clientId={clientId} canManage={canAllocate} />
-      )}
+      {/* A product client has no hours commitment and no allocation screen:
+          the engagement type now only changes how the client is measured in
+          reports, which is the whole of what it is for. */}
 
       {/* FTE History */}
       {engagementType === 'fte' && (

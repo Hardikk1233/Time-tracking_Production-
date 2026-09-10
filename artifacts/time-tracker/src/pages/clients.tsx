@@ -47,7 +47,7 @@ export const ENGAGEMENT_LABELS: Record<string, string> = {
 const ENGAGEMENT_HINTS: Record<string, string> = {
   fte: 'Dedicated capacity, billed as a share of full-time people.',
   block_hours: 'The client buys hours up front and work draws them down.',
-  product: 'The client buys defined deliverables, allocated to whoever produces them.',
+  product: 'The client buys defined deliverables, so hours are recorded but not measured against a target.',
 };
 
 export default function Clients() {
@@ -328,8 +328,9 @@ function CreateClientDialog({ open, onOpenChange }: { open: boolean, onOpenChang
             )}
             {engagementType === 'product' && (
               <p className="text-xs text-muted-foreground border border-dashed border-border rounded-md p-3">
-                Define deliverables in the Products catalog, then allocate them to people
-                on the client page.
+                Time is logged against this client's projects as normal. Reports show
+                the hours but no utilisation figure, because a deliverable has no
+                hours target to measure against.
               </p>
             )}
             <div className="space-y-2">

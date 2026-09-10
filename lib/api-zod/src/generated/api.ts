@@ -1193,6 +1193,7 @@ export const ListLeavesResponseItem = zod.object({
   "userName": zod.string(),
   "userRole": zod.string(),
   "date": zod.coerce.date(),
+  "portion": zod.number().optional().describe('How much of the working day was taken: 1 for a full day, 0.5 for a half.'),
   "note": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
@@ -1204,6 +1205,7 @@ export const ListLeavesResponse = zod.array(ListLeavesResponseItem)
  */
 export const LogLeaveBody = zod.object({
   "date": zod.coerce.date(),
+  "halfDay": zod.boolean().optional().describe('Take half the working day rather than all of it. Defaults to false.'),
   "note": zod.string().optional()
 })
 
@@ -1213,6 +1215,7 @@ export const LogLeaveResponse = zod.object({
   "userName": zod.string(),
   "userRole": zod.string(),
   "date": zod.coerce.date(),
+  "portion": zod.number().optional().describe('How much of the working day was taken: 1 for a full day, 0.5 for a half.'),
   "note": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
@@ -1226,6 +1229,7 @@ export const LogLeaveResponse = zod.object({
 
 export const LogLeavesBulkBody = zod.object({
   "dates": zod.array(zod.coerce.date()).min(1),
+  "halfDay": zod.boolean().optional().describe('Applies to every date in this request. Defaults to false.'),
   "note": zod.string().optional()
 })
 
@@ -1236,6 +1240,7 @@ export const LogLeavesBulkResponse = zod.object({
   "userName": zod.string(),
   "userRole": zod.string(),
   "date": zod.coerce.date(),
+  "portion": zod.number().optional().describe('How much of the working day was taken: 1 for a full day, 0.5 for a half.'),
   "note": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })),
@@ -1289,33 +1294,39 @@ export const GetClientReportResponse = zod.object({
   "clientSummary": zod.array(zod.object({
   "clientId": zod.int(),
   "clientName": zod.string(),
-  "fteCount": zod.number(),
+  "engagementType": zod.enum(['fte', 'block_hours', 'product']).describe('How a client is engaged: dedicated FTEs, a purchased block of hours, or defined deliverables'),
+  "fteCount": zod.number().nullable().describe('Only set on FTE terms; null for block-of-hours and product clients.'),
   "selectedRange": zod.object({
   "billableHours": zod.number(),
-  "contractedHours": zod.number().describe('fteCount × workingDays × 8'),
-  "utilization": zod.number().describe('billableHours \/ contractedHours × 100')
+  "contractedHours": zod.number().nullable().describe('The hours the client is committed to for this window: FTEs × working days × 8 on FTE terms, the purchased balance on a block of hours, and null on a product engagement, which buys deliverables rather than capacity and so has nothing to measure against.\n'),
+  "utilization": zod.number().nullable().describe('billableHours \/ contractedHours × 100. Null when there is no commitment.'),
+  "contractUtilization": zod.number().nullish()
 }),
   "last3m": zod.object({
   "billableHours": zod.number(),
-  "contractedHours": zod.number().describe('fteCount × workingDays × 8'),
-  "utilization": zod.number().describe('billableHours \/ contractedHours × 100')
+  "contractedHours": zod.number().nullable().describe('The hours the client is committed to for this window: FTEs × working days × 8 on FTE terms, the purchased balance on a block of hours, and null on a product engagement, which buys deliverables rather than capacity and so has nothing to measure against.\n'),
+  "utilization": zod.number().nullable().describe('billableHours \/ contractedHours × 100. Null when there is no commitment.'),
+  "contractUtilization": zod.number().nullish()
 }),
   "last6m": zod.object({
   "billableHours": zod.number(),
-  "contractedHours": zod.number().describe('fteCount × workingDays × 8'),
-  "utilization": zod.number().describe('billableHours \/ contractedHours × 100')
+  "contractedHours": zod.number().nullable().describe('The hours the client is committed to for this window: FTEs × working days × 8 on FTE terms, the purchased balance on a block of hours, and null on a product engagement, which buys deliverables rather than capacity and so has nothing to measure against.\n'),
+  "utilization": zod.number().nullable().describe('billableHours \/ contractedHours × 100. Null when there is no commitment.'),
+  "contractUtilization": zod.number().nullish()
 }),
   "last12m": zod.object({
   "billableHours": zod.number(),
-  "contractedHours": zod.number().describe('fteCount × workingDays × 8'),
-  "utilization": zod.number().describe('billableHours \/ contractedHours × 100')
+  "contractedHours": zod.number().nullable().describe('The hours the client is committed to for this window: FTEs × working days × 8 on FTE terms, the purchased balance on a block of hours, and null on a product engagement, which buys deliverables rather than capacity and so has nothing to measure against.\n'),
+  "utilization": zod.number().nullable().describe('billableHours \/ contractedHours × 100. Null when there is no commitment.'),
+  "contractUtilization": zod.number().nullish()
 })
 })),
   "monthlySummary": zod.array(zod.object({
   "month": zod.string().describe('YYYY-MM'),
   "billableHours": zod.number(),
-  "contractedHours": zod.number(),
-  "utilization": zod.number()
+  "contractedHours": zod.number().nullable(),
+  "utilization": zod.number().nullable(),
+  "contractUtilization": zod.number().nullish()
 })).nullish()
 })
 

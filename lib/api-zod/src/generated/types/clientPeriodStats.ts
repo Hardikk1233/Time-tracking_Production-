@@ -8,8 +8,16 @@
 
 export interface ClientPeriodStats {
   billableHours: number;
-  /** fteCount × workingDays × 8 */
-  contractedHours: number;
-  /** billableHours / contractedHours × 100 */
-  utilization: number;
+  /**
+     * The hours the client is committed to for this window: FTEs × working days × 8 on FTE terms, the purchased balance on a block of hours, and null on a product engagement, which buys deliverables rather than capacity and so has nothing to measure against.
+     * @nullable
+     */
+  contractedHours: number | null;
+  /**
+     * billableHours / contractedHours × 100. Null when there is no commitment.
+     * @nullable
+     */
+  utilization: number | null;
+  /** @nullable */
+  contractUtilization?: number | null;
 }

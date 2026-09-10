@@ -589,16 +589,29 @@ export interface ReportFilterOptions {
 
 export interface ClientPeriodStats {
   billableHours: number;
-  /** fteCount × workingDays × 8 */
-  contractedHours: number;
-  /** billableHours / contractedHours × 100 */
-  utilization: number;
+  /**
+     * The hours the client is committed to for this window: FTEs × working days × 8 on FTE terms, the purchased balance on a block of hours, and null on a product engagement, which buys deliverables rather than capacity and so has nothing to measure against.
+     * @nullable
+     */
+  contractedHours: number | null;
+  /**
+     * billableHours / contractedHours × 100. Null when there is no commitment.
+     * @nullable
+     */
+  utilization: number | null;
+  /** @nullable */
+  contractUtilization?: number | null;
 }
 
 export interface ClientUtilizationRow {
   clientId: number;
   clientName: string;
-  fteCount: number;
+  engagementType: EngagementType;
+  /**
+     * Only set on FTE terms; null for block-of-hours and product clients.
+     * @nullable
+     */
+  fteCount: number | null;
   selectedRange: ClientPeriodStats;
   last3m: ClientPeriodStats;
   last6m: ClientPeriodStats;
@@ -609,8 +622,12 @@ export interface MonthlyClientRow {
   /** YYYY-MM */
   month: string;
   billableHours: number;
-  contractedHours: number;
-  utilization: number;
+  /** @nullable */
+  contractedHours: number | null;
+  /** @nullable */
+  utilization: number | null;
+  /** @nullable */
+  contractUtilization?: number | null;
 }
 
 export interface ClientReport {
@@ -682,6 +699,8 @@ export interface Leave {
   userName: string;
   userRole: string;
   date: string;
+  /** How much of the working day was taken: 1 for a full day, 0.5 for a half. */
+  portion?: number;
   /** @nullable */
   note?: string | null;
   createdAt: string;
@@ -689,12 +708,16 @@ export interface Leave {
 
 export interface LeaveInput {
   date: string;
+  /** Take half the working day rather than all of it. Defaults to false. */
+  halfDay?: boolean;
   note?: string;
 }
 
 export interface LeaveBulkInput {
   /** @minItems 1 */
   dates: string[];
+  /** Applies to every date in this request. Defaults to false. */
+  halfDay?: boolean;
   note?: string;
 }
 

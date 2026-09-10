@@ -9,5 +9,7 @@
 export interface LeaveBulkInput {
   /** @minItems 1 */
   dates: Date[];
+  /** Applies to every date in this request. Defaults to false. */
+  halfDay?: boolean;
   note?: string;
 }

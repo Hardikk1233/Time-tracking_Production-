@@ -2478,22 +2478,31 @@ components:
         billableHours:
           type: number
         contractedHours:
-          type: number
-          description: "fteCount × workingDays × 8"
+          type: ["number", "null"]
+          description: >
+            The hours the client is committed to for this window: FTEs ×
+            working days × 8 on FTE terms, the purchased balance on a block of
+            hours, and null on a product engagement, which buys deliverables
+            rather than capacity and so has nothing to measure against.
         utilization:
-          type: number
-          description: "billableHours / contractedHours × 100"
+          type: ["number", "null"]
+          description: "billableHours / contractedHours × 100. Null when there is no commitment."
+        contractUtilization:
+          type: ["number", "null"]
 
     ClientUtilizationRow:
       type: object
-      required: [clientId, clientName, fteCount, selectedRange, last3m, last6m, last12m]
+      required: [clientId, clientName, engagementType, fteCount, selectedRange, last3m, last6m, last12m]
       properties:
         clientId:
           type: integer
         clientName:
           type: string
+        engagementType:
+          $ref: "#/components/schemas/EngagementType"
         fteCount:
-          type: number
+          type: ["number", "null"]
+          description: "Only set on FTE terms; null for block-of-hours and product clients."
         selectedRange:
           $ref: "#/components/schemas/ClientPeriodStats"
         last3m:
@@ -2513,9 +2522,11 @@ components:
         billableHours:
           type: number
         contractedHours:
-          type: number
+          type: ["number", "null"]
         utilization:
-          type: number
+          type: ["number", "null"]
+        contractUtilization:
+          type: ["number", "null"]
 
     ClientReport:
       type: object
@@ -2639,6 +2650,9 @@ components:
         date:
           type: string
           format: date
+        portion:
+          type: number
+          description: "How much of the working day was taken: 1 for a full day, 0.5 for a half."
         note:
           type: ["string", "null"]
         createdAt:
@@ -2652,6 +2666,9 @@ components:
         date:
           type: string
           format: date
+        halfDay:
+          type: boolean
+          description: "Take half the working day rather than all of it. Defaults to false."
         note:
           type: string
 
@@ -2665,6 +2682,9 @@ components:
             type: string
             format: date
           minItems: 1
+        halfDay:
+          type: boolean
+          description: "Applies to every date in this request. Defaults to false."
         note:
           type: string
 

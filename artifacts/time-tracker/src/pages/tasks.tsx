@@ -3,6 +3,7 @@ import { useAuth } from '@/lib/auth';
 import { 
   useListTasks, 
   useCreateTask, 
+  useUpdateTask,
   useDeleteTask,
   getListTasksQueryKey
 } from '@workspace/api-client-react';
@@ -19,7 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, Trash2, CheckSquare } from 'lucide-react';
+import { Plus, Trash2, CheckSquare, Pencil } from 'lucide-react';
 import { errorMessage } from '@/lib/errors';
 
 const taskSchema = z.object({
@@ -33,6 +34,7 @@ export default function Tasks() {
   const { toast } = useToast();
   
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<{ id: number; name: string; description: string | null } | null>(null);
   
   const { data: tasks, isLoading } = useListTasks();
   const deleteMutation = useDeleteTask();
@@ -42,6 +44,7 @@ export default function Tasks() {
   // with one-off project names, so definition went back up a rank on
   // 2026-09-07; associates still browse it and enable tasks on their projects.
   const canAdd = ['avp', 'md'].includes(user?.role || '');
+  const canEdit = ['avp', 'md'].includes(user?.role || '');
   const canDelete = ['avp', 'md'].includes(user?.role || '');
 
   const handleDelete = (id: number) => {
@@ -79,7 +82,7 @@ export default function Tasks() {
                 <th className="px-6 py-4 font-medium">Task Name</th>
                 <th className="px-6 py-4 font-medium">Description</th>
                 <th className="px-6 py-4 font-medium">Created</th>
-                {canDelete && <th className="px-6 py-4 font-medium text-right">Actions</th>}
+                {(canEdit || canDelete) && <th className="px-6 py-4 font-medium text-right">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
@@ -89,7 +92,7 @@ export default function Tasks() {
                     <td className="px-6 py-4"><Skeleton className="h-4 w-48" /></td>
                     <td className="px-6 py-4"><Skeleton className="h-4 w-32" /></td>
                     <td className="px-6 py-4"><Skeleton className="h-4 w-20" /></td>
-                    {canDelete && <td className="px-6 py-4"><Skeleton className="h-8 w-8 ml-auto" /></td>}
+                    {(canEdit || canDelete) && <td className="px-6 py-4"><Skeleton className="h-8 w-8 ml-auto" /></td>}
                   </tr>
                 ))
               ) : tasks && tasks.length > 0 ? (
@@ -105,23 +108,39 @@ export default function Tasks() {
                     <td className="px-6 py-4 font-mono text-xs text-muted-foreground">
                       {format(new Date(task.createdAt), 'MMM dd, yyyy')}
                     </td>
-                    {canDelete && (
+                    {(canEdit || canDelete) && (
                       <td className="px-6 py-4 text-right">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                          onClick={() => handleDelete(task.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          {canEdit && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Rename or re-describe this task"
+                              className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                              onClick={() => setEditing({ id: task.id, name: task.name, description: task.description ?? null })}
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {canDelete && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Remove from the catalog"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => handleDelete(task.id)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     )}
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={canDelete ? 4 : 3} className="px-6 py-12 text-center text-muted-foreground font-mono text-sm border-b-0">
+                  <td colSpan={(canEdit || canDelete) ? 4 : 3} className="px-6 py-12 text-center text-muted-foreground font-mono text-sm border-b-0">
                     NO TASKS FOUND
                   </td>
                 </tr>
@@ -130,6 +149,13 @@ export default function Tasks() {
           </table>
         </div>
       </Card>
+
+      {editing && (
+        <EditTaskDialog
+          task={editing}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </div>
   );
 }
@@ -206,6 +232,99 @@ function CreateTaskDialog({ open, onOpenChange }: { open: boolean, onOpenChange:
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
               <Button type="submit" disabled={createMutation.isPending}>
                 {createMutation.isPending ? 'Saving...' : 'Create'}
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Rename a catalog task, or give it a description.
+ *
+ * Renaming is safe for history: time entries reference the task by id, so
+ * every hour already logged against it follows the new name rather than being
+ * orphaned under the old one. That is the point of a curated catalog - a name
+ * agreed after the fact still describes the work that was done.
+ */
+function EditTaskDialog({
+  task,
+  onClose,
+}: {
+  task: { id: number; name: string; description: string | null };
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const updateMutation = useUpdateTask();
+
+  const form = useForm<z.infer<typeof taskSchema>>({
+    resolver: zodResolver(taskSchema),
+    defaultValues: { name: task.name, description: task.description ?? '' },
+  });
+
+  const onSubmit = (data: z.infer<typeof taskSchema>) => {
+    updateMutation.mutate(
+      { taskId: task.id, data: { name: data.name, description: data.description || undefined } },
+      {
+        onSuccess: () => {
+          toast({ title: 'Task updated' });
+          queryClient.invalidateQueries({ queryKey: getListTasksQueryKey() });
+          onClose();
+        },
+        onError: (err: any) => {
+          toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to update task.') });
+        },
+      },
+    );
+  };
+
+  return (
+    <Dialog open onOpenChange={v => { if (!v) onClose(); }}>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>Edit Task</DialogTitle>
+          <DialogDescription>
+            Hours already logged against this task keep counting under the new name.
+          </DialogDescription>
+        </DialogHeader>
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Task Name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Research & Discovery" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Brief details about the task" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="pt-4 flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+              <Button type="submit" disabled={updateMutation.isPending}>
+                {updateMutation.isPending ? 'Saving...' : 'Save changes'}
               </Button>
             </div>
           </form>

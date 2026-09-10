@@ -8,13 +8,8 @@ import {
   useGetClientHourBlocks,
   useCreateHourBlock,
   useDeleteHourBlock,
-  useListClientProductAssignments,
-  useAssignProduct,
-  useDeleteProductAssignment,
-  useListProducts,
   useListUsers,
   getGetClientHourBlocksQueryKey,
-  getListClientProductAssignmentsQueryKey,
 } from '@workspace/api-client-react';
 import { useToast } from '@/hooks/use-toast';
 import { displayTitle } from '@/lib/roles';
@@ -34,7 +29,7 @@ import { errorMessage } from '@/lib/errors';
  * The two engagement panels on a client page.
  *
  * Which one is shown is decided by the client engagement type, so a client is
- * never asked for hours it did not buy or products it does not receive.
+ * never asked for hours it did not buy.
  */
 
 // ─── Block of hours ──────────────────────────────────────────────────────────
@@ -256,132 +251,5 @@ function AddHourBlockDialog({ open, onOpenChange, clientId }: { open: boolean; o
         </Form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-// ─── Product allocation ──────────────────────────────────────────────────────
-
-/** Which deliverables this client bought, and who is producing each. */
-export function ProductAllocationCard({ clientId, canManage }: { clientId: number; canManage: boolean }) {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-
-  const [productId, setProductId] = useState('');
-  const [assigneeId, setAssigneeId] = useState('');
-
-  const { data: assignments, isLoading } = useListClientProductAssignments(clientId);
-  const { data: products } = useListProducts();
-  const { data: users } = useListUsers();
-  const assignMutation = useAssignProduct();
-  const removeMutation = useDeleteProductAssignment();
-
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: getListClientProductAssignmentsQueryKey(clientId) });
-
-  const handleAssign = () => {
-    if (!productId || !assigneeId) return;
-    assignMutation.mutate(
-      { clientId, data: { productId: Number(productId), assigneeUserId: Number(assigneeId) } },
-      {
-        onSuccess: () => {
-          toast({ title: 'Product allocated' });
-          setProductId('');
-          setAssigneeId('');
-          invalidate();
-        },
-        onError: (err: any) => {
-          toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to allocate product.') });
-        },
-      },
-    );
-  };
-
-  const handleRemove = (id: number) => {
-    removeMutation.mutate({ assignmentId: id }, {
-      onSuccess: () => { toast({ title: 'Allocation withdrawn' }); invalidate(); },
-      onError: (err: any) => {
-        toast({ variant: 'destructive', title: 'Error', description: errorMessage(err, 'Failed to withdraw allocation.') });
-      },
-    });
-  };
-
-  return (
-    <Card className="shadow-sm border-border">
-      <CardHeader className="border-b border-border/50 bg-muted/20 pb-4">
-        <CardTitle className="text-base font-bold flex items-center gap-2">
-          <Package className="w-4 h-4 text-primary" />
-          Products
-          <Badge variant="secondary" className="font-mono text-[10px]">{assignments?.length ?? 0}</Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="pt-4 space-y-4">
-        {canManage && (
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Select value={productId} onValueChange={setProductId}>
-              <SelectTrigger className="flex-1 bg-background">
-                <SelectValue placeholder="Product..." />
-              </SelectTrigger>
-              <SelectContent>
-                {(products ?? []).map(p => (
-                  <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={assigneeId} onValueChange={setAssigneeId}>
-              <SelectTrigger className="flex-1 bg-background">
-                <SelectValue placeholder="Assign to..." />
-              </SelectTrigger>
-              <SelectContent>
-                {(users ?? []).map(u => (
-                  <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button onClick={handleAssign} disabled={!productId || !assigneeId || assignMutation.isPending}>
-              <Plus className="w-4 h-4 mr-1" />
-              Allocate
-            </Button>
-          </div>
-        )}
-
-        {canManage && (products ?? []).length === 0 && (
-          <p className="text-xs text-muted-foreground">
-            Nothing in the catalog yet — define a product on the Products page first.
-          </p>
-        )}
-
-        {isLoading ? (
-          <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
-        ) : assignments && assignments.length > 0 ? (
-          <div className="space-y-2">
-            {assignments.map(a => (
-              <div key={a.id} className="flex items-center justify-between gap-3 p-3 rounded-md border border-border/50 hover:bg-muted/10 transition-colors">
-                <div className="min-w-0">
-                  <p className="font-medium text-foreground truncate">{a.productName}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {a.assigneeName} · {displayTitle({ role: a.assigneeRole } as any)} · allocated {format(new Date(a.assignedAt), 'MMM dd, yyyy')}
-                  </p>
-                </div>
-                {canManage && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                    onClick={() => handleRemove(a.id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="py-8 text-center text-muted-foreground font-mono text-sm border border-dashed border-border rounded-md">
-            <p>NOTHING ALLOCATED</p>
-            {canManage && <p className="text-xs mt-1 opacity-70">Allocate a product to whoever is producing it.</p>}
-          </div>
-        )}
-      </CardContent>
-    </Card>
   );
 }

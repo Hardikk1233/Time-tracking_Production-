@@ -10,6 +10,10 @@ export interface MonthlyClientRow {
   /** YYYY-MM */
   month: string;
   billableHours: number;
-  contractedHours: number;
-  utilization: number;
+  /** @nullable */
+  contractedHours: number | null;
+  /** @nullable */
+  utilization: number | null;
+  /** @nullable */
+  contractUtilization?: number | null;
 }

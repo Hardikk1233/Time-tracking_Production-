@@ -153,15 +153,28 @@ async function exportTablePDF(filename: string, title: string, headers: string[]
 
 // ─── Client Summary Table ─────────────────────────────────────────────────────
 
+type PeriodStats = {
+  billableHours: number;
+  contractedHours: number | null;
+  utilization: number | null;
+};
+
 interface ClientSummaryRow {
   clientId: number;
   clientName: string;
-  fteCount: number;
-  selectedRange: { billableHours: number; contractedHours: number; utilization: number };
-  last3m:  { billableHours: number; contractedHours: number; utilization: number };
-  last6m:  { billableHours: number; contractedHours: number; utilization: number };
-  last12m: { billableHours: number; contractedHours: number; utilization: number };
+  engagementType: 'fte' | 'block_hours' | 'product';
+  fteCount: number | null;
+  selectedRange: PeriodStats;
+  last3m:  PeriodStats;
+  last6m:  PeriodStats;
+  last12m: PeriodStats;
 }
+
+const ENGAGEMENT_LABEL: Record<string, string> = {
+  fte: 'FTE',
+  block_hours: 'Block of hours',
+  product: 'Product',
+};
 
 function ClientSummaryTable({
   rows,
@@ -176,7 +189,18 @@ function ClientSummaryTable({
 }) {
   if (rows.length === 0) return <p className="text-sm text-muted-foreground py-8 text-center">No clients in scope.</p>;
 
-  function UtilCell({ stats }: { stats: { billableHours: number; contractedHours: number; utilization: number } }) {
+  // A product client has no hours commitment, so there is no percentage to
+  // show and nothing to colour red. Printing 0% against a contracted 0 read as
+  // catastrophic under-delivery when it only meant the question did not apply.
+  function UtilCell({ stats }: { stats: PeriodStats }) {
+    if (stats.contractedHours === null || stats.utilization === null) {
+      return (
+        <div className="text-right">
+          <div className="font-semibold tabular-nums text-muted-foreground">—</div>
+          <div className="text-xs text-muted-foreground tabular-nums">{fmt(stats.billableHours)}h logged</div>
+        </div>
+      );
+    }
     return (
       <div className="text-right">
         <div className={`font-semibold tabular-nums ${utilizationColor(stats.utilization)}`}>{pct(stats.utilization)}</div>
@@ -191,7 +215,7 @@ function ClientSummaryTable({
         <thead>
           <tr className="border-b bg-muted/50">
             <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Client</th>
-            <th className="text-center px-3 py-2.5 font-medium text-muted-foreground">FTEs</th>
+            <th className="text-center px-3 py-2.5 font-medium text-muted-foreground">Engagement</th>
             <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">{rangeLabel}</th>
             <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Last 3 Months</th>
             <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Last 6 Months</th>
@@ -209,7 +233,12 @@ function ClientSummaryTable({
                 <div className="font-medium">{r.clientName}</div>
                 <div className="text-xs text-muted-foreground">Click to view monthly chart</div>
               </td>
-              <td className="px-3 py-3 text-center">{r.fteCount}</td>
+              <td className="px-3 py-3 text-center">
+                <div className="text-xs font-medium">{ENGAGEMENT_LABEL[r.engagementType] ?? r.engagementType}</div>
+                {r.engagementType === 'fte' && r.fteCount !== null && (
+                  <div className="text-xs text-muted-foreground tabular-nums">{r.fteCount} FTE</div>
+                )}
+              </td>
               <td className="px-4 py-3"><UtilCell stats={r.selectedRange} /></td>
               <td className="px-4 py-3"><UtilCell stats={r.last3m} /></td>
               <td className="px-4 py-3"><UtilCell stats={r.last6m} /></td>
@@ -440,8 +469,10 @@ export default function Reports() {
     () => (clientReportData?.monthlySummary ?? []).map((m) => ({
       month: m.month,
       'Billable Hours': Number(m.billableHours.toFixed(1)),
-      'Contracted Hours': Number(m.contractedHours.toFixed(1)),
-      'Utilization %': Number(m.utilization.toFixed(1)),
+      // Null on engagements with no hours commitment. Recharts skips a null
+      // point, which is what we want: no capacity line rather than a flat zero.
+      'Contracted Hours': m.contractedHours === null ? null : Number(m.contractedHours.toFixed(1)),
+      'Utilization %': m.utilization === null ? null : Number(m.utilization.toFixed(1)),
     })),
     [clientReportData],
   );
@@ -455,15 +486,22 @@ export default function Reports() {
   }
 
   // ── Export helpers ─────────────────────────────────────────────────────────
+  // A client with no hours commitment exports an em dash rather than a zero:
+  // a spreadsheet reader cannot tell a real 0% from "the question does not
+  // apply", and the second one summed into an average would be wrong.
+  const num = (v: number | null) => (v === null ? '—' : v);
+  const asPct = (v: number | null) => (v === null ? '—' : `${v}%`);
+  const asHrs = (v: number | null) => (v === null ? '—' : `${v}h`);
+
   async function exportClientExcel() {
     await exportTableExcel('Client Utilization Report',
-      ['Client', 'FTEs', `${rangeLabel} Util%`, `${rangeLabel} Billable`, `${rangeLabel} Contracted`, 'L3M Util%', 'L6M Util%', 'L12M Util%'],
-      clientSummary.map((r) => [r.clientName, r.fteCount, r.selectedRange.utilization, r.selectedRange.billableHours, r.selectedRange.contractedHours, r.last3m.utilization, r.last6m.utilization, r.last12m.utilization]));
+      ['Client', 'Engagement', `${rangeLabel} Util%`, `${rangeLabel} Billable`, `${rangeLabel} Contracted`, 'L3M Util%', 'L6M Util%', 'L12M Util%'],
+      clientSummary.map((r) => [r.clientName, ENGAGEMENT_LABEL[r.engagementType] ?? r.engagementType, num(r.selectedRange.utilization), r.selectedRange.billableHours, num(r.selectedRange.contractedHours), num(r.last3m.utilization), num(r.last6m.utilization), num(r.last12m.utilization)]));
   }
   async function exportClientPDF() {
     await exportTablePDF('Client Utilization Report', 'Client Utilization Report',
-      ['Client', 'FTEs', 'Selected Util%', 'Billable', 'Contracted', 'L3M Util%', 'L6M Util%', 'L12M Util%'],
-      clientSummary.map((r) => [r.clientName, r.fteCount, `${r.selectedRange.utilization}%`, `${r.selectedRange.billableHours}h`, `${r.selectedRange.contractedHours}h`, `${r.last3m.utilization}%`, `${r.last6m.utilization}%`, `${r.last12m.utilization}%`]));
+      ['Client', 'Engagement', 'Selected Util%', 'Billable', 'Contracted', 'L3M Util%', 'L6M Util%', 'L12M Util%'],
+      clientSummary.map((r) => [r.clientName, ENGAGEMENT_LABEL[r.engagementType] ?? r.engagementType, asPct(r.selectedRange.utilization), `${r.selectedRange.billableHours}h`, asHrs(r.selectedRange.contractedHours), asPct(r.last3m.utilization), asPct(r.last6m.utilization), asPct(r.last12m.utilization)]));
   }
   async function exportTeamExcel() {
     if (!teamReportData) return;

@@ -13,6 +13,7 @@ import {
   publicHolidaysTable,
   leavesTable,
   clientFteHistoryTable,
+  hourBlocksTable,
   tasksTable,
 } from "@workspace/db";
 
@@ -183,14 +184,21 @@ async function fetchFteHistoryForClients(
   return map;
 }
 
-function buildPeriodStats(billable: number, contracted: number) {
+/**
+ * One period's figures for a client.
+ *
+ * `contracted` is null when the engagement has no hours commitment to measure
+ * against - a product client buys deliverables, not capacity. Reporting 0
+ * there would be a lie the UI cannot tell apart from a real zero, and it is
+ * what made Galava Capital show 0.0h / 64.0h and 0.0% in red: the FTE formula
+ * ran over a client that had never been on FTE terms.
+ */
+function buildPeriodStats(billable: number, contracted: number | null) {
   return {
     billableHours: billable,
     contractedHours: contracted,
-    // Contract utilisation: measured against what the client engaged, not
-    // against staff capacity.
-    contractUtilization: percent(billable, contracted),
-    utilization: percent(billable, contracted),
+    contractUtilization: contracted === null ? null : percent(billable, contracted),
+    utilization: contracted === null ? null : percent(billable, contracted),
   };
 }
 
@@ -268,10 +276,16 @@ router.get("/client-report", async (req, res): Promise<void> => {
   }
 
   // Fetch client metadata (name, fteCount) for all visible clients
+  const clientCols = {
+    id: clientsTable.id,
+    name: clientsTable.name,
+    fteCount: clientsTable.fteCount,
+    engagementType: clientsTable.engagementType,
+  };
   const clientRows =
     visibleClientIds === null
-      ? await db.select({ id: clientsTable.id, name: clientsTable.name, fteCount: clientsTable.fteCount }).from(clientsTable).orderBy(clientsTable.name)
-      : await db.select({ id: clientsTable.id, name: clientsTable.name, fteCount: clientsTable.fteCount }).from(clientsTable).where(inArray(clientsTable.id, visibleClientIds)).orderBy(clientsTable.name);
+      ? await db.select(clientCols).from(clientsTable).orderBy(clientsTable.name)
+      : await db.select(clientCols).from(clientsTable).where(inArray(clientsTable.id, visibleClientIds)).orderBy(clientsTable.name);
 
   if (clientRows.length === 0) {
     res.json({ clientSummary: [], monthlySummary: null });
@@ -296,6 +310,22 @@ router.get("/client-report", async (req, res): Promise<void> => {
   // Fetch FTE history for all visible clients (covering the widest possible window)
   const fteHistoryMap = await fetchFteHistoryForClients(allClientIds, overallStart, overallEnd);
 
+  // Hours bought, for the block-hours clients in this set. One query, and
+  // skipped entirely when nobody here is on those terms.
+  const blockClientIds = clientRows.filter((c) => c.engagementType === "block_hours").map((c) => c.id);
+  const purchasedByClient = new Map<number, number>();
+  if (blockClientIds.length > 0) {
+    const purchased = await db
+      .select({
+        clientId: hourBlocksTable.clientId,
+        hours: sql<number>`SUM(${hourBlocksTable.hours})`,
+      })
+      .from(hourBlocksTable)
+      .where(inArray(hourBlocksTable.clientId, blockClientIds))
+      .groupBy(hourBlocksTable.clientId);
+    for (const r of purchased) purchasedByClient.set(r.clientId, Number(r.hours));
+  }
+
   // Billable hours per client per window (4 parallel queries)
   const [billableSelected, billable3m, billable6m, billable12m] = await Promise.all([
     getBillablePerClient(allClientIds, scopedUserIds, start, end),
@@ -304,20 +334,33 @@ router.get("/client-report", async (req, res): Promise<void> => {
     getBillablePerClient(allClientIds, scopedUserIds, last12mStart, last12mEnd),
   ]);
 
+  // What each engagement is actually measured against:
+  //
+  //   fte         - FTEs x working days x 8, from the FTE history. Unchanged.
+  //   block_hours - the hours the client has bought. A block is a standing
+  //                 balance, not a per-period allowance, so every window is
+  //                 measured against the same purchased total.
+  //   product     - nothing. The client buys deliverables, so there is no
+  //                 hours commitment and no honest utilisation figure.
   const clientSummary = clientRows.map((c) => {
     const history = fteHistoryMap.get(c.id) ?? [];
-    const cSelected = calcContractedHours(start,       end,        holidaySet, history, c.fteCount);
-    const c3m       = calcContractedHours(last3mStart, last3mEnd,  holidaySet, history, c.fteCount);
-    const c6m       = calcContractedHours(last6mStart, last6mEnd,  holidaySet, history, c.fteCount);
-    const c12m      = calcContractedHours(last12mStart, last12mEnd, holidaySet, history, c.fteCount);
+
+    const commitment = (from: string, to: string): number | null => {
+      if (c.engagementType === "product") return null;
+      if (c.engagementType === "block_hours") return purchasedByClient.get(c.id) ?? 0;
+      return calcContractedHours(from, to, holidaySet, history, c.fteCount);
+    };
+
     return {
       clientId: c.id,
       clientName: c.name,
-      fteCount: c.fteCount,
-      selectedRange: buildPeriodStats(billableSelected.get(c.id) ?? 0, cSelected),
-      last3m:  buildPeriodStats(billable3m.get(c.id)  ?? 0, c3m),
-      last6m:  buildPeriodStats(billable6m.get(c.id)  ?? 0, c6m),
-      last12m: buildPeriodStats(billable12m.get(c.id) ?? 0, c12m),
+      engagementType: c.engagementType,
+      // Only meaningful on FTE terms; the UI hides the column for the others.
+      fteCount: c.engagementType === "fte" ? c.fteCount : null,
+      selectedRange: buildPeriodStats(billableSelected.get(c.id) ?? 0, commitment(start, end)),
+      last3m:  buildPeriodStats(billable3m.get(c.id)  ?? 0, commitment(last3mStart, last3mEnd)),
+      last6m:  buildPeriodStats(billable6m.get(c.id)  ?? 0, commitment(last6mStart, last6mEnd)),
+      last12m: buildPeriodStats(billable12m.get(c.id) ?? 0, commitment(last12mStart, last12mEnd)),
     };
   });
 
@@ -383,18 +426,25 @@ router.get("/client-report", async (req, res): Promise<void> => {
       // Cap to the requested range
       const wStart = mStart < start ? start : mStart;
       const wEnd   = mEnd > end ? end : mEnd;
-      // Use per-month FTE from history (15th as representative date)
-      const repDate = monthStr + "-15";
-      const fte = getApplicableFte(repDate, focusHistory, focusClient.fteCount);
-      const wd = countWorkingDays(wStart, wEnd, holidaySet);
-      const contracted = fte * wd * HOURS_PER_DAY;
+      // The monthly commitment follows the engagement, as the summary rows do.
+      // A product client has none, and a block is a standing balance rather
+      // than a monthly allowance, so neither draws a capacity line.
+      let contracted: number | null;
+      if (focusClient.engagementType === "fte") {
+        // Per-month FTE from history, 15th as the representative date.
+        const repDate = monthStr + "-15";
+        const fte = getApplicableFte(repDate, focusHistory, focusClient.fteCount);
+        contracted = fte * countWorkingDays(wStart, wEnd, holidaySet) * HOURS_PER_DAY;
+      } else {
+        contracted = null;
+      }
       const billable = billableByMonth.get(monthStr) ?? 0;
       return {
         month: monthStr,
         billableHours: billable,
         contractedHours: contracted,
-        contractUtilization: percent(billable, contracted),
-        utilization: percent(billable, contracted),
+        contractUtilization: contracted === null ? null : percent(billable, contracted),
+        utilization: contracted === null ? null : percent(billable, contracted),
       };
     });
   }
@@ -509,11 +559,15 @@ router.get("/my-report", async (req, res): Promise<void> => {
     fetchHolidaySet(start, end),
   ]);
 
-  const leaveRows = await db.select({ date: leavesTable.date }).from(leavesTable)
+  const leaveRows = await db.select({ date: leavesTable.date, portion: leavesTable.portion }).from(leavesTable)
     .where(and(eq(leavesTable.userId, currentUserId), gte(leavesTable.date, start), lte(leavesTable.date, end)));
 
   const workingDays = countWorkingDays(start, end, holidaySet);
-  const leaveDays = leaveRows.filter((l) => { const d = new Date(l.date).getDay(); return d > 0 && d < 6 && !holidaySet.has(l.date); }).length;
+  // Summed over `portion`, so a half day leaves half a day of target standing.
+  const leaveDays = leaveRows.reduce((sum, l) => {
+    const d = new Date(l.date).getDay();
+    return d > 0 && d < 6 && !holidaySet.has(l.date) ? sum + l.portion : sum;
+  }, 0);
   const availableDays = Math.max(workingDays - leaveDays, 0);
   const targetHours = availableDays * 8;
 

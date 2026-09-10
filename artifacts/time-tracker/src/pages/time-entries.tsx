@@ -493,6 +493,7 @@ function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
 
   const [selectedDates, setSelectedDates] = useState<Date[]>([]);
   const [note, setNote] = useState('');
+  const [halfDay, setHalfDay] = useState(false);
 
   const now = new Date();
   const monthStart = format(new Date(now.getFullYear(), now.getMonth(), 1), 'yyyy-MM-dd');
@@ -527,7 +528,7 @@ function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
     if (selectedDates.length === 0) return;
     const dates = selectedDates.map(d => format(d, 'yyyy-MM-dd'));
     bulkMutation.mutate(
-      { data: { dates, note: note.trim() || undefined } as any },
+      { data: { dates, halfDay, note: note.trim() || undefined } as any },
       {
         onSuccess: (result: any) => {
           const created = result?.created?.length ?? 0;
@@ -539,6 +540,7 @@ function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
           queryClient.invalidateQueries({ queryKey: getListLeavesQueryKey() });
           setSelectedDates([]);
           setNote('');
+          setHalfDay(false);
         },
         onError: (err: any) => {
           toast({ variant: 'destructive', title: 'Failed to log leave', description: errorMessage(err, 'An error occurred.') });
@@ -557,7 +559,7 @@ function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
   };
 
   const handleClose = (v: boolean) => {
-    if (!v) { setSelectedDates([]); setNote(''); }
+    if (!v) { setSelectedDates([]); setNote(''); setHalfDay(false); }
     onOpenChange(v);
   };
 
@@ -620,6 +622,33 @@ function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
             </div>
           )}
 
+          {/* Applies to every date selected above. Splitting one request into
+              some full and some half days would need a per-date control, which
+              is not worth the complexity until somebody asks for it. */}
+          <div>
+            <label className="text-sm font-medium mb-1.5 block">How much of the day</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setHalfDay(false)}
+                aria-pressed={!halfDay}
+                className={`rounded-md border px-3 py-2 text-sm transition-colors ${!halfDay ? 'border-amber-500 bg-amber-50 text-amber-900 font-medium dark:bg-amber-500/10 dark:text-amber-200' : 'border-border text-muted-foreground hover:bg-muted/50'}`}
+              >
+                Full day
+                <span className="block text-xs font-normal opacity-70">8 hours</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setHalfDay(true)}
+                aria-pressed={halfDay}
+                className={`rounded-md border px-3 py-2 text-sm transition-colors ${halfDay ? 'border-amber-500 bg-amber-50 text-amber-900 font-medium dark:bg-amber-500/10 dark:text-amber-200' : 'border-border text-muted-foreground hover:bg-muted/50'}`}
+              >
+                Half day
+                <span className="block text-xs font-normal opacity-70">4 hours, still log the rest</span>
+              </button>
+            </div>
+          </div>
+
           <div>
             <label className="text-sm font-medium mb-1.5 block">
               Reason <span className="text-muted-foreground font-normal">(Optional)</span>
@@ -634,7 +663,11 @@ function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
               className="bg-amber-500 hover:bg-amber-600 text-white"
               disabled={selectedDates.length === 0 || bulkMutation.isPending}
             >
-              {bulkMutation.isPending ? 'Logging...' : selectedDates.length === 0 ? 'Select dates' : `Log ${selectedDates.length} day${selectedDates.length !== 1 ? 's' : ''}`}
+              {bulkMutation.isPending
+                ? 'Logging...'
+                : selectedDates.length === 0
+                ? 'Select dates'
+                : `Log ${halfDay ? `${selectedDates.length} half day${selectedDates.length !== 1 ? 's' : ''}` : `${selectedDates.length} day${selectedDates.length !== 1 ? 's' : ''}`}`}
             </Button>
           </div>
         </div>
@@ -649,6 +682,11 @@ function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
                     <span className="text-sm font-medium font-mono shrink-0">
                       {format(new Date(leave.date + 'T00:00:00'), 'EEE, MMM dd')}
                     </span>
+                    {leave.portion === 0.5 && (
+                      <span className="shrink-0 rounded border border-amber-500/40 bg-amber-50 px-1.5 text-[10px] font-medium uppercase tracking-wide text-amber-700 dark:bg-amber-500/10 dark:text-amber-200">
+                        Half
+                      </span>
+                    )}
                     {leave.note && <span className="text-xs text-muted-foreground italic truncate">{leave.note}</span>}
                   </div>
                   <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"

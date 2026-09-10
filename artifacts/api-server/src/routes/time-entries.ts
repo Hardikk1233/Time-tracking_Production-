@@ -301,12 +301,13 @@ router.patch("/time-entries/:entryId", async (req, res): Promise<void> => {
     return;
   }
 
-  // Approved hours are final for everyone, including AVP and MD. Correcting
-  // one means reopening it first, which is recorded as its own event.
+  // Approved hours are final until somebody reopens them, which is recorded
+  // as its own event. That is what keeps a corrected figure distinguishable
+  // from one that was always what it says.
   if (entry.status === "approved") {
     res.status(409).json({
       error:
-        "This entry has been approved and can no longer be edited. An MD can reopen it if a correction is needed.",
+        "This entry has been approved. An AVP or MD can reopen it, and then it can be edited.",
     });
     return;
   }
@@ -435,7 +436,7 @@ router.delete("/time-entries/:entryId", async (req, res): Promise<void> => {
   if (entry.status === "approved") {
     res.status(409).json({
       error:
-        "This entry has been approved and can no longer be deleted. An MD can reopen it if a correction is needed.",
+        "This entry has been approved. An AVP or MD can reopen it, after which its owner or an MD can delete it.",
     });
     return;
   }
@@ -490,7 +491,7 @@ router.post(
     if (entry.status === "approved") {
       res.status(409).json({
         error:
-          "This entry has been approved; its billable split can no longer be changed.",
+          "This entry has been approved. An AVP or MD can reopen it, and then the split can be changed.",
       });
       return;
     }
@@ -658,12 +659,19 @@ router.post(
 );
 
 /**
- * The only way an approved entry becomes editable again — MD only, and
- * recorded as a `reopened` event so the correction is visible in the history.
+ * The only way an approved entry becomes editable again, and since 2026-09-10
+ * open to AVPs as well as MDs.
+ *
+ * Correcting approved hours still goes through here rather than straight into
+ * the entry: reopening is recorded as its own `reopened` event, so a figure
+ * that was signed off and later changed says so in the ledger instead of
+ * quietly differing from what the client was told. An AVP who wants an entry
+ * gone reopens it and then rejects or edits it, and all three steps are named
+ * in the history with the person behind each.
  */
 router.post(
   "/time-entries/:entryId/reopen",
-  requireRole("md"),
+  requireRole("avp"),
   async (req, res): Promise<void> => {
     const me = principal(req);
     const entryId = parseId(req.params.entryId);

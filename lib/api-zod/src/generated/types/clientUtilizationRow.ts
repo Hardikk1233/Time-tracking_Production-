@@ -6,11 +6,17 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ClientPeriodStats } from './clientPeriodStats';
+import type { EngagementType } from './engagementType';
 
 export interface ClientUtilizationRow {
   clientId: number;
   clientName: string;
-  fteCount: number;
+  engagementType: EngagementType;
+  /**
+     * Only set on FTE terms; null for block-of-hours and product clients.
+     * @nullable
+     */
+  fteCount: number | null;
   selectedRange: ClientPeriodStats;
   last3m: ClientPeriodStats;
   last6m: ClientPeriodStats;

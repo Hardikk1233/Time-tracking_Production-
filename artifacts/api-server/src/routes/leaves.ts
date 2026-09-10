@@ -10,11 +10,23 @@ type LeaveRow = {
   userName: string;
   userRole: string;
   date: string;
+  portion: number;
   note: string | null;
   createdAt: Date;
 };
 
 const router: IRouter = Router();
+
+/**
+ * Reads the half-day flag off a request body.
+ *
+ * The wire carries a boolean because that is what the control is - a half-day
+ * tick - while the column stores the fraction it means, so capacity maths can
+ * sum it. Anything other than an explicit `true` is a full day.
+ */
+function portionFrom(body: unknown): number {
+  return (body as { halfDay?: unknown })?.halfDay === true ? 0.5 : 1;
+}
 
 // ─── List leaves ──────────────────────────────────────────────────────────────
 // Analysts see only their own; Associates see self + their Analysts;
@@ -76,6 +88,7 @@ router.get("/leaves", async (req, res): Promise<void> => {
       userName: usersTable.name,
       userRole: usersTable.role,
       date: leavesTable.date,
+      portion: leavesTable.portion,
       note: leavesTable.note,
       createdAt: leavesTable.createdAt,
     })
@@ -92,6 +105,7 @@ router.get("/leaves", async (req, res): Promise<void> => {
 router.post("/leaves/bulk", async (req, res): Promise<void> => {
   const currentUserId = principal(req).id;
   const { dates, note } = req.body as { dates?: unknown; note?: string };
+  const portion = portionFrom(req.body);
 
   if (!Array.isArray(dates) || dates.length === 0) {
     res.status(400).json({ error: "dates must be a non-empty array" });
@@ -127,7 +141,7 @@ router.post("/leaves/bulk", async (req, res): Promise<void> => {
   let created: LeaveRow[] = [];
   if (toInsert.length > 0) {
     await db.insert(leavesTable).values(
-      toInsert.map((d) => ({ userId: currentUserId, date: d, note: note ?? null })),
+      toInsert.map((d) => ({ userId: currentUserId, date: d, portion, note: note ?? null })),
     );
 
     created = await db
@@ -137,7 +151,8 @@ router.post("/leaves/bulk", async (req, res): Promise<void> => {
         userName: usersTable.name,
         userRole: usersTable.role,
         date: leavesTable.date,
-        note: leavesTable.note,
+        portion: leavesTable.portion,
+      note: leavesTable.note,
         createdAt: leavesTable.createdAt,
       })
       .from(leavesTable)
@@ -159,6 +174,7 @@ router.post("/leaves/bulk", async (req, res): Promise<void> => {
 router.post("/leaves", async (req, res): Promise<void> => {
   const currentUserId = principal(req).id;
   const { date, note } = req.body as { date?: string; note?: string };
+  const portion = portionFrom(req.body);
 
   if (!date) {
     res.status(400).json({ error: "date is required" });
@@ -184,7 +200,7 @@ router.post("/leaves", async (req, res): Promise<void> => {
 
   const [leave] = await db
     .insert(leavesTable)
-    .values({ userId: currentUserId, date, note: note ?? null })
+    .values({ userId: currentUserId, date, portion, note: note ?? null })
     .returning();
 
   const [withUser] = await db
@@ -194,6 +210,7 @@ router.post("/leaves", async (req, res): Promise<void> => {
       userName: usersTable.name,
       userRole: usersTable.role,
       date: leavesTable.date,
+      portion: leavesTable.portion,
       note: leavesTable.note,
       createdAt: leavesTable.createdAt,
     })
