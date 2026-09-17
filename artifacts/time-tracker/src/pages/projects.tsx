@@ -30,12 +30,15 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, FolderKanban, ChevronRight, Check, PowerOff, Power } from 'lucide-react';
 import { errorMessage } from '@/lib/errors';
 
+// Nothing here is optional. A project with no description, no tasks and
+// nobody on it can be created in seconds and is useless the moment it exists:
+// there is nothing to log against and nobody who may log it.
 const projectSchema = z.object({
   clientId: z.coerce.number().min(1, 'Client is required'),
   name: z.string().min(1, 'Name is required'),
-  description: z.string().optional(),
-  taskIds: z.array(z.number()).optional(),
-  userIds: z.array(z.number()).optional(),
+  description: z.string().trim().min(1, 'Describe the scope of this project'),
+  taskIds: z.array(z.number()).min(1, 'Enable at least one task'),
+  userIds: z.array(z.number()).min(1, 'Add at least one team member'),
 });
 type ProjectForm = z.infer<typeof projectSchema>;
 
@@ -301,13 +304,13 @@ function CreateProjectDialog({ open, onOpenChange, clients }: { open: boolean; o
             )} />
             <FormField control={form.control} name="description" render={({ field }) => (
               <FormItem>
-                <FormLabel>Description <span className="text-muted-foreground font-normal">(Optional)</span></FormLabel>
-                <FormControl><Input placeholder="Brief scope" {...field} /></FormControl>
+                <FormLabel>Description</FormLabel>
+                <FormControl><Input placeholder="What this engagement covers" {...field} /></FormControl>
                 <FormMessage />
               </FormItem>
             )} />
             <div className="space-y-2">
-              <Label>Enabled Tasks <span className="text-muted-foreground font-normal">(Optional)</span></Label>
+              <Label>Enabled Tasks</Label>
               <MultiSelectList
                 items={tasks || []}
                 selectedIds={selectedTaskIds}
@@ -315,9 +318,15 @@ function CreateProjectDialog({ open, onOpenChange, clients }: { open: boolean; o
                 emptyLabel="No tasks available."
                 renderLabel={(t) => <span>{t.name}</span>}
               />
+              {/* These two lists are not FormFields, so their errors have no
+                  FormMessage to land in and the form would refuse to submit
+                  with nothing on screen explaining why. */}
+              {form.formState.errors.taskIds && (
+                <p className="text-sm font-medium text-destructive">{form.formState.errors.taskIds.message}</p>
+              )}
             </div>
             <div className="space-y-2">
-              <Label>Team Members <span className="text-muted-foreground font-normal">(Optional)</span></Label>
+              <Label>Team Members</Label>
               <MultiSelectList
                 items={(users || []).filter(u => u.isActive !== false)}
                 selectedIds={selectedUserIds}
@@ -325,6 +334,9 @@ function CreateProjectDialog({ open, onOpenChange, clients }: { open: boolean; o
                 emptyLabel="No users available."
                 renderLabel={(u) => <span>{u.name} <span className="text-muted-foreground text-xs">({u.role})</span></span>}
               />
+              {form.formState.errors.userIds && (
+                <p className="text-sm font-medium text-destructive">{form.formState.errors.userIds.message}</p>
+              )}
             </div>
             <div className="pt-4 flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

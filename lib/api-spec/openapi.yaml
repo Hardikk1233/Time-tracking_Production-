@@ -1802,13 +1802,16 @@ components:
 
     ClientInput:
       type: object
-      required: [name]
+      # A client with no associate on it is visible to nobody below MD, since
+      # every rank beneath reaches clients through assignment.
+      required: [name, description, associateIds]
       properties:
         name:
           type: string
           minLength: 1
         description:
           type: string
+          minLength: 1
         fteCount:
           type: number
           minimum: 0.1
@@ -1818,6 +1821,7 @@ components:
           $ref: "#/components/schemas/EngagementType"
         associateIds:
           type: array
+          minItems: 1
           items:
             type: integer
           description: "IDs of Associates to assign as responsible"
@@ -1863,7 +1867,9 @@ components:
 
     ProjectInput:
       type: object
-      required: [clientId, name]
+      # All of it. A project with no description, no tasks and nobody on it has
+      # nothing to log against and nobody who may log it.
+      required: [clientId, name, description, taskIds, userIds]
       properties:
         clientId:
           type: integer
@@ -1872,13 +1878,16 @@ components:
           minLength: 1
         description:
           type: string
+          minLength: 1
         taskIds:
           type: array
+          minItems: 1
           items:
             type: integer
           description: "Global tasks enabled for this project"
         userIds:
           type: array
+          minItems: 1
           items:
             type: integer
           description: "Users who can access this project"

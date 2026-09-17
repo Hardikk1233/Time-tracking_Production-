@@ -28,12 +28,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Plus, Trash2, Building2, ChevronRight, Users, PowerOff, Power, Clock, Package } from 'lucide-react';
 import { errorMessage } from '@/lib/errors';
 
+// Nothing here is optional either. The associate list matters most: both AVPs
+// and associates reach a client through assignment, so a client created with
+// nobody on it is visible to no one below MD and quietly belongs to nobody.
 const clientSchema = z.object({
   name: z.string().min(1, 'Name is required'),
-  description: z.string().optional(),
+  description: z.string().trim().min(1, 'Describe this client in a line'),
   engagementType: z.enum(['fte', 'block_hours', 'product']).default('fte'),
   fteCount: z.coerce.number().min(0.1, 'Min 0.1 FTE').max(100, 'Max 100 FTEs').default(1),
-  associateIds: z.array(z.number()).optional(),
+  associateIds: z.array(z.number()).min(1, 'Assign at least one associate'),
 });
 type ClientForm = z.infer<typeof clientSchema>;
 
@@ -279,7 +282,7 @@ function CreateClientDialog({ open, onOpenChange }: { open: boolean, onOpenChang
             )} />
             <FormField control={form.control} name="description" render={({ field }) => (
               <FormItem>
-                <FormLabel>Description <span className="text-muted-foreground font-normal">(Optional)</span></FormLabel>
+                <FormLabel>Description</FormLabel>
                 <FormControl><Input placeholder="Brief overview of the client" {...field} /></FormControl>
                 <FormMessage />
               </FormItem>
@@ -334,7 +337,7 @@ function CreateClientDialog({ open, onOpenChange }: { open: boolean, onOpenChang
               </p>
             )}
             <div className="space-y-2">
-              <Label>Associates Responsible <span className="text-muted-foreground font-normal">(Optional)</span></Label>
+              <Label>Associates Responsible</Label>
               {associates && associates.length > 0 ? (
                 <div className="grid grid-cols-1 gap-1 max-h-36 overflow-y-auto rounded-md border border-input bg-background p-2">
                   {associates.map((a) => {
@@ -354,6 +357,11 @@ function CreateClientDialog({ open, onOpenChange }: { open: boolean, onOpenChang
                 <p className="text-xs text-muted-foreground italic">No associates found.</p>
               )}
               {selectedAssociateIds.length > 0 && <p className="text-xs text-primary mt-1 font-mono">{selectedAssociateIds.length} selected</p>}
+              {/* Not a FormField, so its error needs somewhere of its own to
+                  land - otherwise the form just refuses to submit in silence. */}
+              {form.formState.errors.associateIds && (
+                <p className="text-sm font-medium text-destructive">{form.formState.errors.associateIds.message}</p>
+              )}
             </div>
             <div className="pt-4 flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

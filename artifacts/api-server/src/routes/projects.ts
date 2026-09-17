@@ -149,8 +149,26 @@ router.post(
       userIds?: number[];
     };
 
+    // Every field is required on creation. A project set up without a
+    // description, without tasks, or without anybody on it is the shape that
+    // kept producing support questions: nothing to log against, nobody able
+    // to log, and no way for a reader to tell what the engagement was. The
+    // form asks for all of it, and so does this, because a rule enforced only
+    // in the browser is not a rule.
     if (!clientId || !name?.trim()) {
       res.status(400).json({ error: "clientId and name are required" });
+      return;
+    }
+    if (!description?.trim()) {
+      res.status(400).json({ error: "A description is required" });
+      return;
+    }
+    if (!Array.isArray(taskIds) || taskIds.length === 0) {
+      res.status(400).json({ error: "Enable at least one task on the project" });
+      return;
+    }
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      res.status(400).json({ error: "Add at least one person to the project team" });
       return;
     }
 

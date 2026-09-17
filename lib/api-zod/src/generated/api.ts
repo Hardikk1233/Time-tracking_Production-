@@ -214,18 +214,20 @@ export const ListClientsResponse = zod.array(ListClientsResponseItem)
  * @summary Create a client
  */
 
+
 export const createClientBodyFteCountDefault = 1;
 export const createClientBodyFteCountMin = 0.1;
 export const createClientBodyFteCountMax = 100;
 
 
 
+
 export const CreateClientBody = zod.object({
   "name": zod.string().min(1),
-  "description": zod.string().optional(),
+  "description": zod.string().min(1),
   "fteCount": zod.number().min(createClientBodyFteCountMin).max(createClientBodyFteCountMax).default(createClientBodyFteCountDefault),
   "engagementType": zod.enum(['fte', 'block_hours', 'product']).optional().describe('How a client is engaged: dedicated FTEs, a purchased block of hours, or defined deliverables'),
-  "associateIds": zod.array(zod.int()).optional().describe('IDs of Associates to assign as responsible')
+  "associateIds": zod.array(zod.int()).min(1).describe('IDs of Associates to assign as responsible')
 })
 
 export const createClientResponseFteCountMin = 0.1;
@@ -464,12 +466,15 @@ export const ListProjectsResponse = zod.array(ListProjectsResponseItem)
 
 
 
+
+
+
 export const CreateProjectBody = zod.object({
   "clientId": zod.int(),
   "name": zod.string().min(1),
-  "description": zod.string().optional(),
-  "taskIds": zod.array(zod.int()).optional().describe('Global tasks enabled for this project'),
-  "userIds": zod.array(zod.int()).optional().describe('Users who can access this project')
+  "description": zod.string().min(1),
+  "taskIds": zod.array(zod.int()).min(1).describe('Global tasks enabled for this project'),
+  "userIds": zod.array(zod.int()).min(1).describe('Users who can access this project')
 })
 
 export const createProjectResponseIsActiveDefault = true;

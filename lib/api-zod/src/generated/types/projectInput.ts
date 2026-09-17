@@ -10,9 +10,16 @@ export interface ProjectInput {
   clientId: number;
   /** @minLength 1 */
   name: string;
-  description?: string;
-  /** Global tasks enabled for this project */
-  taskIds?: number[];
-  /** Users who can access this project */
-  userIds?: number[];
+  /** @minLength 1 */
+  description: string;
+  /**
+     * Global tasks enabled for this project
+     * @minItems 1
+     */
+  taskIds: number[];
+  /**
+     * Users who can access this project
+     * @minItems 1
+     */
+  userIds: number[];
 }

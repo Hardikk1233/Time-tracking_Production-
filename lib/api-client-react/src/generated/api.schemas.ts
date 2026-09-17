@@ -153,15 +153,19 @@ export interface ClientFteHistoryInput {
 export interface ClientInput {
   /** @minLength 1 */
   name: string;
-  description?: string;
+  /** @minLength 1 */
+  description: string;
   /**
      * @minimum 0.1
      * @maximum 100
      */
   fteCount?: number;
   engagementType?: EngagementType;
-  /** IDs of Associates to assign as responsible */
-  associateIds?: number[];
+  /**
+     * IDs of Associates to assign as responsible
+     * @minItems 1
+     */
+  associateIds: number[];
 }
 
 export interface ClientUpdate {
@@ -193,11 +197,18 @@ export interface ProjectInput {
   clientId: number;
   /** @minLength 1 */
   name: string;
-  description?: string;
-  /** Global tasks enabled for this project */
-  taskIds?: number[];
-  /** Users who can access this project */
-  userIds?: number[];
+  /** @minLength 1 */
+  description: string;
+  /**
+     * Global tasks enabled for this project
+     * @minItems 1
+     */
+  taskIds: number[];
+  /**
+     * Users who can access this project
+     * @minItems 1
+     */
+  userIds: number[];
 }
 
 export interface ProjectUpdate {

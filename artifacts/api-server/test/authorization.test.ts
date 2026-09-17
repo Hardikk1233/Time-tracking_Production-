@@ -153,10 +153,35 @@ describe("authorization", () => {
     });
 
     it("refuses creating a project under a client the caller cannot see", async () => {
-      const res = await associate
-        .post("/api/projects")
-        .send({ clientId: f.betaId, name: "Backdoor" });
+      // Otherwise complete, so the refusal is about the client rather than the
+      // shape of the request: creation requires a description, a task and a
+      // team member since 2026-09-17, and a bare payload would now 400 before
+      // ever reaching the visibility check this test exists to cover.
+      const res = await associate.post("/api/projects").send({
+        clientId: f.betaId,
+        name: "Backdoor",
+        description: "Should never be created",
+        taskIds: [f.betaTaskId],
+        userIds: [f.otherAssociate],
+      });
       expect(res.status).toBe(404);
+    });
+
+    it("refuses an incomplete project even on a client the caller can see", async () => {
+      const base = {
+        clientId: f.acmeId,
+        name: "Half filled",
+        description: "Scope",
+        taskIds: [f.taskId],
+        userIds: [f.analyst],
+      };
+      for (const missing of ["description", "taskIds", "userIds"] as const) {
+        const body: Record<string, unknown> = { ...base };
+        delete body[missing];
+        const res = await associate.post("/api/projects").send(body);
+        expect(res.status, `omitting ${missing}`).toBe(400);
+      }
+      expect((await associate.post("/api/projects").send(base)).status).toBe(201);
     });
 
     it("allows the in-scope associate to manage their own project", async () => {

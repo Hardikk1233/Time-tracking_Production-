@@ -110,8 +110,20 @@ router.post("/clients", requireRole("avp"), async (req, res): Promise<void> => {
       associateIds?: number[];
     };
 
+  // Required on creation, matching the form. The associate requirement is the
+  // one that earns its keep: a client with nobody on it is invisible to every
+  // rank below MD, since both AVPs and associates reach clients through
+  // assignment - so an unassigned client silently belongs to nobody.
   if (!name?.trim()) {
     res.status(400).json({ error: "name is required" });
+    return;
+  }
+  if (!description?.trim()) {
+    res.status(400).json({ error: "A description is required" });
+    return;
+  }
+  if (!Array.isArray(associateIds) || associateIds.length === 0) {
+    res.status(400).json({ error: "Assign at least one associate to this client" });
     return;
   }
 
@@ -129,7 +141,7 @@ router.post("/clients", requireRole("avp"), async (req, res): Promise<void> => {
     .insert(clientsTable)
     .values({
       name: name.trim(),
-      description: description ?? null,
+      description: description.trim(),
       fteCount: fte,
       // Omitted rather than defaulted here, so the column default stays the
       // single place "fte" is decided.

@@ -10,13 +10,17 @@ import type { EngagementType } from './engagementType';
 export interface ClientInput {
   /** @minLength 1 */
   name: string;
-  description?: string;
+  /** @minLength 1 */
+  description: string;
   /**
      * @minimum 0.1
      * @maximum 100
      */
   fteCount?: number;
   engagementType?: EngagementType;
-  /** IDs of Associates to assign as responsible */
-  associateIds?: number[];
+  /**
+     * IDs of Associates to assign as responsible
+     * @minItems 1
+     */
+  associateIds: number[];
 }
