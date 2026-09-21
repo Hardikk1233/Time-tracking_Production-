@@ -92,7 +92,7 @@ export function Sidebar() {
       <div className="flex-1 py-6 px-3 overflow-y-auto">
         <nav className="flex flex-col gap-1">
           {navItems.map((item) => (
-            <Link key={item.name} href={item.path} className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm font-medium ${location.startsWith(item.path) ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'}`}>
+            <Link key={item.name} href={item.path} data-tour={`nav-${item.path.slice(1)}`} className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm font-medium ${location.startsWith(item.path) ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'}`}>
               <item.icon className="w-4 h-4" />
               {item.name}
             </Link>

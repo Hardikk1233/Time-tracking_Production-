@@ -84,6 +84,9 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     title: user.title ?? null,
     reportingToId: user.reportingToId ?? null,
     reportingToName,
+    // Drives the guided tour: null means it has never been shown, which is
+    // what opens it on a first sign-in and keeps it shut afterwards.
+    tourCompletedAt: user.tourCompletedAt ?? null,
     createdAt: user.createdAt,
   });
 });
@@ -132,8 +135,27 @@ router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {
     title: user.title ?? null,
     reportingToId: user.reportingToId ?? null,
     reportingToName,
+    // Drives the guided tour: null means it has never been shown, which is
+    // what opens it on a first sign-in and keeps it shut afterwards.
+    tourCompletedAt: user.tourCompletedAt ?? null,
     createdAt: user.createdAt,
   });
+});
+
+/**
+ * Mark the guided tour as seen, whether it was finished or dismissed.
+ *
+ * Dismissing counts: somebody who closed it on purpose should not be shown it
+ * again on their next sign-in. The button in the corner is how they get it
+ * back, and it does not clear this - re-running the tour is not the same as
+ * never having seen it.
+ */
+router.post("/auth/tour-complete", requireAuth, async (req, res): Promise<void> => {
+  await db
+    .update(usersTable)
+    .set({ tourCompletedAt: new Date() })
+    .where(eq(usersTable.id, principal(req).id));
+  res.json({ message: "Tour marked as seen" });
 });
 
 export default router;

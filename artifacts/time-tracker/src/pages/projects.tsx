@@ -272,7 +272,7 @@ function CreateProjectDialog({ open, onOpenChange, clients }: { open: boolean; o
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button className="shadow-md font-semibold tracking-tight">
+        <Button data-tour="new-project" className="shadow-md font-semibold tracking-tight">
           <Plus className="w-4 h-4 mr-2" />New Project
         </Button>
       </DialogTrigger>

@@ -34,8 +34,17 @@ export const LoginResponse = zod.object({
   "title": zod.string().nullish().describe('Overrides the role\'s default label, e.g. \"VP\" for someone who holds the avp permission rank under a different real designation. Null shows the ordinary role label.'),
   "reportingToId": zod.int().nullish(),
   "reportingToName": zod.string().nullish(),
+  "tourCompletedAt": zod.coerce.date().nullish().describe('When this person finished or dismissed the guided tour. Null means they have never been shown it, which is what opens it by itself on a first sign-in.'),
   "isActive": zod.boolean().default(loginResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Mark the guided tour as seen
+ */
+export const CompleteTourResponse = zod.object({
+  "message": zod.string()
 })
 
 
@@ -60,6 +69,7 @@ export const GetMeResponse = zod.object({
   "title": zod.string().nullish().describe('Overrides the role\'s default label, e.g. \"VP\" for someone who holds the avp permission rank under a different real designation. Null shows the ordinary role label.'),
   "reportingToId": zod.int().nullish(),
   "reportingToName": zod.string().nullish(),
+  "tourCompletedAt": zod.coerce.date().nullish().describe('When this person finished or dismissed the guided tour. Null means they have never been shown it, which is what opens it by itself on a first sign-in.'),
   "isActive": zod.boolean().default(getMeResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
@@ -83,6 +93,7 @@ export const ListUsersResponseItem = zod.object({
   "title": zod.string().nullish().describe('Overrides the role\'s default label, e.g. \"VP\" for someone who holds the avp permission rank under a different real designation. Null shows the ordinary role label.'),
   "reportingToId": zod.int().nullish(),
   "reportingToName": zod.string().nullish(),
+  "tourCompletedAt": zod.coerce.date().nullish().describe('When this person finished or dismissed the guided tour. Null means they have never been shown it, which is what opens it by itself on a first sign-in.'),
   "isActive": zod.boolean().default(listUsersResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
@@ -115,6 +126,7 @@ export const CreateUserResponse = zod.object({
   "title": zod.string().nullish().describe('Overrides the role\'s default label, e.g. \"VP\" for someone who holds the avp permission rank under a different real designation. Null shows the ordinary role label.'),
   "reportingToId": zod.int().nullish(),
   "reportingToName": zod.string().nullish(),
+  "tourCompletedAt": zod.coerce.date().nullish().describe('When this person finished or dismissed the guided tour. Null means they have never been shown it, which is what opens it by itself on a first sign-in.'),
   "isActive": zod.boolean().default(createUserResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
@@ -137,6 +149,7 @@ export const GetUserResponse = zod.object({
   "title": zod.string().nullish().describe('Overrides the role\'s default label, e.g. \"VP\" for someone who holds the avp permission rank under a different real designation. Null shows the ordinary role label.'),
   "reportingToId": zod.int().nullish(),
   "reportingToName": zod.string().nullish(),
+  "tourCompletedAt": zod.coerce.date().nullish().describe('When this person finished or dismissed the guided tour. Null means they have never been shown it, which is what opens it by itself on a first sign-in.'),
   "isActive": zod.boolean().default(getUserResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
@@ -173,6 +186,7 @@ export const UpdateUserResponse = zod.object({
   "title": zod.string().nullish().describe('Overrides the role\'s default label, e.g. \"VP\" for someone who holds the avp permission rank under a different real designation. Null shows the ordinary role label.'),
   "reportingToId": zod.int().nullish(),
   "reportingToName": zod.string().nullish(),
+  "tourCompletedAt": zod.coerce.date().nullish().describe('When this person finished or dismissed the guided tour. Null means they have never been shown it, which is what opens it by itself on a first sign-in.'),
   "isActive": zod.boolean().default(updateUserResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
@@ -335,6 +349,7 @@ export const ListClientAssignmentsResponseItem = zod.object({
   "title": zod.string().nullish().describe('Overrides the role\'s default label, e.g. \"VP\" for someone who holds the avp permission rank under a different real designation. Null shows the ordinary role label.'),
   "reportingToId": zod.int().nullish(),
   "reportingToName": zod.string().nullish(),
+  "tourCompletedAt": zod.coerce.date().nullish().describe('When this person finished or dismissed the guided tour. Null means they have never been shown it, which is what opens it by itself on a first sign-in.'),
   "isActive": zod.boolean().default(listClientAssignmentsResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })
@@ -568,6 +583,7 @@ export const ListProjectAssignmentsResponseItem = zod.object({
   "title": zod.string().nullish().describe('Overrides the role\'s default label, e.g. \"VP\" for someone who holds the avp permission rank under a different real designation. Null shows the ordinary role label.'),
   "reportingToId": zod.int().nullish(),
   "reportingToName": zod.string().nullish(),
+  "tourCompletedAt": zod.coerce.date().nullish().describe('When this person finished or dismissed the guided tour. Null means they have never been shown it, which is what opens it by itself on a first sign-in.'),
   "isActive": zod.boolean().default(listProjectAssignmentsResponseIsActiveDefault),
   "createdAt": zod.coerce.date()
 })

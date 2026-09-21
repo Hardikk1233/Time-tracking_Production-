@@ -46,6 +46,11 @@ export interface User {
   reportingToId?: number | null;
   /** @nullable */
   reportingToName?: string | null;
+  /**
+     * When this person finished or dismissed the guided tour. Null means they have never been shown it, which is what opens it by itself on a first sign-in.
+     * @nullable
+     */
+  tourCompletedAt?: string | null;
   isActive?: boolean;
   createdAt: string;
 }

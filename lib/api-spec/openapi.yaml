@@ -75,6 +75,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /auth/tour-complete:
+    post:
+      operationId: completeTour
+      tags: [auth]
+      summary: Mark the guided tour as seen
+      responses:
+        "200":
+          description: Recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
   /auth/logout:
     post:
       operationId: logout
@@ -1690,6 +1703,13 @@ components:
           type: ["integer", "null"]
         reportingToName:
           type: ["string", "null"]
+        tourCompletedAt:
+          description: >-
+            When this person finished or dismissed the guided tour. Null means
+            they have never been shown it, which is what opens it by itself on
+            a first sign-in.
+          type: ["string", "null"]
+          format: date-time
         isActive:
           type: boolean
           default: true

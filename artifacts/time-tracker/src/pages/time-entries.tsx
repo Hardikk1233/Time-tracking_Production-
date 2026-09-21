@@ -327,7 +327,7 @@ export default function TimeEntries() {
                   </tr>
                 ))
               ) : entries && entries.length > 0 ? (
-                entries.map((entry: TimeEntry) => {
+                entries.map((entry: TimeEntry, idx: number) => {
                   // Associates+ can approve any pending entry (including own)
                   const canApprove = isAssociateOrAbove && entry.status === 'pending';
                   // AVP/MD: edit anything at any status; Associate: any pending; Analyst: own pending only
@@ -375,7 +375,10 @@ export default function TimeEntries() {
                         <StatusBadge status={entry.status} />
                       </td>
                       <td className="px-6 py-4">
-                        <div className="flex items-center justify-end gap-1">
+                        {/* The tour points at the first row's controls, so it
+                            has something real to spotlight rather than a
+                            hard-coded rectangle. */}
+                        <div className="flex items-center justify-end gap-1" data-tour={idx === 0 ? 'entry-actions' : undefined}>
                           {canEdit && (
                             <Button
                               variant="ghost" size="icon"
@@ -566,7 +569,7 @@ function LogLeaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="shadow-sm font-semibold tracking-tight border-amber-500/40 text-amber-600 hover:bg-amber-50 hover:border-amber-500">
+        <Button data-tour="log-leave" variant="outline" className="shadow-sm font-semibold tracking-tight border-amber-500/40 text-amber-600 hover:bg-amber-50 hover:border-amber-500">
           <CalendarOff className="w-4 h-4 mr-2" />
           Log Leave
         </Button>
@@ -763,7 +766,7 @@ function LogTimeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogTrigger asChild>
-        <Button className="shadow-md font-semibold tracking-tight" data-testid="button-log-time">
+        <Button data-tour="log-time" className="shadow-md font-semibold tracking-tight" data-testid="button-log-time">
           <Plus className="w-4 h-4 mr-2" />
           Log Time
         </Button>

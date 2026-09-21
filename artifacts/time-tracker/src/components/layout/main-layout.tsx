@@ -3,6 +3,7 @@ import { Sidebar } from './sidebar';
 import { useAuth } from '@/lib/auth';
 import { useLocation } from 'wouter';
 import { FeedbackWidget } from '@/components/feedback-widget';
+import { ProductTour } from '@/components/product-tour';
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -31,6 +32,10 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       {/* Temporary, for the rollout. Inside the authenticated layout so it
           never appears on the login screen. */}
       <FeedbackWidget />
+      {/* Opens itself on a first sign-in, and sits as a button afterwards.
+          Also inside the authenticated layout: it needs a signed-in user to
+          know which rank's tour to run. */}
+      <ProductTour />
     </div>
   );
 }

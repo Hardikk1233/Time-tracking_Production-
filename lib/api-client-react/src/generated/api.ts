@@ -261,6 +261,77 @@ export const useLogin = <TError = ErrorType<ErrorResponse>,
       return useMutation(getLoginMutationOptions(options));
     }
 
+export const getCompleteTourUrl = () => {
+
+
+
+
+  return `/api/auth/tour-complete`
+}
+
+/**
+ * @summary Mark the guided tour as seen
+ */
+export const completeTour = async ( options?: Parameters<typeof customFetch>[1]): Promise<MessageResponse> => {
+
+  return customFetch<MessageResponse>(getCompleteTourUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getCompleteTourMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeTour>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof completeTour>>, TError,void, TContext> => {
+
+const mutationKey = ['completeTour'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof completeTour>>, void> = () => {
+
+
+          return  completeTour(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CompleteTourMutationResult = NonNullable<Awaited<ReturnType<typeof completeTour>>>
+
+    export type CompleteTourMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Mark the guided tour as seen
+ */
+export const useCompleteTour = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeTour>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof completeTour>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getCompleteTourMutationOptions(options));
+    }
+
 export const getLogoutUrl = () => {
 
 

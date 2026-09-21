@@ -39,6 +39,16 @@ export const usersTable = pgTable("users", {
     { onDelete: "set null" },
   ),
   isActive: boolean("is_active").notNull().default(true),
+  /**
+   * When this person finished or dismissed the guided tour.
+   *
+   * Null means they have never been shown it, which is what makes the tour
+   * open by itself on a first sign-in and stay closed on every one after.
+   * A timestamp rather than a boolean so it is possible to tell a long-
+   * standing user from somebody who joined this week without them, and to
+   * re-run the tour for everyone by clearing rows older than a given date.
+   */
+  tourCompletedAt: timestamp("tour_completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
