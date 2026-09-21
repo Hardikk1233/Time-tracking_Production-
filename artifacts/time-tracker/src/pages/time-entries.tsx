@@ -6,6 +6,7 @@ import {
   useUpdateTimeEntry,
   useApproveTimeEntry,
   useRejectTimeEntry,
+  useReopenTimeEntry,
   useSplitTimeEntry,
   useListClients,
   useListProjects,
@@ -40,7 +41,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '@/components/ui/command';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, Check, X, Filter, Scissors, CalendarOff, Trash2, Pencil, ChevronsUpDown, CheckSquare } from 'lucide-react';
+import { Plus, Check, X, Filter, Scissors, CalendarOff, Trash2, Pencil, ChevronsUpDown, CheckSquare, Undo2 } from 'lucide-react';
 import { errorMessage } from '@/lib/errors';
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
@@ -143,6 +144,7 @@ export default function TimeEntries() {
 
   const approveMutation = useApproveTimeEntry();
   const rejectMutation = useRejectTimeEntry();
+  const reopenMutation = useReopenTimeEntry();
 
   const isAssociateOrAbove = ['associate', 'avp', 'md'].includes(user?.role ?? '');
   const isAvpOrAbove = ['avp', 'md'].includes(user?.role ?? '');
@@ -180,6 +182,21 @@ export default function TimeEntries() {
       },
       onError: (err: any) => {
         toast({ variant: 'destructive', title: 'Could not reject', description: errorMessage(err, 'Please try again.') });
+      },
+    });
+  };
+
+  // An approved entry is frozen server-side; reopening is its own recorded
+  // event, which is why it is a separate action rather than a silent side
+  // effect of editing.
+  const handleReopen = (id: number) => {
+    reopenMutation.mutate({ entryId: id }, {
+      onSuccess: () => {
+        toast({ title: 'Entry reopened', description: 'It is pending again and can now be edited.' });
+        queryClient.invalidateQueries({ queryKey: getListTimeEntriesQueryKey() });
+      },
+      onError: (err: any) => {
+        toast({ variant: 'destructive', title: 'Could not reopen', description: errorMessage(err, 'Please try again.') });
       },
     });
   };
@@ -330,9 +347,16 @@ export default function TimeEntries() {
                 entries.map((entry: TimeEntry, idx: number) => {
                   // Associates+ can approve any pending entry (including own)
                   const canApprove = isAssociateOrAbove && entry.status === 'pending';
-                  // AVP/MD: edit anything at any status; Associate: any pending; Analyst: own pending only
-                  const canEdit = isAvpOrAbove
-                    || (entry.status === 'pending' && (entry.userId === user?.id || isAssociateOrAbove));
+                  // An approved entry is locked for everyone until it is
+                  // reopened - AVPs and MDs included. They get the reopen
+                  // action instead, and the pencil comes back afterwards.
+                  const canReopen = isAvpOrAbove && entry.status === 'approved';
+                  // The split is frozen with the rest of an approved entry.
+                  const canSplit = isAssociateOrAbove && entry.status !== 'approved';
+                  // AVP/MD: any unapproved entry; Associate: any pending; Analyst: own pending only
+                  const canEdit = entry.status !== 'approved'
+                    && (isAvpOrAbove
+                      || (entry.status === 'pending' && (entry.userId === user?.id || isAssociateOrAbove)));
                   const isChecked = selectedIds.has(entry.id);
                   return (
                     <tr key={entry.id} className={cn('hover:bg-muted/10 transition-colors', isChecked && 'bg-emerald-50/40')}>
@@ -389,7 +413,18 @@ export default function TimeEntries() {
                               <Pencil className="w-4 h-4" />
                             </Button>
                           )}
-                          {isAssociateOrAbove && (
+                          {canReopen && (
+                            <Button
+                              variant="ghost" size="icon"
+                              className="h-8 w-8 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-full"
+                              title="Reopen entry so it can be edited"
+                              onClick={() => handleReopen(entry.id)}
+                              disabled={reopenMutation.isPending}
+                            >
+                              <Undo2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {canSplit && (
                             <Button
                               variant="ghost" size="icon"
                               className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50 rounded-full"
@@ -899,8 +934,6 @@ function EditTimeEntryDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { user } = useAuth();
-  const isAvpOrAbove = ['avp', 'md'].includes(user?.role ?? '');
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const updateMutation = useUpdateTimeEntry();
@@ -975,7 +1008,7 @@ function EditTimeEntryDialog({
           </DialogTitle>
           <DialogDescription>
             Update the details for this time entry.
-            {!isAvpOrAbove && ' Only pending entries can be edited.'}
+            {' '}An approved entry is locked until an AVP or MD reopens it.
           </DialogDescription>
         </DialogHeader>
 

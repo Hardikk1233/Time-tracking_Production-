@@ -869,6 +869,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/TimeEntry"
 
+  /time-entries/{entryId}/reopen:
+    post:
+      operationId: reopenTimeEntry
+      tags: [time-entries]
+      summary: Reopen an approved time entry so it can be edited again
+      parameters:
+        - $ref: "#/components/parameters/EntryId"
+      responses:
+        "200":
+          description: Reopened
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimeEntry"
+
   # ─── Dashboard ───────────────────────────────────────────────────────────
   /dashboard/summary:
     get:

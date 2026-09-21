@@ -1010,6 +1010,36 @@ export const RejectTimeEntryResponse = zod.object({
 
 
 /**
+ * @summary Reopen an approved time entry so it can be edited again
+ */
+export const ReopenTimeEntryParams = zod.object({
+  "entryId": zod.coerce.number().int()
+})
+
+export const ReopenTimeEntryResponse = zod.object({
+  "id": zod.int(),
+  "userId": zod.int(),
+  "userName": zod.string(),
+  "userRole": zod.string().optional(),
+  "taskId": zod.int(),
+  "taskName": zod.string(),
+  "projectId": zod.int().nullish().describe('null for legacy entries logged before tasks became a global catalog'),
+  "projectName": zod.string().nullish(),
+  "clientId": zod.int().nullish(),
+  "clientName": zod.string().nullish(),
+  "hours": zod.number(),
+  "date": zod.coerce.date(),
+  "description": zod.string().nullish(),
+  "billableHours": zod.number().nullish().describe('null = not yet split; 0..hours = explicitly split by Associate+'),
+  "nonBillableHours": zod.number().nullish().describe('computed: hours - billableHours; null if not yet split'),
+  "status": zod.enum(['pending', 'approved', 'rejected']),
+  "approvedById": zod.int().nullish(),
+  "approvedByName": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
  * @summary Overall hours summary
  */
 export const GetDashboardSummaryQueryParams = zod.object({

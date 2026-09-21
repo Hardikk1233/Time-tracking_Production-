@@ -116,8 +116,9 @@ export default function TimePolicy() {
               bill from.
             </Rule>
             <Rule label="Corrections">
-              Only an MD can reopen an approved entry. Doing so is recorded, so a
-              correction is visible rather than silent.
+              An AVP or an MD can reopen an approved entry, which returns it to
+              pending so it can be edited. Doing so is recorded, so a correction
+              is visible rather than silent.
             </Rule>
             <Rule label="Deletions">
               You may delete your own entries. Deleting somebody else&rsquo;s is

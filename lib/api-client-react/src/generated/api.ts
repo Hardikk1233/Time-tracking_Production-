@@ -3450,6 +3450,77 @@ export const useRejectTimeEntry = <TError = ErrorType<unknown>,
       return useMutation(getRejectTimeEntryMutationOptions(options));
     }
 
+export const getReopenTimeEntryUrl = (entryId: number,) => {
+
+
+
+
+  return `/api/time-entries/${entryId}/reopen`
+}
+
+/**
+ * @summary Reopen an approved time entry so it can be edited again
+ */
+export const reopenTimeEntry = async (entryId: number, options?: Parameters<typeof customFetch>[1]): Promise<TimeEntry> => {
+
+  return customFetch<TimeEntry>(getReopenTimeEntryUrl(entryId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getReopenTimeEntryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reopenTimeEntry>>, TError,{entryId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reopenTimeEntry>>, TError,{entryId: number}, TContext> => {
+
+const mutationKey = ['reopenTimeEntry'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reopenTimeEntry>>, {entryId: number}> = (props) => {
+          const {entryId} = props ?? {};
+
+          return  reopenTimeEntry(entryId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReopenTimeEntryMutationResult = NonNullable<Awaited<ReturnType<typeof reopenTimeEntry>>>
+
+    export type ReopenTimeEntryMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Reopen an approved time entry so it can be edited again
+ */
+export const useReopenTimeEntry = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reopenTimeEntry>>, TError,{entryId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reopenTimeEntry>>,
+        TError,
+        {entryId: number},
+        TContext
+      > => {
+      return useMutation(getReopenTimeEntryMutationOptions(options));
+    }
+
 export const getGetDashboardSummaryUrl = (params?: GetDashboardSummaryParams,) => {
   const normalizedParams = new URLSearchParams();
 
