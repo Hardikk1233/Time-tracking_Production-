@@ -240,23 +240,85 @@ describe("Entra ID authentication", () => {
       }
     });
 
-    it("shows a title override for someone the hierarchy has no rank for", async () => {
-      // Kashif Lone (VP) and Rohanjit Das (SVP) both hold the avp permission
-      // rank - Entra's role claim cannot tell them apart from an ordinary
-      // AVP - but should not appear signed in as "AVP".
+    it("labels an administrator Admin rather than by their rank", async () => {
+      // The people who administer the system hold md so that they can actually
+      // administer it, but only the Managing Director should read as "MD".
       const token = await mintToken({
-        oid: "oid-vp-title",
+        oid: "oid-admin-title",
         email: "kashif.lone@tristone-partners.com",
-        roles: ["TimeTrack.AVP"],
+        roles: ["TimeTrack.MD"],
       });
       await request(app).get("/api/time-entries").set(bearer(token));
 
       const [user] = await db
         .select()
         .from(usersTable)
-        .where(eq(usersTable.entraOid, "oid-vp-title"));
-      expect(user.role).toBe("avp");
-      expect(user.title).toBe("VP");
+        .where(eq(usersTable.entraOid, "oid-admin-title"));
+      expect(user.role).toBe("md");
+      expect(user.title).toBe("Admin");
+    });
+
+    it("leaves an md who holds no override reading as MD", async () => {
+      // Amit is the Managing Director, not an administrator. A null title is
+      // what makes the UI fall back to the rank's own label.
+      const token = await mintToken({
+        oid: "oid-plain-md",
+        email: "amit@tristone.test",
+        roles: ["TimeTrack.MD"],
+      });
+      await request(app).get("/api/time-entries").set(bearer(token));
+
+      const [user] = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.entraOid, "oid-plain-md"));
+      expect(user.role).toBe("md");
+      expect(user.title).toBeNull();
+    });
+
+    it("replaces a stale title the override map has since changed", async () => {
+      // Kashif and Rohanjit were stored as "VP" and "SVP" before they became
+      // administrators. Filling the column only when empty would have left
+      // them on the old label forever, so the map rewrites what disagrees.
+      const token = await mintToken({
+        oid: "oid-stale-title",
+        email: "rohanjit.das@tristone-partners.com",
+        roles: ["TimeTrack.MD"],
+      });
+      await request(app).get("/api/time-entries").set(bearer(token));
+      await db
+        .update(usersTable)
+        .set({ title: "SVP" })
+        .where(eq(usersTable.entraOid, "oid-stale-title"));
+
+      await request(app).get("/api/time-entries").set(bearer(token));
+
+      const [user] = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.entraOid, "oid-stale-title"));
+      expect(user.title).toBe("Admin");
+    });
+
+    it("leaves a hand-set title alone for somebody the map does not name", async () => {
+      const token = await mintToken({
+        oid: "oid-hand-set-title",
+        email: "director@tristone.test",
+        roles: ["TimeTrack.AVP"],
+      });
+      await request(app).get("/api/time-entries").set(bearer(token));
+      await db
+        .update(usersTable)
+        .set({ title: "Director" })
+        .where(eq(usersTable.entraOid, "oid-hand-set-title"));
+
+      await request(app).get("/api/time-entries").set(bearer(token));
+
+      const [user] = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.entraOid, "oid-hand-set-title"));
+      expect(user.title).toBe("Director");
     });
 
     it("leaves the title unset for an AVP with no override", async () => {

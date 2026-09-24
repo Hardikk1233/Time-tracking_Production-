@@ -13,7 +13,7 @@ export interface User {
   email: string;
   role: UserRole;
   /**
-     * Overrides the role's default label, e.g. "VP" for someone who holds the avp permission rank under a different real designation. Null shows the ordinary role label.
+     * Overrides the role's default label, e.g. "Admin" for someone who holds the md permission rank because they administer the system rather than because they are the Managing Director. Null shows the ordinary role label.
      * @nullable
      */
   title?: string | null;

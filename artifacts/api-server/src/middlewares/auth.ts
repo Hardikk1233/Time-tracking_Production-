@@ -43,20 +43,28 @@ function toPrincipal(user: UserRow, via: Principal["via"]): Principal {
 }
 
 /**
- * People whose real designation the four-tier role hierarchy cannot express.
+ * People whose designation differs from the rank they hold.
  *
- * Kashif Lone and Rohanjit Das hold the avp permission rank - same access,
- * same authorization checks as every other AVP - but their actual titles are
- * Vice President and Senior Vice President. Entra's app role claim cannot
- * carry this: mapping them to a role of their own would have meant a fifth
- * permission tier for a distinction that is cosmetic. This overrides only
- * what they see themselves signed in as.
+ * The md rank is held both by the Managing Director and by the people who
+ * administer the system. They need identical access - an administrator who
+ * cannot reopen an entry or correct a client cannot administer anything - so
+ * splitting them into a fifth permission tier would have meant two ranks with
+ * the same powers and a second copy of every check that names md. The
+ * difference is what the person is, not what they may do, so it is carried
+ * here as a label instead: Amit holds md with no override and stays "MD",
+ * while everyone listed here shows as "Admin".
+ *
+ * Kashif and Rohanjit previously appeared here as "VP" and "SVP", from when
+ * they held the avp rank. Those labels are gone because the same map now
+ * answers a different question - not "what is this person's real title" but
+ * "does this person administer the system".
  *
  * Keyed by email to match how an existing password account is adopted below.
  */
 const TITLE_OVERRIDES: Record<string, string> = {
-  "kashif.lone@tristone-partners.com": "VP",
-  "rohanjit.das@tristone-partners.com": "SVP",
+  "hardik.pandey@tristone-partners.com": "Admin",
+  "kashif.lone@tristone-partners.com": "Admin",
+  "rohanjit.das@tristone-partners.com": "Admin",
 };
 
 function titleOverrideFor(email: string): string | null {
@@ -126,18 +134,26 @@ async function resolveEntraUser(
   if (!user.isActive) return null;
 
   // Entra owns role and display name; a change there takes effect on the next
-  // token rather than needing a corresponding edit in this app. A title
-  // override is filled in once, for a row that predates it, and left alone
-  // after - the token carries no such claim, so there is nothing to re-sync.
-  const overrideTitle =
-    user.title == null ? titleOverrideFor(identity.email) : null;
-  if (user.role !== identity.role || user.name !== identity.name || overrideTitle) {
+  // token rather than needing a corresponding edit in this app. The token
+  // carries no title claim, so the map above owns that column the same way:
+  // where it names an email, its answer is written on every sign-in that
+  // disagrees. It used to fill the column only when it was empty, which meant
+  // a label could be changed here and never reach anyone who had already been
+  // given the old one. An email absent from the map is left alone, so a title
+  // set by hand for somebody it says nothing about survives.
+  const overrideTitle = titleOverrideFor(identity.email);
+  const titleIsStale = overrideTitle !== null && user.title !== overrideTitle;
+  if (
+    user.role !== identity.role ||
+    user.name !== identity.name ||
+    titleIsStale
+  ) {
     const [updated] = await db
       .update(usersTable)
       .set({
         role: identity.role,
         name: identity.name,
-        ...(overrideTitle ? { title: overrideTitle } : {}),
+        ...(titleIsStale ? { title: overrideTitle } : {}),
       })
       .where(eq(usersTable.id, user.id))
       .returning();
