@@ -295,6 +295,12 @@ export default function Login() {
             UPTIME // 99.99%<br/>
             STATUS // SECURE
           </p>
+          {/* Deliberately the faintest thing on the pane: a credit belongs on
+              the sign-in screen, but below the status block and well under the
+              headline in weight, so it is found rather than announced. */}
+          <p className="mt-10 font-mono text-[11px] leading-relaxed text-sidebar-foreground/30">
+            End to end designed and developed by Kashif Lone and Hardik Pandey
+          </p>
         </div>
       </div>
     </div>
