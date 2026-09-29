@@ -8,9 +8,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { devGet, devSend, type AppEvent, type FeedbackItem } from '@/lib/dev-api';
+import { DevPerformance } from './dev-performance';
 
 /**
- * Temporary console for the rollout: what broke, and what people said about it.
+ * Temporary console for the rollout: what broke, what people said about it,
+ * and - since the firm-wide rollout - how the app is holding up under them.
  *
  * Server-gated by DEV_CONSOLE_EMAILS — the endpoints answer 404 to anyone not
  * on the list, so this page being reachable in the bundle grants nothing. It is
@@ -103,8 +105,8 @@ export default function DevConsole() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Dev console</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Temporary. Errors captured from both sides of the app, and feedback
-            from whoever is testing.
+            Temporary. Load, latency and errors from both sides of the app, and
+            feedback from whoever is using it.
           </p>
         </div>
         <Button
@@ -118,8 +120,9 @@ export default function DevConsole() {
         </Button>
       </div>
 
-      <Tabs defaultValue="feedback">
+      <Tabs defaultValue="performance">
         <TabsList>
+          <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="feedback" className="gap-2">
             Feedback
             {unread > 0 && <Badge variant="default">{unread}</Badge>}
@@ -131,6 +134,10 @@ export default function DevConsole() {
             )}
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="performance" className="mt-4">
+          <DevPerformance />
+        </TabsContent>
 
         <TabsContent value="feedback" className="space-y-3 mt-4">
           {feedbackItems.length === 0 && (

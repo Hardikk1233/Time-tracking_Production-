@@ -13,7 +13,12 @@ import dashboardRouter from "./dashboard";
 import holidaysRouter from "./holidays";
 import leavesRouter from "./leaves";
 import reportsRouter from "./reports";
-import { devIngestRouter, feedbackRouter, devConsoleRouter } from "./dev";
+import {
+  devIngestRouter,
+  feedbackRouter,
+  clientMetricsRouter,
+  devConsoleRouter,
+} from "./dev";
 import { requireAuth } from "../middlewares/auth";
 import { requireDevConsole } from "../middlewares/dev-console";
 import { devIngestLimiter } from "../middlewares/rate-limit";
@@ -53,9 +58,11 @@ router.use(holidaysRouter);
 router.use(leavesRouter);
 router.use("/reports", reportsRouter);
 
-// Temporary rollout tooling. Anyone signed in may send feedback; only the
-// DEV_CONSOLE_EMAILS allowlist may read what has been collected.
+// Temporary rollout tooling. Anyone signed in may send feedback or the
+// timings their browser saw; only the DEV_CONSOLE_EMAILS allowlist may read
+// what has been collected.
 router.use(feedbackRouter);
+router.use(clientMetricsRouter);
 router.use("/dev", requireDevConsole, devConsoleRouter);
 
 export default router;

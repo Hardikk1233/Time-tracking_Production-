@@ -4,6 +4,11 @@ import { config } from "./config";
 import app from "./app";
 import { closeDatabase } from "@workspace/db";
 import { logger } from "./lib/logger";
+import {
+  flushMetrics,
+  startReplicaSampler,
+  stopReplicaSampler,
+} from "./lib/telemetry";
 
 const server = app.listen(config.port, () => {
   logger.info(
@@ -11,9 +16,12 @@ const server = app.listen(config.port, () => {
       port: config.port,
       nodeEnv: config.nodeEnv,
       servingStatic: Boolean(config.staticDir),
+      replica: config.replicaName,
+      metrics: config.metricsEnabled,
     },
     "Server listening",
   );
+  startReplicaSampler();
 });
 
 /**
@@ -39,6 +47,14 @@ function shutdown(signal: NodeJS.Signals): void {
 
   server.close(async (err) => {
     if (err) logger.error({ err }, "Error closing HTTP server");
+    // The last few seconds of timings are still in memory; a replica being
+    // scaled in is exactly the moment they are worth having.
+    stopReplicaSampler();
+    try {
+      await flushMetrics();
+    } catch (metricsErr) {
+      logger.warn({ err: metricsErr }, "Could not flush request metrics");
+    }
     try {
       await closeDatabase();
     } catch (dbErr) {

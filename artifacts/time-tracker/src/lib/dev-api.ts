@@ -91,3 +91,129 @@ export interface FeedbackItem {
   pageUrl: string | null;
   status: 'new' | 'read';
 }
+
+// ─── Shapes returned by the performance endpoints ────────────────────────────
+
+export type MetricsWindow = '15m' | '1h' | '24h' | '7d';
+
+export interface SeriesPoint {
+  t: string;
+  requests: number;
+  errors: number;
+  p50: number;
+  p95: number;
+  p99: number;
+  clientP95: number | null;
+  byReplica: Record<string, number>;
+}
+
+export interface RouteStat {
+  method: string;
+  route: string;
+  requests: number;
+  p50: number;
+  p95: number;
+  p99: number;
+  errors: number;
+  slow: number;
+  clientP95: number | null;
+}
+
+export interface UserStat {
+  userId: number;
+  userEmail: string | null;
+  userName: string | null;
+  requests: number;
+  errors: number;
+  slow: number;
+  abandoned: number;
+  p95: number;
+  maxMs: number;
+  clientRequests: number;
+  clientFailures: number;
+  clientP95: number | null;
+  lastSeen: string;
+}
+
+export interface ReplicaStat {
+  replica: string;
+  requests: number;
+  share: number;
+  p95: number;
+  latest: {
+    sampledAt: string;
+    eventLoopLagMs: number;
+    eventLoopMaxMs: number;
+    rssMb: number;
+    heapUsedMb: number;
+    inFlight: number;
+    poolTotal: number;
+    poolIdle: number;
+    poolWaiting: number;
+  } | null;
+}
+
+export interface SamplePoint {
+  t: string;
+  replica: string;
+  lagMs: number;
+  lagMaxMs: number;
+  rssMb: number;
+  inFlight: number;
+  poolWaiting: number;
+  requests: number;
+}
+
+export interface PageStat {
+  page: string;
+  loads: number;
+  p50: number;
+  p95: number;
+  p95Ttfb: number | null;
+}
+
+export interface MetricsOverview {
+  window: MetricsWindow;
+  since: string;
+  bucketSeconds: number;
+  slowMs: number;
+  live: { replica: string; inFlight: number; buffered: number };
+  totals: {
+    requests: number;
+    rps: number;
+    p50: number;
+    p95: number;
+    p99: number;
+    errors5xx: number;
+    errors4xx: number;
+    abandoned: number;
+    slow: number;
+    users: number;
+    replicas: number;
+    clientRequests: number;
+    clientP95: number | null;
+    clientFailures: number;
+  };
+  series: SeriesPoint[];
+  routes: RouteStat[];
+  users: UserStat[];
+  replicas: ReplicaStat[];
+  samples: SamplePoint[];
+  pages: PageStat[];
+}
+
+export interface RequestRow {
+  id: number;
+  occurredAt: string;
+  source: 'server' | 'client';
+  kind: 'api' | 'page';
+  method: string | null;
+  route: string;
+  statusCode: number | null;
+  durationMs: number;
+  userId: number | null;
+  userEmail: string | null;
+  replica: string | null;
+  requestId: string | null;
+  page: string | null;
+}

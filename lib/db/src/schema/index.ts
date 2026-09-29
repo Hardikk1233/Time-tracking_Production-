@@ -14,3 +14,4 @@ export * from "./holidays";
 export * from "./leaves";
 export * from "./appEvents";
 export * from "./feedback";
+export * from "./requestMetrics";

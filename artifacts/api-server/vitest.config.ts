@@ -31,6 +31,10 @@ export default defineConfig({
       ENTRA_AUDIENCE: "api://timetrack-test",
       ENTRA_ISSUER: "https://test-issuer.local/v2.0",
       ENTRA_JWKS_URI: "http://127.0.0.1:8098/keys",
+      // The /dev console answers 404 to everyone unless somebody is listed.
+      DEV_CONSOLE_EMAILS: "md@test.local",
+      // Gives request rows a stable replica name to assert on.
+      CONTAINER_APP_REPLICA_NAME: "test-replica",
     },
     globalSetup: ["./test/global-setup.ts"],
     // The suite shares one database, so files run sequentially rather than

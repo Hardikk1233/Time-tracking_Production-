@@ -15,6 +15,7 @@ import { apiLimiter, loginLimiter } from "./middlewares/rate-limit";
 import { config } from "./config";
 import { logger } from "./lib/logger";
 import { recordEvent } from "./lib/dev-events";
+import { requestTelemetry } from "./lib/telemetry";
 import "./types/session.d";
 
 const app: Express = express();
@@ -101,6 +102,11 @@ app.use(
     },
   }),
 );
+
+// Ahead of the limiters on purpose: a 429 is something that happened to a
+// person, and the Performance tab should show it against their name rather
+// than have it vanish before it was measured.
+app.use("/api", requestTelemetry);
 
 app.use("/api/auth/login", loginLimiter);
 app.use("/api", apiLimiter);

@@ -172,6 +172,30 @@ export const config = {
    * loop in one browser cannot fill the 32 GB volume the timesheets live on.
    */
   devEventRetention: integer("DEV_EVENT_RETENTION", 5000, 100, 100_000),
+
+  // ─── Request telemetry ─────────────────────────────────────────────────────
+  // Timing and load capture for the /dev console's Performance tab. On by
+  // default, unlike the console that reads it: the point is to have the data
+  // from *before* someone reports slowness, and the cost is one batched
+  // insert every few seconds.
+
+  /** Switch capture off entirely - the middleware and sampler become no-ops. */
+  metricsEnabled: boolean("METRICS_ENABLED", true),
+
+  /** Days of request rows and replica samples to keep. Trimmed on write. */
+  metricsRetentionDays: integer("METRICS_RETENTION_DAYS", 7, 1, 90),
+
+  /** A request slower than this counts as slow in the console's summaries. */
+  metricsSlowMs: integer("METRICS_SLOW_MS", 1000, 50, 60_000),
+
+  /** How often each replica records its own health. */
+  metricsSampleMs: integer("METRICS_SAMPLE_MS", 15_000, 1_000, 300_000),
+
+  /**
+   * Which replica this process is. Container Apps sets it; anywhere else the
+   * pid stands in, so a local run still groups its own rows together.
+   */
+  replicaName: read("CONTAINER_APP_REPLICA_NAME") ?? `local-${process.pid}`,
 } as const;
 
 if (missing.length > 0 || invalid.length > 0) {
