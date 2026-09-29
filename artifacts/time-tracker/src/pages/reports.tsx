@@ -6,6 +6,7 @@ import {
   useGetClientReport,
   useGetTeamReport,
   useGetMyReport,
+  useGetCustomReport,
 } from '@workspace/api-client-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,6 +21,7 @@ import {
   RefreshCw,
   FileText,
   TrendingUp,
+  SlidersHorizontal,
 } from 'lucide-react';
 import {
   ComposedChart,
@@ -32,10 +34,11 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
+import { CustomReportTable } from '@/components/custom-report';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Section = 'client' | 'team' | 'my';
+type Section = 'client' | 'team' | 'my' | 'custom';
 
 // ─── MultiSelect ─────────────────────────────────────────────────────────────
 
@@ -164,6 +167,7 @@ interface ClientSummaryRow {
   clientName: string;
   engagementType: 'fte' | 'block_hours' | 'product';
   fteCount: number | null;
+  requesters: Array<{ name: string; designation: string }>;
   selectedRange: PeriodStats;
   last3m:  PeriodStats;
   last6m:  PeriodStats;
@@ -215,6 +219,7 @@ function ClientSummaryTable({
         <thead>
           <tr className="border-b bg-muted/50">
             <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Client</th>
+            <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Requested by</th>
             <th className="text-center px-3 py-2.5 font-medium text-muted-foreground">Engagement</th>
             <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">{rangeLabel}</th>
             <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Last 3 Months</th>
@@ -232,6 +237,20 @@ function ClientSummaryTable({
               <td className="px-4 py-3">
                 <div className="font-medium">{r.clientName}</div>
                 <div className="text-xs text-muted-foreground">Click to view monthly chart</div>
+              </td>
+              <td className="px-3 py-3">
+                {r.requesters.length === 0 ? (
+                  <span className="text-xs text-muted-foreground">—</span>
+                ) : (
+                  <div className="space-y-0.5">
+                    {r.requesters.map((q, i) => (
+                      <div key={i} className="text-xs leading-tight">
+                        <span className="font-medium">{q.name}</span>
+                        <span className="text-muted-foreground"> · {q.designation}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </td>
               <td className="px-3 py-3 text-center">
                 <div className="text-xs font-medium">{ENGAGEMENT_LABEL[r.engagementType] ?? r.engagementType}</div>
@@ -441,6 +460,15 @@ export default function Reports() {
   // My Reports
   const [appliedMyParams, setAppliedMyParams] = useState<{ start: string; end: string } | null>(null);
 
+  // Custom Reports — narrowed in the order the question is actually asked:
+  // dates, then clients, then the projects under them, then the people.
+  const [customClientIds,  setCustomClientIds]  = useState<number[]>([]);
+  const [customProjectIds, setCustomProjectIds] = useState<number[]>([]);
+  const [customUserIds,    setCustomUserIds]    = useState<number[]>([]);
+  const [appliedCustomParams, setAppliedCustomParams] = useState<{
+    clientIds?: string; projectIds?: string; userIds?: string; start: string; end: string;
+  } | null>(null);
+
   // Filter options
   const { data: filterOptions } = useGetReportFilterOptions();
   const allUsers   = filterOptions?.users   ?? [];
@@ -463,6 +491,39 @@ export default function Reports() {
     { startDate: appliedMyParams?.start, endDate: appliedMyParams?.end },
     { query: { enabled: !!appliedMyParams } as any },
   );
+
+  // ── Custom Report ──────────────────────────────────────────────────────────
+  const { data: customReportData, isFetching: customFetching } = useGetCustomReport(
+    {
+      clientIds: appliedCustomParams?.clientIds,
+      projectIds: appliedCustomParams?.projectIds,
+      userIds: appliedCustomParams?.userIds,
+      startDate: appliedCustomParams?.start,
+      endDate: appliedCustomParams?.end,
+    },
+    { query: { enabled: !!appliedCustomParams } as any },
+  );
+
+  // Projects offered are only those under the chosen clients — picking a
+  // project belonging to a client you did not choose is not a question anyone
+  // is asking, and the full list runs to hundreds.
+  const allProjects = filterOptions?.projects ?? [];
+  const customProjectOptions = useMemo(
+    () => (customClientIds.length === 0
+      ? allProjects
+      : allProjects.filter((p) => customClientIds.includes(p.clientId))),
+    [allProjects, customClientIds],
+  );
+
+  // Narrowing the clients can strand a project selected under one that is no
+  // longer chosen; it would keep filtering the report invisibly.
+  useEffect(() => {
+    const allowed = new Set(customProjectOptions.map((p) => p.id));
+    setCustomProjectIds((ids) => {
+      const kept = ids.filter((id) => allowed.has(id));
+      return kept.length === ids.length ? ids : kept;
+    });
+  }, [customProjectOptions]);
 
   // ── Chart data ─────────────────────────────────────────────────────────────
   const chartData = useMemo(
@@ -490,18 +551,20 @@ export default function Reports() {
   // a spreadsheet reader cannot tell a real 0% from "the question does not
   // apply", and the second one summed into an average would be wrong.
   const num = (v: number | null) => (v === null ? '—' : v);
+  const requesterList = (r: { requesters: Array<{ name: string; designation: string }> }) =>
+    r.requesters.map((q) => `${q.name} (${q.designation})`).join('; ');
   const asPct = (v: number | null) => (v === null ? '—' : `${v}%`);
   const asHrs = (v: number | null) => (v === null ? '—' : `${v}h`);
 
   async function exportClientExcel() {
     await exportTableExcel('Client Utilization Report',
-      ['Client', 'Engagement', `${rangeLabel} Util%`, `${rangeLabel} Billable`, `${rangeLabel} Contracted`, 'L3M Util%', 'L6M Util%', 'L12M Util%'],
-      clientSummary.map((r) => [r.clientName, ENGAGEMENT_LABEL[r.engagementType] ?? r.engagementType, num(r.selectedRange.utilization), r.selectedRange.billableHours, num(r.selectedRange.contractedHours), num(r.last3m.utilization), num(r.last6m.utilization), num(r.last12m.utilization)]));
+      ['Client', 'Requested by', 'Engagement', `${rangeLabel} Util%`, `${rangeLabel} Billable`, `${rangeLabel} Contracted`, 'L3M Util%', 'L6M Util%', 'L12M Util%'],
+      clientSummary.map((r) => [r.clientName, requesterList(r), ENGAGEMENT_LABEL[r.engagementType] ?? r.engagementType, num(r.selectedRange.utilization), r.selectedRange.billableHours, num(r.selectedRange.contractedHours), num(r.last3m.utilization), num(r.last6m.utilization), num(r.last12m.utilization)]));
   }
   async function exportClientPDF() {
     await exportTablePDF('Client Utilization Report', 'Client Utilization Report',
-      ['Client', 'Engagement', 'Selected Util%', 'Billable', 'Contracted', 'L3M Util%', 'L6M Util%', 'L12M Util%'],
-      clientSummary.map((r) => [r.clientName, ENGAGEMENT_LABEL[r.engagementType] ?? r.engagementType, asPct(r.selectedRange.utilization), `${r.selectedRange.billableHours}h`, asHrs(r.selectedRange.contractedHours), asPct(r.last3m.utilization), asPct(r.last6m.utilization), asPct(r.last12m.utilization)]));
+      ['Client', 'Requested by', 'Engagement', 'Selected Util%', 'Billable', 'Contracted', 'L3M Util%', 'L6M Util%', 'L12M Util%'],
+      clientSummary.map((r) => [r.clientName, requesterList(r), ENGAGEMENT_LABEL[r.engagementType] ?? r.engagementType, asPct(r.selectedRange.utilization), `${r.selectedRange.billableHours}h`, asHrs(r.selectedRange.contractedHours), asPct(r.last3m.utilization), asPct(r.last6m.utilization), asPct(r.last12m.utilization)]));
   }
   async function exportTeamExcel() {
     if (!teamReportData) return;
@@ -509,6 +572,19 @@ export default function Reports() {
       ['Member', 'Role', 'Client', 'Project', 'Task', 'Total', 'Billable', 'Non-Billable', 'Efficiency%'],
       teamReportData.map((r) => [r.userName, roleLabel(r.userRole), r.clientName, r.projectName, r.taskName, r.totalHours, r.billableHours, r.nonBillableHours, r.efficiency]));
   }
+  async function exportCustomExcel() {
+    const rows = customReportData?.rows ?? [];
+    if (rows.length === 0) return;
+    const requesterFor = (clientId: number) =>
+      (customReportData?.requesters ?? [])
+        .filter((q) => q.clientId === clientId)
+        .map((q) => `${q.name} (${q.designation})`)
+        .join('; ');
+    await exportTableExcel('Custom Report',
+      ['Client', 'Requesters', 'Project', 'Member', 'Role', 'Task', 'Total', 'Billable', 'Non-Billable'],
+      rows.map((r) => [r.clientName, requesterFor(r.clientId), r.projectName, r.userName, roleLabel(r.userRole), r.taskName, r.totalHours, r.billableHours, r.nonBillableHours]));
+  }
+
   async function exportMyExcel() {
     if (!myReportData) return;
     await exportTableExcel('My Hours Report',
@@ -519,6 +595,7 @@ export default function Reports() {
   const tabs: { id: Section; label: string; icon: React.ReactNode }[] = [
     { id: 'client', label: 'Client Reports', icon: <Building2 className="w-4 h-4" /> },
     { id: 'team',   label: 'Team Reports',   icon: <Users    className="w-4 h-4" /> },
+    { id: 'custom', label: 'Custom Reports', icon: <SlidersHorizontal className="w-4 h-4" /> },
     { id: 'my',     label: 'My Reports',     icon: <User     className="w-4 h-4" /> },
   ];
 
@@ -698,6 +775,74 @@ export default function Reports() {
               </CardHeader>
               <CardContent className="p-0">
                 <TeamTable rows={teamReportData ?? []} />
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* ── CUSTOM REPORTS ─────────────────────────────────────────────────── */}
+      {section === 'custom' && (
+        <div className="space-y-5">
+          <Card>
+            <CardContent className="pt-5">
+              {/* The order of these controls is the order of the question:
+                  over what period, for which clients, on which of their
+                  projects, by whom. Each one narrows the next. */}
+              <div className="flex items-end gap-3 flex-wrap">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">1. Date Range</label>
+                  <DateFilters />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">2. Clients</label>
+                  <MultiSelect label="clients" options={allClients} selected={customClientIds} onChange={setCustomClientIds} />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">3. Projects</label>
+                  <MultiSelect label="projects" options={customProjectOptions.map((p) => ({ id: p.id, name: p.name }))} selected={customProjectIds} onChange={setCustomProjectIds} />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">4. Team Members</label>
+                  <MultiSelect label="team members" options={allUsers.map((u) => ({ id: u.id, name: u.name }))} selected={customUserIds} onChange={setCustomUserIds} />
+                </div>
+                <Button
+                  onClick={() => setAppliedCustomParams({
+                    clientIds:  customClientIds.length  ? customClientIds.join(',')  : undefined,
+                    projectIds: customProjectIds.length ? customProjectIds.join(',') : undefined,
+                    userIds:    customUserIds.length    ? customUserIds.join(',')    : undefined,
+                    start: startDate, end: endDate,
+                  })}
+                  disabled={customFetching} className="gap-2 self-end">
+                  {customFetching ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+                  Run Report
+                </Button>
+                {customReportData && customReportData.rows.length > 0 && (
+                  <Button variant="outline" size="sm" onClick={exportCustomExcel} className="gap-2 self-end">
+                    <Download className="w-4 h-4" />Excel
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Leave any filter empty to include everything within your access scope. Choosing clients narrows the projects offered.
+              </p>
+            </CardContent>
+          </Card>
+
+          {appliedCustomParams && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Hours by Client → Project → Member → Task</CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  {appliedCustomParams.start} to {appliedCustomParams.end}
+                  {customFetching && <span className="ml-2 text-primary animate-pulse">Loading…</span>}
+                </p>
+              </CardHeader>
+              <CardContent className="p-0">
+                <CustomReportTable
+                  rows={customReportData?.rows ?? []}
+                  requesters={customReportData?.requesters ?? []}
+                />
               </CardContent>
             </Card>
           )}

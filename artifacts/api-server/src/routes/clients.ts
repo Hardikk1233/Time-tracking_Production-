@@ -5,6 +5,7 @@ import {
   clientsTable,
   clientUsersTable,
   clientFteHistoryTable,
+  clientRequestersTable,
   usersTable,
 } from "@workspace/db";
 import { principal, requireRole, type Principal } from "../middlewares/auth";
@@ -277,6 +278,116 @@ router.delete(
       }
       throw err;
     }
+  },
+);
+
+// ─── Assignments ─────────────────────────────────────────────────────────────
+
+// ─── Requesters ──────────────────────────────────────────────────────────────
+//
+// The client's own people, the ones who ask for the work. Reading them needs
+// only sight of the client, because a requester's name is part of knowing who
+// you are working for. Writing them opens one rank lower than the rest of this
+// file: an Associate runs the day-to-day relationship and is the person who
+// learns that somebody new has joined on the client's side. Making them ask an
+// AVP to record it is how the list goes stale.
+
+const MAX_REQUESTER_FIELD = 200;
+
+/** Trims and length-checks one free-text field, or returns null if unusable. */
+function requesterField(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > MAX_REQUESTER_FIELD) return null;
+  return trimmed;
+}
+
+router.get("/clients/:clientId/requesters", async (req, res): Promise<void> => {
+  const clientId = await resolveClient(req, res);
+  if (!clientId) return;
+
+  const rows = await db
+    .select({
+      id: clientRequestersTable.id,
+      clientId: clientRequestersTable.clientId,
+      name: clientRequestersTable.name,
+      designation: clientRequestersTable.designation,
+      createdAt: clientRequestersTable.createdAt,
+    })
+    .from(clientRequestersTable)
+    .where(eq(clientRequestersTable.clientId, clientId))
+    .orderBy(clientRequestersTable.name);
+
+  res.json(rows);
+});
+
+router.post(
+  "/clients/:clientId/requesters",
+  requireRole("associate"),
+  async (req, res): Promise<void> => {
+    const clientId = await resolveClient(req, res);
+    if (!clientId) return;
+
+    const body = req.body as { name?: unknown; designation?: unknown };
+    const name = requesterField(body?.name);
+    const designation = requesterField(body?.designation);
+
+    // Both, and both said plainly: a requester with no title answers half the
+    // question the list exists to answer.
+    if (!name || !designation) {
+      res.status(400).json({
+        error: "Both a name and a designation are required.",
+      });
+      return;
+    }
+
+    const [created] = await db
+      .insert(clientRequestersTable)
+      .values({ clientId, name, designation })
+      .returning({
+        id: clientRequestersTable.id,
+        clientId: clientRequestersTable.clientId,
+        name: clientRequestersTable.name,
+        designation: clientRequestersTable.designation,
+        createdAt: clientRequestersTable.createdAt,
+      });
+
+    res.status(201).json(created);
+  },
+);
+
+router.delete(
+  "/clients/:clientId/requesters/:requesterId",
+  requireRole("associate"),
+  async (req, res): Promise<void> => {
+    const clientId = await resolveClient(req, res);
+    if (!clientId) return;
+
+    const requesterId = parseId(req.params.requesterId);
+    if (!requesterId) {
+      res.status(400).json({ error: "Invalid requester ID" });
+      return;
+    }
+
+    // Scoped to the client in the same statement: without it, knowing an id
+    // would be enough to delete a requester belonging to somebody else's
+    // account.
+    const [deleted] = await db
+      .delete(clientRequestersTable)
+      .where(
+        and(
+          eq(clientRequestersTable.id, requesterId),
+          eq(clientRequestersTable.clientId, clientId),
+        ),
+      )
+      .returning({ id: clientRequestersTable.id });
+
+    if (!deleted) {
+      res.status(404).json({ error: "Requester not found" });
+      return;
+    }
+
+    res.json({ message: "Requester removed" });
   },
 );
 

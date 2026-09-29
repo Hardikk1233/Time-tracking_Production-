@@ -354,6 +354,62 @@ paths:
               schema:
                 $ref: "#/components/schemas/MessageResponse"
 
+  /clients/{clientId}/requesters:
+    get:
+      operationId: listClientRequesters
+      tags: [clients]
+      summary: List the client-side people who request work
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      responses:
+        "200":
+          description: Requesters
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClientRequester"
+    post:
+      operationId: addClientRequester
+      tags: [clients]
+      summary: Record a new requester on the client's side
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientRequesterInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientRequester"
+
+  /clients/{clientId}/requesters/{requesterId}:
+    delete:
+      operationId: removeClientRequester
+      tags: [clients]
+      summary: Remove a requester from a client
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - name: requesterId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
   /clients/{clientId}/fte-history:
     get:
       operationId: listClientFteHistory
@@ -1250,6 +1306,45 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/TeamReportRow"
+
+  /reports/custom-report:
+    get:
+      operationId: getCustomReport
+      tags: [reports]
+      summary: Hours by client, project, person and task for a chosen slice
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: clientIds
+          in: query
+          schema:
+            type: string
+            description: Comma-separated client IDs. Omitted means every client in scope.
+        - name: projectIds
+          in: query
+          schema:
+            type: string
+            description: Comma-separated project IDs. Omitted means every project under the chosen clients.
+        - name: userIds
+          in: query
+          schema:
+            type: string
+            description: Comma-separated user IDs. Omitted means everyone in scope.
+      responses:
+        "200":
+          description: Custom report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomReport"
 
   /reports/my-report:
     get:
@@ -2499,9 +2594,72 @@ components:
         clientId:
           type: integer
 
+    ClientRequester:
+      type: object
+      required: [id, clientId, name, designation, createdAt]
+      properties:
+        id:
+          type: integer
+        clientId:
+          type: integer
+        name:
+          type: string
+        designation:
+          type: string
+          description: Their title at the client, e.g. "CFO".
+        createdAt:
+          type: string
+          format: date-time
+
+    ClientRequesterInput:
+      type: object
+      required: [name, designation]
+      properties:
+        name:
+          type: string
+        designation:
+          type: string
+
+    ReportRequester:
+      type: object
+      required: [id, clientId, name, designation]
+      properties:
+        id:
+          type: integer
+        clientId:
+          type: integer
+        name:
+          type: string
+        designation:
+          type: string
+
+    CustomReport:
+      type: object
+      required: [rows, requesters, range]
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/TeamReportRow"
+        requesters:
+          type: array
+          description: The client-side requesters for every client appearing in rows.
+          items:
+            $ref: "#/components/schemas/ReportRequester"
+        range:
+          type: object
+          required: [start, end]
+          properties:
+            start:
+              type: string
+              format: date
+            end:
+              type: string
+              format: date
+
     ReportFilterOptions:
       type: object
-      required: [users, clients, projects]
+      required: [users, clients, projects, requesters]
       properties:
         users:
           type: array
@@ -2515,6 +2673,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ReportFilterProject"
+        requesters:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportRequester"
 
     ClientPeriodStats:
       type: object
@@ -2537,7 +2699,7 @@ components:
 
     ClientUtilizationRow:
       type: object
-      required: [clientId, clientName, engagementType, fteCount, selectedRange, last3m, last6m, last12m]
+      required: [clientId, clientName, engagementType, fteCount, requesters, selectedRange, last3m, last6m, last12m]
       properties:
         clientId:
           type: integer
@@ -2545,6 +2707,17 @@ components:
           type: string
         engagementType:
           $ref: "#/components/schemas/EngagementType"
+        requesters:
+          type: array
+          description: The client-side people who ask for this account's work.
+          items:
+            type: object
+            required: [name, designation]
+            properties:
+              name:
+                type: string
+              designation:
+                type: string
         fteCount:
           type: ["number", "null"]
           description: "Only set on FTE terms; null for block-of-hours and product clients."

@@ -13,6 +13,7 @@ import {
   publicHolidaysTable,
   leavesTable,
   clientFteHistoryTable,
+  clientRequestersTable,
   hourBlocksTable,
   tasksTable,
 } from "@workspace/db";
@@ -217,6 +218,107 @@ router.use(async (req, res, next) => {
   next();
 });
 
+/**
+ * Hours grouped by person, client, project and task for a window.
+ *
+ * The one query behind both Team Reports and Custom Reports. They ask the same
+ * question and differ only in what they let you narrow it by, so they share
+ * the SQL: two copies would be two places for the billable/non-billable split
+ * to drift, and this codebase has paid for that kind of drift before.
+ *
+ * A null filter means "no restriction"; an empty array means "nothing is
+ * allowed", which callers must answer before getting here.
+ */
+async function aggregateHours(opts: {
+  start: string;
+  end: string;
+  userIds: number[] | null;
+  projectIds: number[] | null;
+}): Promise<Array<{
+  userId: number; userName: string; userRole: string;
+  clientId: number; clientName: string;
+  projectId: number; projectName: string;
+  taskId: number; taskName: string;
+  totalHours: number; billableHours: number; nonBillableHours: number; efficiency: number;
+}>> {
+  const conds: Parameters<typeof and>[0][] = [
+    gte(timeEntriesTable.date, opts.start),
+    lte(timeEntriesTable.date, opts.end),
+  ];
+  if (opts.userIds)    conds.push(inArray(timeEntriesTable.userId,    opts.userIds) as any);
+  if (opts.projectIds) conds.push(inArray(timeEntriesTable.projectId, opts.projectIds) as any);
+
+  const rows = await db
+    .select({
+      userId:    usersTable.id,
+      userName:  usersTable.name,
+      userRole:  usersTable.role,
+      clientId:  clientsTable.id,
+      clientName: clientsTable.name,
+      projectId:  projectsTable.id,
+      projectName: projectsTable.name,
+      taskId:    tasksTable.id,
+      taskName:  tasksTable.name,
+      totalHours:   sql<number>`SUM(${timeEntriesTable.hours})`,
+      billableHours: sql<number>`SUM(COALESCE(${timeEntriesTable.billableHours}, ${timeEntriesTable.hours}))`,
+    })
+    .from(timeEntriesTable)
+    .innerJoin(usersTable,    eq(usersTable.id,    timeEntriesTable.userId))
+    .innerJoin(projectsTable, eq(projectsTable.id, timeEntriesTable.projectId))
+    .innerJoin(clientsTable,  eq(clientsTable.id,  projectsTable.clientId))
+    .innerJoin(tasksTable,    eq(tasksTable.id,    timeEntriesTable.taskId))
+    .where(and(...conds))
+    .groupBy(
+      usersTable.id, usersTable.name, usersTable.role,
+      clientsTable.id, clientsTable.name,
+      projectsTable.id, projectsTable.name,
+      tasksTable.id, tasksTable.name,
+    )
+    .orderBy(clientsTable.name, projectsTable.name, usersTable.name, tasksTable.name);
+
+  return rows.map((r) => {
+    const total    = Number(r.totalHours);
+    const billable = Number(r.billableHours);
+    return {
+      userId: r.userId, userName: r.userName, userRole: r.userRole,
+      clientId: r.clientId, clientName: r.clientName,
+      projectId: r.projectId, projectName: r.projectName,
+      taskId: r.taskId, taskName: r.taskName,
+      totalHours: total,
+      billableHours: billable,
+      nonBillableHours: total - billable,
+      efficiency: percent(billable, total),
+    };
+  });
+}
+
+/**
+ * Project ids the caller may read, narrowed by whatever they filtered on.
+ *
+ * Returns null for "no restriction" and an empty array for "nothing matches",
+ * which the caller must treat as an empty report rather than as unrestricted -
+ * conflating those two is how a scoping bug turns into a data leak.
+ */
+async function resolveProjectIds(
+  scopedClientIds: number[] | null,
+  filterClientIds: number[] | null,
+  filterProjectIds: number[] | null,
+): Promise<number[] | null> {
+  const clientIds = intersect(scopedClientIds, filterClientIds);
+
+  let fromClients: number[] | null = null;
+  if (clientIds !== null) {
+    if (clientIds.length === 0) return [];
+    const rows = await db
+      .select({ id: projectsTable.id })
+      .from(projectsTable)
+      .where(inArray(projectsTable.clientId, clientIds));
+    fromClients = rows.map((r) => r.id);
+  }
+
+  return intersect(fromClients, filterProjectIds);
+}
+
 // ─── GET /filter-options ──────────────────────────────────────────────────────
 
 router.get("/filter-options", async (req, res): Promise<void> => {
@@ -245,7 +347,29 @@ router.get("/filter-options", async (req, res): Promise<void> => {
           .where(inArray(projectsTable.clientId, visibleClientIds))
           .orderBy(projectsTable.name);
 
-  res.json({ users: usersResult, clients: clientsResult, projects: projectsResult });
+  // Requesters ride along with the clients the caller can see: the custom
+  // report names them beside each client, and a second round trip for four
+  // columns of text is not worth the wiring.
+  const requestersResult =
+    visibleClientIds.length === 0
+      ? []
+      : await db
+          .select({
+            id: clientRequestersTable.id,
+            clientId: clientRequestersTable.clientId,
+            name: clientRequestersTable.name,
+            designation: clientRequestersTable.designation,
+          })
+          .from(clientRequestersTable)
+          .where(inArray(clientRequestersTable.clientId, visibleClientIds))
+          .orderBy(clientRequestersTable.name);
+
+  res.json({
+    users: usersResult,
+    clients: clientsResult,
+    projects: projectsResult,
+    requesters: requestersResult,
+  });
 });
 
 // ─── GET /client-report ───────────────────────────────────────────────────────
@@ -342,6 +466,25 @@ router.get("/client-report", async (req, res): Promise<void> => {
   //                 measured against the same purchased total.
   //   product     - nothing. The client buys deliverables, so there is no
   //                 hours commitment and no honest utilisation figure.
+  // Who asks for the work, per client. The utilisation table is where somebody
+  // decides whether an account is worth its capacity, and "who is asking"
+  // belongs next to that number rather than a click away on the client page.
+  const requesterRows = await db
+    .select({
+      clientId: clientRequestersTable.clientId,
+      name: clientRequestersTable.name,
+      designation: clientRequestersTable.designation,
+    })
+    .from(clientRequestersTable)
+    .where(inArray(clientRequestersTable.clientId, allClientIds))
+    .orderBy(clientRequestersTable.name);
+  const requestersByClient = new Map<number, Array<{ name: string; designation: string }>>();
+  for (const r of requesterRows) {
+    const list = requestersByClient.get(r.clientId) ?? [];
+    list.push({ name: r.name, designation: r.designation });
+    requestersByClient.set(r.clientId, list);
+  }
+
   const clientSummary = clientRows.map((c) => {
     const history = fteHistoryMap.get(c.id) ?? [];
 
@@ -355,6 +498,7 @@ router.get("/client-report", async (req, res): Promise<void> => {
       clientId: c.id,
       clientName: c.name,
       engagementType: c.engagementType,
+      requesters: requestersByClient.get(c.id) ?? [],
       // Only meaningful on FTE terms; the UI hides the column for the others.
       fteCount: c.engagementType === "fte" ? c.fteCount : null,
       selectedRange: buildPeriodStats(billableSelected.get(c.id) ?? 0, commitment(start, end)),
@@ -466,68 +610,88 @@ router.get("/team-report", async (req, res): Promise<void> => {
 
   const { scopedUserIds, scopedClientIds } = await resolveScope(principal(req));
 
-  const effectiveUserIds   = intersect(scopedUserIds, filterUserIds);
-  const effectiveClientIds = intersect(scopedClientIds, filterClientIds);
-
+  const effectiveUserIds = intersect(scopedUserIds, filterUserIds);
   if (effectiveUserIds !== null && effectiveUserIds.length === 0) { res.json([]); return; }
-  if (effectiveClientIds !== null && effectiveClientIds.length === 0) { res.json([]); return; }
 
-  let effectiveProjectIds: number[] | null = null;
-  if (effectiveClientIds !== null) {
-    const projRows = await db.select({ id: projectsTable.id }).from(projectsTable).where(inArray(projectsTable.clientId, effectiveClientIds));
-    if (projRows.length === 0) { res.json([]); return; }
-    effectiveProjectIds = projRows.map((r) => r.id);
-  }
+  const effectiveProjectIds = await resolveProjectIds(scopedClientIds, filterClientIds, null);
+  if (effectiveProjectIds !== null && effectiveProjectIds.length === 0) { res.json([]); return; }
 
-  const conds: Parameters<typeof and>[0][] = [
-    gte(timeEntriesTable.date, start),
-    lte(timeEntriesTable.date, end),
-  ];
-  if (effectiveUserIds)    conds.push(inArray(timeEntriesTable.userId,    effectiveUserIds) as any);
-  if (effectiveProjectIds) conds.push(inArray(timeEntriesTable.projectId, effectiveProjectIds) as any);
+  const rows = await aggregateHours({
+    start, end, userIds: effectiveUserIds, projectIds: effectiveProjectIds,
+  });
 
-  const rows = await db
-    .select({
-      userId:    usersTable.id,
-      userName:  usersTable.name,
-      userRole:  usersTable.role,
-      clientId:  clientsTable.id,
-      clientName: clientsTable.name,
-      projectId:  projectsTable.id,
-      projectName: projectsTable.name,
-      taskId:    tasksTable.id,
-      taskName:  tasksTable.name,
-      totalHours:   sql<number>`SUM(${timeEntriesTable.hours})`,
-      billableHours: sql<number>`SUM(COALESCE(${timeEntriesTable.billableHours}, ${timeEntriesTable.hours}))`,
-    })
-    .from(timeEntriesTable)
-    .innerJoin(usersTable,    eq(usersTable.id,    timeEntriesTable.userId))
-    .innerJoin(projectsTable, eq(projectsTable.id, timeEntriesTable.projectId))
-    .innerJoin(clientsTable,  eq(clientsTable.id,  projectsTable.clientId))
-    .innerJoin(tasksTable,    eq(tasksTable.id,    timeEntriesTable.taskId))
-    .where(and(...conds))
-    .groupBy(
-      usersTable.id, usersTable.name, usersTable.role,
-      clientsTable.id, clientsTable.name,
-      projectsTable.id, projectsTable.name,
-      tasksTable.id, tasksTable.name,
-    )
-    .orderBy(usersTable.name, clientsTable.name, projectsTable.name, tasksTable.name);
+  // Team Reports has always listed person-first; Custom Reports groups by
+  // client. Same rows, ordered for the screen that asked.
+  rows.sort((a, b) =>
+    a.userName.localeCompare(b.userName) ||
+    a.clientName.localeCompare(b.clientName) ||
+    a.projectName.localeCompare(b.projectName) ||
+    a.taskName.localeCompare(b.taskName));
 
-  res.json(rows.map((r) => {
-    const total   = Number(r.totalHours);
-    const billable = Number(r.billableHours);
-    return {
-      userId: r.userId, userName: r.userName, userRole: r.userRole,
-      clientId: r.clientId, clientName: r.clientName,
-      projectId: r.projectId, projectName: r.projectName,
-      taskId: r.taskId, taskName: r.taskName,
-      totalHours: total,
-      billableHours: billable,
-      nonBillableHours: total - billable,
-      efficiency: percent(billable, total),
-    };
-  }));
+  res.json(rows);
+});
+
+// ─── GET /custom-report ───────────────────────────────────────────────────────
+//
+// The report that answers "where did the time actually go", narrowing in the
+// order somebody actually thinks: a date range, then which clients, then which
+// projects under them, then which people.
+//
+// It returns the same flat person x client x project x task rows as Team
+// Reports and lets the screen do the grouping. Sending a nested tree instead
+// would fix one shape of question - and the whole point of this report is that
+// the shape of the question changes: today it is "how much did the AVP put
+// into that memo", next week it is "what did research cost us across every
+// client this quarter".
+//
+// Deliberately not gated above the reports router's own check. Scope already
+// decides what each rank can see - an Analyst's own hours, an Associate's
+// projects, an AVP's clients - so the report is safe for anyone the firm has
+// given a login, and an Associate wanting to know where their project's hours
+// went should not have to ask an MD to run it for them.
+
+router.get("/custom-report", async (req, res): Promise<void> => {
+  const { startDate, endDate, userIds: rawUserIds, clientIds: rawClientIds, projectIds: rawProjectIds } =
+    req.query as Record<string, string | string[] | undefined>;
+
+  const { start, end } = resolveRange(startDate as string | undefined, endDate as string | undefined);
+  const filterUserIds    = parseIds(rawUserIds as string | undefined);
+  const filterClientIds  = parseIds(rawClientIds as string | undefined);
+  const filterProjectIds = parseIds(rawProjectIds as string | undefined);
+
+  const { scopedUserIds, scopedClientIds } = await resolveScope(principal(req));
+
+  const effectiveUserIds = intersect(scopedUserIds, filterUserIds);
+  const empty = { rows: [], requesters: [], range: { start, end } };
+
+  if (effectiveUserIds !== null && effectiveUserIds.length === 0) { res.json(empty); return; }
+
+  const effectiveProjectIds = await resolveProjectIds(scopedClientIds, filterClientIds, filterProjectIds);
+  if (effectiveProjectIds !== null && effectiveProjectIds.length === 0) { res.json(empty); return; }
+
+  const rows = await aggregateHours({
+    start, end, userIds: effectiveUserIds, projectIds: effectiveProjectIds,
+  });
+
+  // Who asked for the work, for every client that appears in the result. The
+  // report is read to decide whether an engagement is worth what it costs, and
+  // that judgement is different depending on who was doing the asking.
+  const clientIdsInReport = [...new Set(rows.map((r) => r.clientId))];
+  const requesters =
+    clientIdsInReport.length === 0
+      ? []
+      : await db
+          .select({
+            id: clientRequestersTable.id,
+            clientId: clientRequestersTable.clientId,
+            name: clientRequestersTable.name,
+            designation: clientRequestersTable.designation,
+          })
+          .from(clientRequestersTable)
+          .where(inArray(clientRequestersTable.clientId, clientIdsInReport))
+          .orderBy(clientRequestersTable.name);
+
+  res.json({ rows, requesters, range: { start, end } });
 });
 
 // ─── GET /my-report ───────────────────────────────────────────────────────────

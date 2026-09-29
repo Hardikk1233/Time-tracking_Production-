@@ -27,12 +27,16 @@ import type {
   ClientHoursTrendPoint,
   ClientInput,
   ClientReport,
+  ClientRequester,
+  ClientRequesterInput,
   ClientUpdate,
+  CustomReport,
   DashboardSummary,
   ErrorResponse,
   GetClientHoursParams,
   GetClientHoursTrendParams,
   GetClientReportParams,
+  GetCustomReportParams,
   GetDashboardSummaryParams,
   GetMyReportParams,
   GetRecentActivityParams,
@@ -1443,6 +1447,228 @@ export const useRemoveUserFromClient = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getRemoveUserFromClientMutationOptions(options));
+    }
+
+export const getListClientRequestersUrl = (clientId: number,) => {
+
+
+
+
+  return `/api/clients/${clientId}/requesters`
+}
+
+/**
+ * @summary List the client-side people who request work
+ */
+export const listClientRequesters = async (clientId: number, options?: Parameters<typeof customFetch>[1]): Promise<ClientRequester[]> => {
+
+  return customFetch<ClientRequester[]>(getListClientRequestersUrl(clientId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListClientRequestersQueryKey = (clientId: number,) => {
+    return [
+    `/api/clients/${clientId}/requesters`
+    ] as const;
+    }
+
+
+export const getListClientRequestersQueryOptions = <TData = Awaited<ReturnType<typeof listClientRequesters>>, TError = ErrorType<unknown>>(clientId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listClientRequesters>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListClientRequestersQueryKey(clientId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listClientRequesters>>> = ({ signal }) => listClientRequesters(clientId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: clientId !== null && clientId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listClientRequesters>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListClientRequestersQueryResult = NonNullable<Awaited<ReturnType<typeof listClientRequesters>>>
+export type ListClientRequestersQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List the client-side people who request work
+ */
+
+export function useListClientRequesters<TData = Awaited<ReturnType<typeof listClientRequesters>>, TError = ErrorType<unknown>>(
+ clientId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listClientRequesters>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListClientRequestersQueryOptions(clientId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAddClientRequesterUrl = (clientId: number,) => {
+
+
+
+
+  return `/api/clients/${clientId}/requesters`
+}
+
+/**
+ * @summary Record a new requester on the client's side
+ */
+export const addClientRequester = async (clientId: number,
+    clientRequesterInput: ClientRequesterInput, options?: Parameters<typeof customFetch>[1]): Promise<ClientRequester> => {
+
+  return customFetch<ClientRequester>(getAddClientRequesterUrl(clientId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(clientRequesterInput)
+  }
+);}
+
+
+
+
+
+export const getAddClientRequesterMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addClientRequester>>, TError,{clientId: number;data: BodyType<ClientRequesterInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof addClientRequester>>, TError,{clientId: number;data: BodyType<ClientRequesterInput>}, TContext> => {
+
+const mutationKey = ['addClientRequester'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addClientRequester>>, {clientId: number;data: BodyType<ClientRequesterInput>}> = (props) => {
+          const {clientId,data} = props ?? {};
+
+          return  addClientRequester(clientId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddClientRequesterMutationResult = NonNullable<Awaited<ReturnType<typeof addClientRequester>>>
+    export type AddClientRequesterMutationBody = BodyType<ClientRequesterInput>
+    export type AddClientRequesterMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Record a new requester on the client's side
+ */
+export const useAddClientRequester = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addClientRequester>>, TError,{clientId: number;data: BodyType<ClientRequesterInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof addClientRequester>>,
+        TError,
+        {clientId: number;data: BodyType<ClientRequesterInput>},
+        TContext
+      > => {
+      return useMutation(getAddClientRequesterMutationOptions(options));
+    }
+
+export const getRemoveClientRequesterUrl = (clientId: number,
+    requesterId: number,) => {
+
+
+
+
+  return `/api/clients/${clientId}/requesters/${requesterId}`
+}
+
+/**
+ * @summary Remove a requester from a client
+ */
+export const removeClientRequester = async (clientId: number,
+    requesterId: number, options?: Parameters<typeof customFetch>[1]): Promise<MessageResponse> => {
+
+  return customFetch<MessageResponse>(getRemoveClientRequesterUrl(clientId,requesterId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getRemoveClientRequesterMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeClientRequester>>, TError,{clientId: number;requesterId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof removeClientRequester>>, TError,{clientId: number;requesterId: number}, TContext> => {
+
+const mutationKey = ['removeClientRequester'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeClientRequester>>, {clientId: number;requesterId: number}> = (props) => {
+          const {clientId,requesterId} = props ?? {};
+
+          return  removeClientRequester(clientId,requesterId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveClientRequesterMutationResult = NonNullable<Awaited<ReturnType<typeof removeClientRequester>>>
+
+    export type RemoveClientRequesterMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Remove a requester from a client
+ */
+export const useRemoveClientRequester = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeClientRequester>>, TError,{clientId: number;requesterId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof removeClientRequester>>,
+        TError,
+        {clientId: number;requesterId: number},
+        TContext
+      > => {
+      return useMutation(getRemoveClientRequesterMutationOptions(options));
     }
 
 export const getListClientFteHistoryUrl = (clientId: number,) => {
@@ -4767,6 +4993,90 @@ export function useGetTeamReport<TData = Awaited<ReturnType<typeof getTeamReport
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetTeamReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCustomReportUrl = (params?: GetCustomReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/custom-report?${stringifiedParams}` : `/api/reports/custom-report`
+}
+
+/**
+ * @summary Hours by client, project, person and task for a chosen slice
+ */
+export const getCustomReport = async (params?: GetCustomReportParams, options?: Parameters<typeof customFetch>[1]): Promise<CustomReport> => {
+
+  return customFetch<CustomReport>(getGetCustomReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCustomReportQueryKey = (params?: GetCustomReportParams,) => {
+    return [
+    `/api/reports/custom-report`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetCustomReportQueryOptions = <TData = Awaited<ReturnType<typeof getCustomReport>>, TError = ErrorType<unknown>>(params?: GetCustomReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCustomReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCustomReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCustomReport>>> = ({ signal }) => getCustomReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCustomReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCustomReportQueryResult = NonNullable<Awaited<ReturnType<typeof getCustomReport>>>
+export type GetCustomReportQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Hours by client, project, person and task for a chosen slice
+ */
+
+export function useGetCustomReport<TData = Awaited<ReturnType<typeof getCustomReport>>, TError = ErrorType<unknown>>(
+ params?: GetCustomReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCustomReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCustomReportQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

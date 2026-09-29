@@ -11,8 +11,12 @@ import {
   useListClientFteHistory,
   useAddClientFteHistory,
   useDeleteClientFteHistory,
+  useListClientRequesters,
+  useAddClientRequester,
+  useRemoveClientRequester,
   getListClientAssignmentsQueryKey,
   getListClientFteHistoryQueryKey,
+  getListClientRequestersQueryKey,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
@@ -31,7 +35,7 @@ import { Badge } from '@/components/ui/badge';
 import { HourBlocksCard } from '@/components/client-engagement';
 import {
   ArrowLeft, Building2, Users, FolderKanban, UserPlus, UserMinus,
-  ChevronRight, TrendingUp, Plus, Trash2, Calendar,
+  ChevronRight, TrendingUp, Plus, Trash2, Calendar, Contact,
 } from 'lucide-react';
 import { Link } from 'wouter';
 import { format, parseISO } from 'date-fns';
@@ -44,6 +48,16 @@ const fteSchema = z.object({
   effectiveTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD required').optional().or(z.literal('')),
 });
 type FteForm = z.infer<typeof fteSchema>;
+
+// ─── Requester form schema ────────────────────────────────────────────────────
+// Both fields required, matching the API. A requester with no title answers
+// half of what the list exists to answer - "the CFO asked for this" and "an
+// analyst asked for this" are different facts about the engagement.
+const requesterSchema = z.object({
+  name: z.string().trim().min(1, 'Name is required').max(200, 'Too long'),
+  designation: z.string().trim().min(1, 'Designation is required').max(200, 'Too long'),
+});
+type RequesterForm = z.infer<typeof requesterSchema>;
 
 export default function ClientDetail() {
   const [, params] = useRoute('/clients/:id');
@@ -61,12 +75,18 @@ export default function ClientDetail() {
   const { data: allUsers } = useListUsers();
   const { data: projects, isLoading: isLoadingProjects } = useListProjects({ clientId });
   const { data: fteHistory, isLoading: isLoadingFte } = useListClientFteHistory(clientId);
+  const { data: requesters, isLoading: isLoadingRequesters } = useListClientRequesters(clientId);
 
   const assignMutation = useAssignUserToClient();
   const removeMutation = useRemoveUserFromClient();
   const deleteFteMutation = useDeleteClientFteHistory();
 
   const isManager = ['avp', 'md'].includes(user?.role || '');
+  // Requesters open one rank lower than client administration: the Associate
+  // running the account is who learns that somebody new has joined on the
+  // client's side, and making them ask an AVP to record it is how the list
+  // goes stale. Matches requireRole("associate") on the API.
+  const canEditRequesters = ['associate', 'avp', 'md'].includes(user?.role || '');
   // Blocks and product allocation open up one rank lower than client admin,
   // matching requireRole("associate") on the API.
   const canAllocate = ['associate', 'avp', 'md'].includes(user?.role || '');
@@ -245,6 +265,14 @@ export default function ClientDetail() {
             )}
           </CardContent>
         </Card>
+
+        {/* Requesters — the client's own people, not users of this app */}
+        <RequestersCard
+          clientId={clientId}
+          requesters={requesters ?? []}
+          isLoading={isLoadingRequesters}
+          canEdit={canEditRequesters}
+        />
 
         {/* Projects */}
         <Card className="shadow-sm border-border">
@@ -503,5 +531,160 @@ function AddFtePeriodDialog({ open, onOpenChange, clientId }: { open: boolean; o
         </Form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ─── Requesters ───────────────────────────────────────────────────────────────
+
+/**
+ * The people on the client's side who ask for the work.
+ *
+ * Deliberately separate from Assigned Team: that card is staff of this firm,
+ * with logins and hours. These are the counterparties, and conflating the two
+ * is how somebody ends up trying to assign a client's CFO to a project.
+ */
+function RequestersCard({
+  clientId,
+  requesters,
+  isLoading,
+  canEdit,
+}: {
+  clientId: number;
+  requesters: Array<{ id: number; name: string; designation: string }>;
+  isLoading: boolean;
+  canEdit: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [adding, setAdding] = useState(false);
+
+  const addMutation = useAddClientRequester();
+  const removeMutation = useRemoveClientRequester();
+
+  const form = useForm<RequesterForm>({
+    resolver: zodResolver(requesterSchema),
+    defaultValues: { name: '', designation: '' },
+  });
+
+  const refresh = () =>
+    queryClient.invalidateQueries({ queryKey: getListClientRequestersQueryKey(clientId) });
+
+  const onSubmit = (data: RequesterForm) => {
+    addMutation.mutate(
+      { clientId, data },
+      {
+        onSuccess: () => {
+          toast({ title: 'Requester added' });
+          void refresh();
+          form.reset();
+          setAdding(false);
+        },
+        onError: (err: any) =>
+          toast({ variant: 'destructive', title: 'Could not add', description: errorMessage(err, 'Please try again.') }),
+      },
+    );
+  };
+
+  const handleRemove = (requesterId: number, name: string) => {
+    removeMutation.mutate(
+      { clientId, requesterId },
+      {
+        onSuccess: () => {
+          toast({ title: `${name} removed` });
+          void refresh();
+        },
+        onError: (err: any) =>
+          toast({ variant: 'destructive', title: 'Could not remove', description: errorMessage(err, 'Please try again.') }),
+      },
+    );
+  };
+
+  return (
+    <Card className="shadow-sm border-border">
+      <CardHeader className="border-b border-border/50 bg-muted/20 pb-4">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base font-bold flex items-center gap-2">
+            <Contact className="w-4 h-4 text-primary" />
+            Requesters
+            <Badge variant="secondary" className="font-mono text-[10px]">
+              {requesters.length}
+            </Badge>
+          </CardTitle>
+          {canEdit && !adding && (
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setAdding(true)}>
+              <Plus className="w-3.5 h-3.5" />
+              Add
+            </Button>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground pt-1">
+          Who asks for the work on the client&rsquo;s side. Shown on reports.
+        </p>
+      </CardHeader>
+      <CardContent className="pt-4 space-y-4">
+        {adding && (
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3 p-3 bg-muted/30 rounded-md">
+              <FormField control={form.control} name="name" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs">Name</FormLabel>
+                  <FormControl><Input placeholder="Priya Menon" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="designation" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs">Designation</FormLabel>
+                  <FormControl><Input placeholder="Chief Financial Officer" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <div className="flex gap-2 justify-end">
+                <Button type="button" size="sm" variant="ghost"
+                  onClick={() => { form.reset(); setAdding(false); }}>
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" disabled={addMutation.isPending}>
+                  {addMutation.isPending ? 'Adding…' : 'Add requester'}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        )}
+
+        {isLoading ? (
+          <div className="space-y-3">{[1, 2].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
+        ) : requesters.length > 0 ? (
+          <div className="space-y-2">
+            {requesters.map(r => (
+              <div key={r.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-md group">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold text-xs">
+                    {r.name.substring(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{r.name}</p>
+                    <p className="text-xs text-muted-foreground">{r.designation}</p>
+                  </div>
+                </div>
+                {canEdit && (
+                  <Button
+                    variant="ghost" size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => handleRemove(r.id, r.name)} disabled={removeMutation.isPending}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="py-8 text-center text-muted-foreground font-mono text-sm border border-dashed border-border rounded-md">
+            NO REQUESTERS RECORDED
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

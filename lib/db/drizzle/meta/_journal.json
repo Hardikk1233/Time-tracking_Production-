@@ -78,6 +78,13 @@
       "when": 1790662104672,
       "tag": "0010_request_metrics",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790686444870,
+      "tag": "0011_client_requesters",
+      "breakpoints": true
     }
   ]
 }

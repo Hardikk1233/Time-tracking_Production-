@@ -1,6 +1,7 @@
 export * from "./users";
 export * from "./clients";
 export * from "./clientFteHistory";
+export * from "./clientRequesters";
 export * from "./hourBlocks";
 export * from "./products";
 export * from "./projects";

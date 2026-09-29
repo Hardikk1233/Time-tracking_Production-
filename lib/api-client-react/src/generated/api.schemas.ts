@@ -597,59 +597,31 @@ export interface ReportFilterProject {
   clientId: number;
 }
 
-export interface ReportFilterOptions {
-  users: ReportFilterUser[];
-  clients: ReportFilterClient[];
-  projects: ReportFilterProject[];
-}
-
-export interface ClientPeriodStats {
-  billableHours: number;
-  /**
-     * The hours the client is committed to for this window: FTEs × working days × 8 on FTE terms, the purchased balance on a block of hours, and null on a product engagement, which buys deliverables rather than capacity and so has nothing to measure against.
-     * @nullable
-     */
-  contractedHours: number | null;
-  /**
-     * billableHours / contractedHours × 100. Null when there is no commitment.
-     * @nullable
-     */
-  utilization: number | null;
-  /** @nullable */
-  contractUtilization?: number | null;
-}
-
-export interface ClientUtilizationRow {
+export interface ClientRequester {
+  id: number;
   clientId: number;
-  clientName: string;
-  engagementType: EngagementType;
-  /**
-     * Only set on FTE terms; null for block-of-hours and product clients.
-     * @nullable
-     */
-  fteCount: number | null;
-  selectedRange: ClientPeriodStats;
-  last3m: ClientPeriodStats;
-  last6m: ClientPeriodStats;
-  last12m: ClientPeriodStats;
+  name: string;
+  /** Their title at the client, e.g. "CFO". */
+  designation: string;
+  createdAt: string;
 }
 
-export interface MonthlyClientRow {
-  /** YYYY-MM */
-  month: string;
-  billableHours: number;
-  /** @nullable */
-  contractedHours: number | null;
-  /** @nullable */
-  utilization: number | null;
-  /** @nullable */
-  contractUtilization?: number | null;
+export interface ClientRequesterInput {
+  name: string;
+  designation: string;
 }
 
-export interface ClientReport {
-  clientSummary: ClientUtilizationRow[];
-  monthlySummary?: MonthlyClientRow[] | null;
+export interface ReportRequester {
+  id: number;
+  clientId: number;
+  name: string;
+  designation: string;
 }
+
+export type CustomReportRange = {
+  start: string;
+  end: string;
+};
 
 export type TeamReportRowUserRole = typeof TeamReportRowUserRole[keyof typeof TeamReportRowUserRole];
 
@@ -676,6 +648,75 @@ export interface TeamReportRow {
   nonBillableHours: number;
   /** billableHours / totalHours × 100 */
   efficiency: number;
+}
+
+export interface CustomReport {
+  rows: TeamReportRow[];
+  /** The client-side requesters for every client appearing in rows. */
+  requesters: ReportRequester[];
+  range: CustomReportRange;
+}
+
+export interface ReportFilterOptions {
+  users: ReportFilterUser[];
+  clients: ReportFilterClient[];
+  projects: ReportFilterProject[];
+  requesters: ReportRequester[];
+}
+
+export interface ClientPeriodStats {
+  billableHours: number;
+  /**
+     * The hours the client is committed to for this window: FTEs × working days × 8 on FTE terms, the purchased balance on a block of hours, and null on a product engagement, which buys deliverables rather than capacity and so has nothing to measure against.
+     * @nullable
+     */
+  contractedHours: number | null;
+  /**
+     * billableHours / contractedHours × 100. Null when there is no commitment.
+     * @nullable
+     */
+  utilization: number | null;
+  /** @nullable */
+  contractUtilization?: number | null;
+}
+
+export type ClientUtilizationRowRequestersItem = {
+  name: string;
+  designation: string;
+};
+
+export interface ClientUtilizationRow {
+  clientId: number;
+  clientName: string;
+  engagementType: EngagementType;
+  /** The client-side people who ask for this account's work. */
+  requesters: ClientUtilizationRowRequestersItem[];
+  /**
+     * Only set on FTE terms; null for block-of-hours and product clients.
+     * @nullable
+     */
+  fteCount: number | null;
+  selectedRange: ClientPeriodStats;
+  last3m: ClientPeriodStats;
+  last6m: ClientPeriodStats;
+  last12m: ClientPeriodStats;
+}
+
+export interface MonthlyClientRow {
+  /** YYYY-MM */
+  month: string;
+  billableHours: number;
+  /** @nullable */
+  contractedHours: number | null;
+  /** @nullable */
+  utilization: number | null;
+  /** @nullable */
+  contractUtilization?: number | null;
+}
+
+export interface ClientReport {
+  clientSummary: ClientUtilizationRow[];
+  monthlySummary?: MonthlyClientRow[] | null;
 }
 
 export interface MyReportRow {
@@ -843,6 +884,23 @@ userIds?: string;
  * Comma-separated client IDs
  */
 clientIds?: string;
+};
+
+export type GetCustomReportParams = {
+startDate?: string;
+endDate?: string;
+/**
+ * Comma-separated client IDs. Omitted means every client in scope.
+ */
+clientIds?: string;
+/**
+ * Comma-separated project IDs. Omitted means every project under the chosen clients.
+ */
+projectIds?: string;
+/**
+ * Comma-separated user IDs. Omitted means everyone in scope.
+ */
+userIds?: string;
 };
 
 export type GetMyReportParams = {

@@ -8,9 +8,11 @@
 import type { ReportFilterClient } from './reportFilterClient';
 import type { ReportFilterProject } from './reportFilterProject';
 import type { ReportFilterUser } from './reportFilterUser';
+import type { ReportRequester } from './reportRequester';
 
 export interface ReportFilterOptions {
   users: ReportFilterUser[];
   clients: ReportFilterClient[];
   projects: ReportFilterProject[];
+  requesters: ReportRequester[];
 }

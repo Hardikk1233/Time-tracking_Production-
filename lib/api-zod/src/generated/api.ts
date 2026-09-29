@@ -386,6 +386,57 @@ export const RemoveUserFromClientResponse = zod.object({
 
 
 /**
+ * @summary List the client-side people who request work
+ */
+export const ListClientRequestersParams = zod.object({
+  "clientId": zod.coerce.number().int()
+})
+
+export const ListClientRequestersResponseItem = zod.object({
+  "id": zod.int(),
+  "clientId": zod.int(),
+  "name": zod.string(),
+  "designation": zod.string().describe('Their title at the client, e.g. \"CFO\".'),
+  "createdAt": zod.coerce.date()
+})
+export const ListClientRequestersResponse = zod.array(ListClientRequestersResponseItem)
+
+
+/**
+ * @summary Record a new requester on the client's side
+ */
+export const AddClientRequesterParams = zod.object({
+  "clientId": zod.coerce.number().int()
+})
+
+export const AddClientRequesterBody = zod.object({
+  "name": zod.string(),
+  "designation": zod.string()
+})
+
+export const AddClientRequesterResponse = zod.object({
+  "id": zod.int(),
+  "clientId": zod.int(),
+  "name": zod.string(),
+  "designation": zod.string().describe('Their title at the client, e.g. \"CFO\".'),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Remove a requester from a client
+ */
+export const RemoveClientRequesterParams = zod.object({
+  "clientId": zod.coerce.number().int(),
+  "requesterId": zod.coerce.number().int()
+})
+
+export const RemoveClientRequesterResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
  * @summary List FTE history for a client
  */
 export const ListClientFteHistoryParams = zod.object({
@@ -1328,6 +1379,12 @@ export const GetReportFilterOptionsResponse = zod.object({
   "id": zod.int(),
   "name": zod.string(),
   "clientId": zod.int()
+})),
+  "requesters": zod.array(zod.object({
+  "id": zod.int(),
+  "clientId": zod.int(),
+  "name": zod.string(),
+  "designation": zod.string()
 }))
 })
 
@@ -1346,6 +1403,10 @@ export const GetClientReportResponse = zod.object({
   "clientId": zod.int(),
   "clientName": zod.string(),
   "engagementType": zod.enum(['fte', 'block_hours', 'product']).describe('How a client is engaged: dedicated FTEs, a purchased block of hours, or defined deliverables'),
+  "requesters": zod.array(zod.object({
+  "name": zod.string(),
+  "designation": zod.string()
+})).describe('The client-side people who ask for this account\'s work.'),
   "fteCount": zod.number().nullable().describe('Only set on FTE terms; null for block-of-hours and product clients.'),
   "selectedRange": zod.object({
   "billableHours": zod.number(),
@@ -1408,6 +1469,46 @@ export const GetTeamReportResponseItem = zod.object({
   "efficiency": zod.number().describe('billableHours \/ totalHours × 100')
 })
 export const GetTeamReportResponse = zod.array(GetTeamReportResponseItem)
+
+
+/**
+ * @summary Hours by client, project, person and task for a chosen slice
+ */
+export const GetCustomReportQueryParams = zod.object({
+  "startDate": zod.date().optional(),
+  "endDate": zod.date().optional(),
+  "clientIds": zod.coerce.string().optional(),
+  "projectIds": zod.coerce.string().optional(),
+  "userIds": zod.coerce.string().optional()
+})
+
+export const GetCustomReportResponse = zod.object({
+  "rows": zod.array(zod.object({
+  "userId": zod.int(),
+  "userName": zod.string(),
+  "userRole": zod.enum(['analyst', 'associate', 'avp', 'md']),
+  "clientId": zod.int(),
+  "clientName": zod.string(),
+  "projectId": zod.int(),
+  "projectName": zod.string(),
+  "taskId": zod.int(),
+  "taskName": zod.string(),
+  "totalHours": zod.number(),
+  "billableHours": zod.number(),
+  "nonBillableHours": zod.number(),
+  "efficiency": zod.number().describe('billableHours \/ totalHours × 100')
+})),
+  "requesters": zod.array(zod.object({
+  "id": zod.int(),
+  "clientId": zod.int(),
+  "name": zod.string(),
+  "designation": zod.string()
+})).describe('The client-side requesters for every client appearing in rows.'),
+  "range": zod.object({
+  "start": zod.coerce.date(),
+  "end": zod.coerce.date()
+})
+})
 
 
 /**
