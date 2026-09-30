@@ -521,6 +521,9 @@ export const ListProjectsResponseItem = zod.object({
   "name": zod.string(),
   "description": zod.string().nullish(),
   "isActive": zod.boolean().default(listProjectsResponseIsActiveDefault),
+  "requesterId": zod.int().nullish().describe('Which of the client\'s requesters commissioned this project. Null when none has been recorded - most projects predate the field.'),
+  "requesterName": zod.string().nullish(),
+  "requesterDesignation": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 export const ListProjectsResponse = zod.array(ListProjectsResponseItem)
@@ -540,7 +543,8 @@ export const CreateProjectBody = zod.object({
   "name": zod.string().min(1),
   "description": zod.string().min(1),
   "taskIds": zod.array(zod.int()).min(1).describe('Global tasks enabled for this project'),
-  "userIds": zod.array(zod.int()).min(1).describe('Users who can access this project')
+  "userIds": zod.array(zod.int()).min(1).describe('Users who can access this project'),
+  "requesterId": zod.int().nullish().describe('Optional, unlike the rest: a client may have nobody recorded yet, and a project should not be blocked on that piece of admin. Must be a requester of the project\'s own client.')
 })
 
 export const createProjectResponseIsActiveDefault = true;
@@ -552,6 +556,9 @@ export const CreateProjectResponse = zod.object({
   "name": zod.string(),
   "description": zod.string().nullish(),
   "isActive": zod.boolean().default(createProjectResponseIsActiveDefault),
+  "requesterId": zod.int().nullish().describe('Which of the client\'s requesters commissioned this project. Null when none has been recorded - most projects predate the field.'),
+  "requesterName": zod.string().nullish(),
+  "requesterDesignation": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -572,6 +579,9 @@ export const GetProjectResponse = zod.object({
   "name": zod.string(),
   "description": zod.string().nullish(),
   "isActive": zod.boolean().default(getProjectResponseIsActiveDefault),
+  "requesterId": zod.int().nullish().describe('Which of the client\'s requesters commissioned this project. Null when none has been recorded - most projects predate the field.'),
+  "requesterName": zod.string().nullish(),
+  "requesterDesignation": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -589,7 +599,8 @@ export const UpdateProjectParams = zod.object({
 export const UpdateProjectBody = zod.object({
   "name": zod.string().min(1).optional(),
   "description": zod.string().nullish(),
-  "isActive": zod.boolean().optional()
+  "isActive": zod.boolean().optional(),
+  "requesterId": zod.int().nullish().describe('Null clears the attribution. Must belong to the project\'s client.')
 })
 
 export const updateProjectResponseIsActiveDefault = true;
@@ -601,6 +612,9 @@ export const UpdateProjectResponse = zod.object({
   "name": zod.string(),
   "description": zod.string().nullish(),
   "isActive": zod.boolean().default(updateProjectResponseIsActiveDefault),
+  "requesterId": zod.int().nullish().describe('Which of the client\'s requesters commissioned this project. Null when none has been recorded - most projects predate the field.'),
+  "requesterName": zod.string().nullish(),
+  "requesterDesignation": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -1478,6 +1492,8 @@ export const GetTeamReportResponseItem = zod.object({
   "projectName": zod.string(),
   "taskId": zod.int(),
   "taskName": zod.string(),
+  "requesterName": zod.string().nullish().describe('Who asked for this row\'s project - not the client\'s whole roster.'),
+  "requesterDesignation": zod.string().nullish(),
   "totalHours": zod.number(),
   "billableHours": zod.number(),
   "nonBillableHours": zod.number(),
@@ -1509,6 +1525,8 @@ export const GetCustomReportResponse = zod.object({
   "projectName": zod.string(),
   "taskId": zod.int(),
   "taskName": zod.string(),
+  "requesterName": zod.string().nullish().describe('Who asked for this row\'s project - not the client\'s whole roster.'),
+  "requesterDesignation": zod.string().nullish(),
   "totalHours": zod.number(),
   "billableHours": zod.number(),
   "nonBillableHours": zod.number(),

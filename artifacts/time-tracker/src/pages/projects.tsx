@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import {
   useListProjects,
   useCreateProject,
+  useListClientRequesters,
   useUpdateProject,
   useDeleteProject,
   useListClients,
@@ -40,6 +41,9 @@ const projectSchema = z.object({
   description: z.string().trim().min(1, 'Describe the scope of this project'),
   taskIds: z.array(z.number()).min(1, 'Enable at least one task'),
   userIds: z.array(z.number()).min(1, 'Add at least one team member'),
+  // Optional, unlike the rest of the form: a client may have nobody recorded
+  // yet, and a project should not be blocked on that piece of admin.
+  requesterId: z.coerce.number().optional().nullable(),
 });
 type ProjectForm = z.infer<typeof projectSchema>;
 
@@ -243,8 +247,21 @@ function CreateProjectDialog({ open, onOpenChange, clients }: { open: boolean; o
 
   const form = useForm<ProjectForm>({
     resolver: zodResolver(projectSchema),
-    defaultValues: { name: '', description: '', taskIds: [], userIds: [] },
+    defaultValues: { name: '', description: '', taskIds: [], userIds: [], requesterId: null },
   });
+
+  // Requesters belong to a client, so the list only exists once one is chosen.
+  const selectedClientId = form.watch('clientId');
+  const { data: requesters } = useListClientRequesters(selectedClientId, {
+    query: { enabled: Number(selectedClientId) > 0 } as any,
+  });
+
+  // Changing the client strands a requester chosen under the previous one,
+  // which the API would then refuse with a message about a client the person
+  // is no longer looking at.
+  useEffect(() => {
+    form.setValue('requesterId', null);
+  }, [selectedClientId]);
 
   const selectedTaskIds = form.watch('taskIds') ?? [];
   const selectedUserIds = form.watch('userIds') ?? [];
@@ -259,7 +276,7 @@ function CreateProjectDialog({ open, onOpenChange, clients }: { open: boolean; o
       onSuccess: () => {
         toast({ title: 'Project created' });
         queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
-        form.reset({ name: '', description: '', taskIds: [], userIds: [] });
+        form.reset({ name: '', description: '', taskIds: [], userIds: [], requesterId: null });
         onOpenChange(false);
       },
       onError: (err: any) => {
@@ -293,6 +310,40 @@ function CreateProjectDialog({ open, onOpenChange, clients }: { open: boolean; o
                     {activeClients.map(c => <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                <FormMessage />
+              </FormItem>
+            )} />
+            {/* Who on the client's side asked for this work. Offered right
+                after the client, because the options depend on it. */}
+            <FormField control={form.control} name="requesterId" render={({ field }) => (
+              <FormItem>
+                <FormLabel>
+                  Requester <span className="text-muted-foreground font-normal">(optional)</span>
+                </FormLabel>
+                <Select
+                  onValueChange={(v) => field.onChange(v === 'none' ? null : Number(v))}
+                  value={field.value ? String(field.value) : 'none'}
+                  disabled={!selectedClientId}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder={selectedClientId ? 'Select a requester' : 'Choose a client first'} />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="none">— Not recorded</SelectItem>
+                    {(requesters ?? []).map(r => (
+                      <SelectItem key={r.id} value={String(r.id)}>
+                        {r.name} <span className="text-muted-foreground text-xs">· {r.designation}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedClientId && (requesters ?? []).length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    This client has no requesters yet — add them on the client page.
+                  </p>
+                )}
                 <FormMessage />
               </FormItem>
             )} />

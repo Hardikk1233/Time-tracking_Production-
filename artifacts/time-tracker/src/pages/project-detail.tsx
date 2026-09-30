@@ -213,6 +213,14 @@ export default function ProjectDetail() {
             <div className="text-xs font-mono text-primary mb-1 uppercase tracking-wider">{project.clientName}</div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">{project.name}</h1>
             <p className="text-muted-foreground font-mono text-sm mt-1">{project.description || 'No description provided.'}</p>
+            {/* Who commissioned this piece of work, when it is recorded. */}
+            {project.requesterName && (
+              <p className="text-sm text-muted-foreground mt-2">
+                Requested by{' '}
+                <span className="font-medium text-foreground">{project.requesterName}</span>
+                <span className="text-muted-foreground"> · {project.requesterDesignation}</span>
+              </p>
+            )}
             <p className="text-xs text-muted-foreground font-mono mt-1 opacity-60">Created {format(new Date(project.createdAt), 'MMMM yyyy')}</p>
           </div>
         </div>

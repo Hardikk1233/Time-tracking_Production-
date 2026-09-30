@@ -28,6 +28,9 @@ export interface CustomRow {
   projectName: string;
   taskId: number;
   taskName: string;
+  /** Who asked for this row's project - not the client's whole roster. */
+  requesterName?: string | null;
+  requesterDesignation?: string | null;
   totalHours: number;
   billableHours: number;
   nonBillableHours: number;
@@ -151,14 +154,7 @@ export function CustomReportTable({
                       <span className="font-semibold">{clientName}</span>
                       {clientRequesters.length > 0 && (
                         <span className="text-xs text-muted-foreground font-normal">
-                          · requested by{' '}
-                          {clientRequesters.map((q, i) => (
-                            <span key={q.id}>
-                              {i > 0 && ', '}
-                              {q.name}
-                              <span className="opacity-60"> ({q.designation})</span>
-                            </span>
-                          ))}
+                          · {clientRequesters.length} requester{clientRequesters.length === 1 ? '' : 's'} on this client
                         </span>
                       )}
                     </div>
@@ -173,7 +169,15 @@ export function CustomReportTable({
                       <Fragment key={`project-${projectId}`}>
                         {/* ── Project ────────────────────────────────── */}
                         <tr className="border-b border-border/50 bg-background">
-                          <td className="py-2 px-3 pl-10 font-medium">{projectRows[0].projectName}</td>
+                          <td className="py-2 px-3 pl-10">
+                            <span className="font-medium">{projectRows[0].projectName}</span>
+                            {projectRows[0].requesterName && (
+                              <span className="text-xs text-muted-foreground font-normal">
+                                {' '}· requested by {projectRows[0].requesterName}
+                                <span className="opacity-60"> ({projectRows[0].requesterDesignation})</span>
+                              </span>
+                            )}
+                          </td>
                           <HoursCells rows={projectRows} bold />
                         </tr>
 

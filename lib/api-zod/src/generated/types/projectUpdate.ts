@@ -12,4 +12,9 @@ export interface ProjectUpdate {
   /** @nullable */
   description?: string | null;
   isActive?: boolean;
+  /**
+     * Null clears the attribution. Must belong to the project's client.
+     * @nullable
+     */
+  requesterId?: number | null;
 }

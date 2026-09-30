@@ -235,6 +235,135 @@ describe("a person's designation travels with their rank", () => {
   });
 });
 
+/**
+ * A project names the one person who commissioned it.
+ *
+ * The client's requester list says who *can* ask; this says who did. A report
+ * row about one memo naming all seven of an account's contacts answers a
+ * question nobody asked, which is what this replaces.
+ */
+describe("a project's requester", () => {
+  let f: Fixtures;
+  let acmeRequester: number;
+  let betaRequester: number;
+
+  beforeEach(async () => {
+    f = await resetDatabase();
+    const md = await signIn(app, "md@test.local");
+    acmeRequester = (await md.post(`/api/clients/${f.acmeId}/requesters`)
+      .send({ name: "Priya Menon", designation: "CFO" })).body.id;
+    betaRequester = (await md.post(`/api/clients/${f.betaId}/requesters`)
+      .send({ name: "Beta Person", designation: "COO" })).body.id;
+  });
+
+  const newProject = (extra: Record<string, unknown> = {}) => ({
+    clientId: f.acmeId,
+    name: "Q4 Memo",
+    description: "A memo",
+    taskIds: [f.taskId],
+    userIds: [f.analyst],
+    ...extra,
+  });
+
+  it("is recorded when the project is created", async () => {
+    const md = await signIn(app, "md@test.local");
+    const res = await md.post("/api/projects").send(newProject({ requesterId: acmeRequester }));
+
+    expect(res.status).toBe(201);
+    expect(res.body.requesterId).toBe(acmeRequester);
+
+    const fetched = await md.get(`/api/projects/${res.body.id}`);
+    expect(fetched.body.requesterName).toBe("Priya Menon");
+    expect(fetched.body.requesterDesignation).toBe("CFO");
+  });
+
+  it("stays optional, so a client with nobody recorded is not blocked", async () => {
+    const md = await signIn(app, "md@test.local");
+    const res = await md.post("/api/projects").send(newProject());
+
+    expect(res.status).toBe(201);
+    expect(res.body.requesterId).toBeNull();
+
+    // And the project still appears in listings - a left join, not an inner one.
+    const list = await md.get(`/api/projects?clientId=${f.acmeId}`);
+    expect(list.body.some((p: { id: number }) => p.id === res.body.id)).toBe(true);
+  });
+
+  it("refuses somebody who belongs to a different client", async () => {
+    // The foreign key only says the requester exists; without the extra check
+    // a project could be attributed to a person at another firm.
+    const md = await signIn(app, "md@test.local");
+    const res = await md.post("/api/projects").send(newProject({ requesterId: betaRequester }));
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/does not belong to this client/i);
+  });
+
+  it("can be changed and cleared afterwards", async () => {
+    const md = await signIn(app, "md@test.local");
+    const created = await md.post("/api/projects").send(newProject({ requesterId: acmeRequester }));
+    const id = created.body.id;
+
+    const cleared = await md.patch(`/api/projects/${id}`).send({ requesterId: null });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.requesterId).toBeNull();
+
+    const reset = await md.patch(`/api/projects/${id}`).send({ requesterId: acmeRequester });
+    expect(reset.body.requesterId).toBe(acmeRequester);
+
+    const wrongClient = await md.patch(`/api/projects/${id}`).send({ requesterId: betaRequester });
+    expect(wrongClient.status).toBe(400);
+  });
+
+  it("survives the requester being deleted, losing only the attribution", async () => {
+    // The person leaves the client; the project and its hours must not.
+    const md = await signIn(app, "md@test.local");
+    const created = await md.post("/api/projects").send(newProject({ requesterId: acmeRequester }));
+
+    await md.delete(`/api/clients/${f.acmeId}/requesters/${acmeRequester}`);
+
+    const fetched = await md.get(`/api/projects/${created.body.id}`);
+    expect(fetched.status).toBe(200);
+    expect(fetched.body.requesterId).toBeNull();
+  });
+
+  it("names only that project's requester on report rows", async () => {
+    const md = await signIn(app, "md@test.local");
+    // A second requester at the same client, deliberately not attached to the
+    // project: the old behaviour listed every one of these against every row.
+    await md.post(`/api/clients/${f.acmeId}/requesters`).send({ name: "Other Contact", designation: "Analyst" });
+
+    const created = await md.post("/api/projects").send(newProject({ requesterId: acmeRequester }));
+    await seedEntry({
+      userId: f.analyst, projectId: created.body.id, taskId: f.taskId,
+      hours: 5, date: "2026-08-03",
+    });
+
+    const res = await md.get("/api/reports/custom-report?startDate=2026-08-01&endDate=2026-08-31");
+    const row = res.body.rows.find((r: { projectId: number }) => r.projectId === created.body.id);
+
+    expect(row.requesterName).toBe("Priya Menon");
+    expect(row.requesterDesignation).toBe("CFO");
+
+    // Only requesters actually attached to a project in the report, so the
+    // unattached "Other Contact" is absent.
+    expect(res.body.requesters.map((q: { name: string }) => q.name)).toEqual(["Priya Menon"]);
+  });
+
+  it("leaves the requester null on rows whose project has none", async () => {
+    const md = await signIn(app, "md@test.local");
+    await seedEntry({
+      userId: f.analyst, projectId: f.auditProjectId, taskId: f.taskId,
+      hours: 4, date: "2026-08-04",
+    });
+
+    const res = await md.get("/api/reports/custom-report?startDate=2026-08-01&endDate=2026-08-31");
+    const row = res.body.rows.find((r: { projectId: number }) => r.projectId === f.auditProjectId);
+    expect(row).toBeDefined();
+    expect(row.requesterName).toBeNull();
+  });
+});
+
 describe("the custom report", () => {
   let f: Fixtures;
   const range = "startDate=2026-08-01&endDate=2026-08-31";
@@ -296,19 +425,35 @@ describe("the custom report", () => {
     expect(byUser.body.rows[0].userId).toBe(f.avp);
   });
 
-  it("names who asked for the work, for every client in the result", async () => {
+  it("names only the requesters actually attached to a project in the report", async () => {
+    // This once listed every requester at every client in the result, which
+    // meant a report on one memo named all seven contacts at the account.
+    // Now a requester appears only if some project in the report is theirs.
     const md = await signIn(app, "md@test.local");
-    await md.post(`/api/clients/${f.acmeId}/requesters`).send({ name: "Priya Menon", designation: "CFO" });
+    const acmeRequester = (await md.post(`/api/clients/${f.acmeId}/requesters`)
+      .send({ name: "Priya Menon", designation: "CFO" })).body.id;
     await md.post(`/api/clients/${f.betaId}/requesters`).send({ name: "Beta Person", designation: "COO" });
 
-    const all = await md.get(`/api/reports/custom-report?${range}`);
-    expect(all.body.requesters).toHaveLength(2);
+    // Nothing is attached yet, so nobody is named however wide the window.
+    const before = await md.get(`/api/reports/custom-report?${range}`);
+    expect(before.body.rows.length).toBeGreaterThan(0);
+    expect(before.body.requesters).toEqual([]);
 
-    // Narrowed to one client, only that client's requesters come back - the
-    // report should not name people from an account it is not reporting on.
-    const acmeOnly = await md.get(`/api/reports/custom-report?${range}&clientIds=${f.acmeId}`);
-    expect(acmeOnly.body.requesters).toHaveLength(1);
-    expect(acmeOnly.body.requesters[0]).toMatchObject({ clientId: f.acmeId, name: "Priya Menon" });
+    await md.patch(`/api/projects/${f.auditProjectId}`).send({ requesterId: acmeRequester });
+
+    const after = await md.get(`/api/reports/custom-report?${range}`);
+    expect(after.body.requesters).toHaveLength(1);
+    expect(after.body.requesters[0]).toMatchObject({ clientId: f.acmeId, name: "Priya Menon" });
+
+    // And the rows for that project now carry the person who asked for it.
+    const acmeRows = after.body.rows.filter((r: { projectId: number }) => r.projectId === f.auditProjectId);
+    expect(acmeRows.length).toBeGreaterThan(0);
+    for (const row of acmeRows) expect(row.requesterName).toBe("Priya Menon");
+
+    // Beta's contact is attached to nothing, so it stays out of the report.
+    const betaRows = after.body.rows.filter((r: { clientId: number }) => r.clientId === f.betaId);
+    expect(betaRows.length).toBeGreaterThan(0);
+    for (const row of betaRows) expect(row.requesterName).toBeNull();
   });
 
   describe("scope still decides what comes back", () => {

@@ -195,6 +195,15 @@ export interface Project {
   /** @nullable */
   description?: string | null;
   isActive?: boolean;
+  /**
+     * Which of the client's requesters commissioned this project. Null when none has been recorded - most projects predate the field.
+     * @nullable
+     */
+  requesterId?: number | null;
+  /** @nullable */
+  requesterName?: string | null;
+  /** @nullable */
+  requesterDesignation?: string | null;
   createdAt: string;
 }
 
@@ -214,6 +223,11 @@ export interface ProjectInput {
      * @minItems 1
      */
   userIds: number[];
+  /**
+     * Optional, unlike the rest: a client may have nobody recorded yet, and a project should not be blocked on that piece of admin. Must be a requester of the project's own client.
+     * @nullable
+     */
+  requesterId?: number | null;
 }
 
 export interface ProjectUpdate {
@@ -222,6 +236,11 @@ export interface ProjectUpdate {
   /** @nullable */
   description?: string | null;
   isActive?: boolean;
+  /**
+     * Null clears the attribution. Must belong to the project's client.
+     * @nullable
+     */
+  requesterId?: number | null;
 }
 
 export interface Task {
@@ -668,6 +687,13 @@ export interface TeamReportRow {
   projectName: string;
   taskId: number;
   taskName: string;
+  /**
+     * Who asked for this row's project - not the client's whole roster.
+     * @nullable
+     */
+  requesterName?: string | null;
+  /** @nullable */
+  requesterDesignation?: string | null;
   totalHours: number;
   billableHours: number;
   nonBillableHours: number;

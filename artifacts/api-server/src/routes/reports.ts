@@ -236,6 +236,7 @@ async function aggregateHours(opts: {
   projectIds: number[] | null;
 }): Promise<Array<{
   userId: number; userName: string; userRole: string; userTitle: string | null;
+  requesterName: string | null; requesterDesignation: string | null;
   clientId: number; clientName: string;
   projectId: number; projectName: string;
   taskId: number; taskName: string;
@@ -260,6 +261,11 @@ async function aggregateHours(opts: {
       projectName: projectsTable.name,
       taskId:    tasksTable.id,
       taskName:  tasksTable.name,
+      // Who asked for *this* project, not everybody at the client. A row
+      // about one memo naming all seven of an account's contacts tells the
+      // reader nothing about who commissioned it.
+      requesterName: clientRequestersTable.name,
+      requesterDesignation: clientRequestersTable.designation,
       totalHours:   sql<number>`SUM(${timeEntriesTable.hours})`,
       billableHours: sql<number>`SUM(COALESCE(${timeEntriesTable.billableHours}, ${timeEntriesTable.hours}))`,
     })
@@ -268,12 +274,16 @@ async function aggregateHours(opts: {
     .innerJoin(projectsTable, eq(projectsTable.id, timeEntriesTable.projectId))
     .innerJoin(clientsTable,  eq(clientsTable.id,  projectsTable.clientId))
     .innerJoin(tasksTable,    eq(tasksTable.id,    timeEntriesTable.taskId))
+    // Left: most projects have no requester recorded, and an inner join would
+    // drop their hours from the report entirely.
+    .leftJoin(clientRequestersTable, eq(clientRequestersTable.id, projectsTable.requesterId))
     .where(and(...conds))
     .groupBy(
       usersTable.id, usersTable.name, usersTable.role, usersTable.title,
       clientsTable.id, clientsTable.name,
       projectsTable.id, projectsTable.name,
       tasksTable.id, tasksTable.name,
+      clientRequestersTable.name, clientRequestersTable.designation,
     )
     .orderBy(clientsTable.name, projectsTable.name, usersTable.name, tasksTable.name);
 
@@ -285,6 +295,7 @@ async function aggregateHours(opts: {
       clientId: r.clientId, clientName: r.clientName,
       projectId: r.projectId, projectName: r.projectName,
       taskId: r.taskId, taskName: r.taskName,
+      requesterName: r.requesterName, requesterDesignation: r.requesterDesignation,
       totalHours: total,
       billableHours: billable,
       nonBillableHours: total - billable,
@@ -674,23 +685,26 @@ router.get("/custom-report", async (req, res): Promise<void> => {
     start, end, userIds: effectiveUserIds, projectIds: effectiveProjectIds,
   });
 
-  // Who asked for the work, for every client that appears in the result. The
-  // report is read to decide whether an engagement is worth what it costs, and
-  // that judgement is different depending on who was doing the asking.
-  const clientIdsInReport = [...new Set(rows.map((r) => r.clientId))];
-  const requesters =
-    clientIdsInReport.length === 0
-      ? []
-      : await db
-          .select({
-            id: clientRequestersTable.id,
-            clientId: clientRequestersTable.clientId,
-            name: clientRequestersTable.name,
-            designation: clientRequestersTable.designation,
-          })
-          .from(clientRequestersTable)
-          .where(inArray(clientRequestersTable.clientId, clientIdsInReport))
-          .orderBy(clientRequestersTable.name);
+  // Each row already names the person who asked for that project. `requesters`
+  // stays in the response for the client-level heading, but it now carries
+  // only the requesters actually attached to the projects in this report -
+  // listing an account's whole roster against one memo answered a question
+  // nobody had asked.
+  const requesters = await db
+    .selectDistinct({
+      id: clientRequestersTable.id,
+      clientId: clientRequestersTable.clientId,
+      name: clientRequestersTable.name,
+      designation: clientRequestersTable.designation,
+    })
+    .from(clientRequestersTable)
+    .innerJoin(projectsTable, eq(projectsTable.requesterId, clientRequestersTable.id))
+    .where(
+      rows.length === 0
+        ? sql`false`
+        : inArray(projectsTable.id, [...new Set(rows.map((r) => r.projectId))]),
+    )
+    .orderBy(clientRequestersTable.name);
 
   res.json({ rows, requesters, range: { start, end } });
 });

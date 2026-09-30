@@ -22,6 +22,13 @@ export interface TeamReportRow {
   projectName: string;
   taskId: number;
   taskName: string;
+  /**
+     * Who asked for this row's project - not the client's whole roster.
+     * @nullable
+     */
+  requesterName?: string | null;
+  /** @nullable */
+  requesterDesignation?: string | null;
   totalHours: number;
   billableHours: number;
   nonBillableHours: number;

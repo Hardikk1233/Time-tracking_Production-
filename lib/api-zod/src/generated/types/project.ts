@@ -14,5 +14,14 @@ export interface Project {
   /** @nullable */
   description?: string | null;
   isActive?: boolean;
+  /**
+     * Which of the client's requesters commissioned this project. Null when none has been recorded - most projects predate the field.
+     * @nullable
+     */
+  requesterId?: number | null;
+  /** @nullable */
+  requesterName?: string | null;
+  /** @nullable */
+  requesterDesignation?: string | null;
   createdAt: Date;
 }

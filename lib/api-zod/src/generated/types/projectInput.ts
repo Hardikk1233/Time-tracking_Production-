@@ -22,4 +22,9 @@ export interface ProjectInput {
      * @minItems 1
      */
   userIds: number[];
+  /**
+     * Optional, unlike the rest: a client may have nobody recorded yet, and a project should not be blocked on that piece of admin. Must be a requester of the project's own client.
+     * @nullable
+     */
+  requesterId?: number | null;
 }

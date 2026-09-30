@@ -1992,6 +1992,14 @@ components:
         isActive:
           type: boolean
           default: true
+        requesterId:
+          type: ["integer", "null"]
+          description: >-
+            Which of the client's requesters commissioned this project. Null when none has been recorded - most projects predate the field.
+        requesterName:
+          type: ["string", "null"]
+        requesterDesignation:
+          type: ["string", "null"]
         createdAt:
           type: string
           format: date-time
@@ -2022,6 +2030,12 @@ components:
           items:
             type: integer
           description: "Users who can access this project"
+        requesterId:
+          type: ["integer", "null"]
+          description: >-
+            Optional, unlike the rest: a client may have nobody recorded yet,
+            and a project should not be blocked on that piece of admin. Must
+            be a requester of the project's own client.
 
     ProjectUpdate:
       type: object
@@ -2033,6 +2047,9 @@ components:
           type: ["string", "null"]
         isActive:
           type: boolean
+        requesterId:
+          type: ["integer", "null"]
+          description: "Null clears the attribution. Must belong to the project's client."
 
     # ─── Tasks (global catalog) ──────────────────────────────────────────
     Task:
@@ -2803,6 +2820,12 @@ components:
           type: integer
         taskName:
           type: string
+        requesterName:
+          type: ["string", "null"]
+          description: >-
+            Who asked for this row's project - not the client's whole roster.
+        requesterDesignation:
+          type: ["string", "null"]
         totalHours:
           type: number
         billableHours:

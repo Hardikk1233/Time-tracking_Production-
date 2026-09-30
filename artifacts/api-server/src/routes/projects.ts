@@ -4,6 +4,7 @@ import {
   db,
   projectsTable,
   clientsTable,
+  clientRequestersTable,
   projectUsersTable,
   clientUsersTable,
   projectTasksTable,
@@ -45,6 +46,54 @@ async function resolveProject(
 }
 
 // ─── Read ────────────────────────────────────────────────────────────────────
+
+/**
+ * The requester columns, joined the same way in every project response.
+ *
+ * A left join, not an inner one: most projects have no requester - every one
+ * that predates the column, and any at a client with nobody recorded yet - and
+ * an inner join would quietly drop them from every list in the app.
+ */
+const REQUESTER_COLUMNS = {
+  requesterId: projectsTable.requesterId,
+  requesterName: clientRequestersTable.name,
+  requesterDesignation: clientRequestersTable.designation,
+};
+
+/**
+ * Checks that a requester belongs to the client the project sits under.
+ *
+ * The foreign key only says "some requester exists"; it cannot say "one of
+ * *this* client's". Without this check a project could be attributed to a
+ * person at another firm by passing their id, which would then be printed on
+ * the report as fact.
+ *
+ * Returns true for null - clearing the field is always allowed.
+ */
+async function requesterBelongsToClient(
+  requesterId: number | null,
+  clientId: number,
+): Promise<boolean> {
+  if (requesterId === null) return true;
+  const [row] = await db
+    .select({ id: clientRequestersTable.id })
+    .from(clientRequestersTable)
+    .where(
+      and(
+        eq(clientRequestersTable.id, requesterId),
+        eq(clientRequestersTable.clientId, clientId),
+      ),
+    );
+  return Boolean(row);
+}
+
+/** Reads a requesterId off a request body: a number, null to clear, or undefined to leave alone. */
+function parseRequesterId(value: unknown): number | null | undefined | "invalid" {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) return value;
+  return "invalid";
+}
 
 router.get("/projects", async (req, res): Promise<void> => {
   const me = principal(req);
@@ -99,9 +148,11 @@ router.get("/projects", async (req, res): Promise<void> => {
       description: projectsTable.description,
       isActive: projectsTable.isActive,
       createdAt: projectsTable.createdAt,
+      ...REQUESTER_COLUMNS,
     })
     .from(projectsTable)
     .innerJoin(clientsTable, eq(projectsTable.clientId, clientsTable.id))
+    .leftJoin(clientRequestersTable, eq(clientRequestersTable.id, projectsTable.requesterId))
     .where(whereClause)
     .orderBy(projectsTable.name);
 
@@ -121,9 +172,11 @@ router.get("/projects/:projectId", async (req, res): Promise<void> => {
       description: projectsTable.description,
       isActive: projectsTable.isActive,
       createdAt: projectsTable.createdAt,
+      ...REQUESTER_COLUMNS,
     })
     .from(projectsTable)
     .innerJoin(clientsTable, eq(projectsTable.clientId, clientsTable.id))
+    .leftJoin(clientRequestersTable, eq(clientRequestersTable.id, projectsTable.requesterId))
     .where(eq(projectsTable.id, projectId));
 
   if (!row) {
@@ -148,6 +201,15 @@ router.post(
       taskIds?: number[];
       userIds?: number[];
     };
+
+    // Who asked for this piece of work. Optional, unlike the fields below: a
+    // client may have nobody recorded yet, and refusing the project until
+    // somebody adds one would block the work on a piece of admin.
+    const requesterId = parseRequesterId((req.body as { requesterId?: unknown }).requesterId);
+    if (requesterId === "invalid") {
+      res.status(400).json({ error: "requesterId must be a requester id, or null" });
+      return;
+    }
 
     // Every field is required on creation. A project set up without a
     // description, without tasks, or without anybody on it is the shape that
@@ -189,9 +251,19 @@ router.post(
       return;
     }
 
+    if (!(await requesterBelongsToClient(requesterId ?? null, clientId))) {
+      res.status(400).json({ error: "That requester does not belong to this client" });
+      return;
+    }
+
     const [project] = await db
       .insert(projectsTable)
-      .values({ clientId, name: name.trim(), description: description ?? null })
+      .values({
+        clientId,
+        name: name.trim(),
+        description: description ?? null,
+        requesterId: requesterId ?? null,
+      })
       .returning();
 
     if (Array.isArray(taskIds) && taskIds.length > 0) {
@@ -227,6 +299,12 @@ router.patch(
       isActive?: boolean;
     };
 
+    const requesterId = parseRequesterId((req.body as { requesterId?: unknown }).requesterId);
+    if (requesterId === "invalid") {
+      res.status(400).json({ error: "requesterId must be a requester id, or null" });
+      return;
+    }
+
     const updates: Partial<typeof projectsTable.$inferInsert> = {};
     if (name !== undefined) {
       if (!name.trim()) {
@@ -237,6 +315,23 @@ router.patch(
     }
     if (description !== undefined) updates.description = description;
     if (isActive !== undefined) updates.isActive = isActive;
+    if (requesterId !== undefined) {
+      // Read the project's own client rather than trusting a body field: the
+      // requester has to belong to the account this project actually sits on.
+      const [owning] = await db
+        .select({ clientId: projectsTable.clientId })
+        .from(projectsTable)
+        .where(eq(projectsTable.id, projectId));
+      if (!owning) {
+        res.status(404).json({ error: "Project not found" });
+        return;
+      }
+      if (!(await requesterBelongsToClient(requesterId, owning.clientId))) {
+        res.status(400).json({ error: "That requester does not belong to this client" });
+        return;
+      }
+      updates.requesterId = requesterId;
+    }
 
     if (Object.keys(updates).length === 0) {
       res.status(400).json({ error: "No fields to update" });

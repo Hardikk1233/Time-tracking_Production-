@@ -275,6 +275,7 @@ function ClientSummaryTable({
 
 interface TeamRow {
   userId: number; userName: string; userRole: string; userTitle?: string | null;
+  requesterName?: string | null; requesterDesignation?: string | null;
   clientId: number; clientName: string;
   projectId: number; projectName: string;
   taskId: number; taskName: string;
@@ -576,14 +577,15 @@ export default function Reports() {
   async function exportCustomExcel() {
     const rows = customReportData?.rows ?? [];
     if (rows.length === 0) return;
-    const requesterFor = (clientId: number) =>
-      (customReportData?.requesters ?? [])
-        .filter((q) => q.clientId === clientId)
-        .map((q) => `${q.name} (${q.designation})`)
-        .join('; ');
     await exportTableExcel('Custom Report',
-      ['Client', 'Requesters', 'Project', 'Member', 'Role', 'Task', 'Total', 'Billable', 'Non-Billable'],
-      rows.map((r) => [r.clientName, requesterFor(r.clientId), r.projectName, r.userName, roleLabel(r.userRole, r.userTitle), r.taskName, r.totalHours, r.billableHours, r.nonBillableHours]));
+      ['Client', 'Project', 'Requested by', 'Member', 'Role', 'Task', 'Total', 'Billable', 'Non-Billable'],
+      rows.map((r) => [
+        r.clientName,
+        r.projectName,
+        r.requesterName ? `${r.requesterName} (${r.requesterDesignation})` : '—',
+        r.userName, roleLabel(r.userRole, r.userTitle), r.taskName,
+        r.totalHours, r.billableHours, r.nonBillableHours,
+      ]));
   }
 
   async function exportMyExcel() {
