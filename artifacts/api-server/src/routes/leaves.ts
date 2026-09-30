@@ -9,6 +9,7 @@ type LeaveRow = {
   userId: number;
   userName: string;
   userRole: string;
+  userTitle: string | null;
   date: string;
   portion: number;
   note: string | null;
@@ -87,6 +88,7 @@ router.get("/leaves", async (req, res): Promise<void> => {
       userId: leavesTable.userId,
       userName: usersTable.name,
       userRole: usersTable.role,
+      userTitle: usersTable.title,
       date: leavesTable.date,
       portion: leavesTable.portion,
       note: leavesTable.note,
@@ -150,6 +152,7 @@ router.post("/leaves/bulk", async (req, res): Promise<void> => {
         userId: leavesTable.userId,
         userName: usersTable.name,
         userRole: usersTable.role,
+        userTitle: usersTable.title,
         date: leavesTable.date,
         portion: leavesTable.portion,
       note: leavesTable.note,
@@ -209,6 +212,7 @@ router.post("/leaves", async (req, res): Promise<void> => {
       userId: leavesTable.userId,
       userName: usersTable.name,
       userRole: usersTable.role,
+      userTitle: usersTable.title,
       date: leavesTable.date,
       portion: leavesTable.portion,
       note: leavesTable.note,

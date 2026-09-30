@@ -2085,6 +2085,10 @@ components:
         assigneeRole:
           type: string
           enum: [analyst, associate, avp, md]
+        assigneeTitle:
+          type: ["string", "null"]
+          description: >-
+            Overrides the rank label where the person's designation differs from it. Null shows the ordinary role label.
         assignedById:
           type: integer
         assignedAt:
@@ -2205,6 +2209,10 @@ components:
         assigneeRole:
           type: string
           enum: [analyst, associate, avp, md]
+        assigneeTitle:
+          type: ["string", "null"]
+          description: >-
+            Overrides the rank label where the person's designation differs from it. Null shows the ordinary role label.
         assignedById:
           type: integer
         assignedAt:
@@ -2337,6 +2345,10 @@ components:
           type: string
         userRole:
           type: string
+        userTitle:
+          type: ["string", "null"]
+          description: >-
+            Overrides the rank label where the person's designation differs from it. Null shows the ordinary role label.
         taskId:
           type: integer
         taskName:
@@ -2516,6 +2528,10 @@ components:
         role:
           type: string
           enum: [analyst, associate, avp, md]
+        title:
+          type: ["string", "null"]
+          description: >-
+            Overrides the rank label where the person's designation differs from it. Null shows the ordinary role label.
         totalHours:
           type: number
         billableHours:
@@ -2771,6 +2787,10 @@ components:
         userRole:
           type: string
           enum: [analyst, associate, avp, md]
+        userTitle:
+          type: ["string", "null"]
+          description: >-
+            Overrides the rank label where the person's designation differs from it. Null shows the ordinary role label.
         clientId:
           type: integer
         clientName:
@@ -2865,6 +2885,10 @@ components:
           type: string
         userRole:
           type: string
+        userTitle:
+          type: ["string", "null"]
+          description: >-
+            Overrides the rank label where the person's designation differs from it. Null shows the ordinary role label.
         date:
           type: string
           format: date

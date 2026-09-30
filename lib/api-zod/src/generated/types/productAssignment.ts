@@ -14,6 +14,11 @@ export interface ProductAssignment {
   assigneeUserId: number;
   assigneeName: string;
   assigneeRole: ProductAssignmentAssigneeRole;
+  /**
+     * Overrides the rank label where the person's designation differs from it. Null shows the ordinary role label.
+     * @nullable
+     */
+  assigneeTitle?: string | null;
   assignedById: number;
   assignedAt: Date;
 }

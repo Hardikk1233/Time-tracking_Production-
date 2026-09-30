@@ -22,6 +22,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { format, startOfMonth, differenceInCalendarDays } from 'date-fns';
 import { Link } from 'wouter';
 import { Badge } from '@/components/ui/badge';
+import { displayTitle } from '@/lib/roles';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -389,7 +390,7 @@ export default function Dashboard() {
                         <tr key={member.userId} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors">
                           <td className="px-6 py-3 font-medium text-foreground">{member.userName}</td>
                           <td className="px-6 py-3">
-                            <Badge variant="outline" className="font-mono font-normal text-[10px] capitalize">{member.role}</Badge>
+                            <Badge variant="outline" className="font-mono font-normal text-[10px]">{displayTitle(member)}</Badge>
                           </td>
                           <td className="px-6 py-3 text-right font-mono text-sm">{member.totalHours.toFixed(1)}h</td>
                           <td className="px-6 py-3 text-right font-mono text-sm text-primary">{member.billableHours.toFixed(1)}h</td>

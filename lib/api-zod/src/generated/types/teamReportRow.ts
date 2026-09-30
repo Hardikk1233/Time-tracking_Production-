@@ -11,6 +11,11 @@ export interface TeamReportRow {
   userId: number;
   userName: string;
   userRole: TeamReportRowUserRole;
+  /**
+     * Overrides the rank label where the person's designation differs from it. Null shows the ordinary role label.
+     * @nullable
+     */
+  userTitle?: string | null;
   clientId: number;
   clientName: string;
   projectId: number;

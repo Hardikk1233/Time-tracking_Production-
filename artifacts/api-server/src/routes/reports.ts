@@ -235,7 +235,7 @@ async function aggregateHours(opts: {
   userIds: number[] | null;
   projectIds: number[] | null;
 }): Promise<Array<{
-  userId: number; userName: string; userRole: string;
+  userId: number; userName: string; userRole: string; userTitle: string | null;
   clientId: number; clientName: string;
   projectId: number; projectName: string;
   taskId: number; taskName: string;
@@ -253,6 +253,7 @@ async function aggregateHours(opts: {
       userId:    usersTable.id,
       userName:  usersTable.name,
       userRole:  usersTable.role,
+      userTitle: usersTable.title,
       clientId:  clientsTable.id,
       clientName: clientsTable.name,
       projectId:  projectsTable.id,
@@ -269,7 +270,7 @@ async function aggregateHours(opts: {
     .innerJoin(tasksTable,    eq(tasksTable.id,    timeEntriesTable.taskId))
     .where(and(...conds))
     .groupBy(
-      usersTable.id, usersTable.name, usersTable.role,
+      usersTable.id, usersTable.name, usersTable.role, usersTable.title,
       clientsTable.id, clientsTable.name,
       projectsTable.id, projectsTable.name,
       tasksTable.id, tasksTable.name,
@@ -280,7 +281,7 @@ async function aggregateHours(opts: {
     const total    = Number(r.totalHours);
     const billable = Number(r.billableHours);
     return {
-      userId: r.userId, userName: r.userName, userRole: r.userRole,
+      userId: r.userId, userName: r.userName, userRole: r.userRole, userTitle: r.userTitle,
       clientId: r.clientId, clientName: r.clientName,
       projectId: r.projectId, projectName: r.projectName,
       taskId: r.taskId, taskName: r.taskName,

@@ -12,6 +12,11 @@ export interface TimeEntry {
   userId: number;
   userName: string;
   userRole?: string;
+  /**
+     * Overrides the rank label where the person's designation differs from it. Null shows the ordinary role label.
+     * @nullable
+     */
+  userTitle?: string | null;
   taskId: number;
   taskName: string;
   /**

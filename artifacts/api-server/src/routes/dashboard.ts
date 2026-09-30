@@ -397,6 +397,7 @@ router.get("/dashboard/utilization", async (req, res): Promise<void> => {
         userId: usersTable.id,
         userName: usersTable.name,
         role: usersTable.role,
+        title: usersTable.title,
         totalHours: totalHoursSql,
         billableHours: billableHoursSql,
         nonBillableHours: nonBillableHoursSql,
@@ -408,7 +409,7 @@ router.get("/dashboard/utilization", async (req, res): Promise<void> => {
         and(eq(timeEntriesTable.userId, usersTable.id), entryWhere),
       )
       .where(userWhereClause)
-      .groupBy(usersTable.id, usersTable.name, usersTable.role)
+      .groupBy(usersTable.id, usersTable.name, usersTable.role, usersTable.title)
       .orderBy(sql`COALESCE(SUM(${timeEntriesTable.hours}), 0) DESC`),
     fetchHolidaySet(startDate, endDate),
   ]);
@@ -497,6 +498,7 @@ router.get("/dashboard/recent-activity", async (req, res): Promise<void> => {
       userId: timeEntriesTable.userId,
       userName: usersTable.name,
       userRole: usersTable.role,
+      userTitle: usersTable.title,
       taskId: timeEntriesTable.taskId,
       taskName: tasksTable.name,
       projectId: projectsTable.id,
@@ -578,6 +580,7 @@ router.get("/dashboard/pending-approvals", async (req, res): Promise<void> => {
       userId: timeEntriesTable.userId,
       userName: usersTable.name,
       userRole: usersTable.role,
+      userTitle: usersTable.title,
       taskId: timeEntriesTable.taskId,
       taskName: tasksTable.name,
       projectId: projectsTable.id,

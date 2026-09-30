@@ -7,7 +7,7 @@ import {
   getListMyTaskAssignmentsQueryKey,
 } from '@workspace/api-client-react';
 import { useToast } from '@/hooks/use-toast';
-import { displayTitle } from '@/lib/roles';
+import { displayTitle, displayTitleOf } from '@/lib/roles';
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +20,7 @@ interface Assignment {
   assigneeUserId: number;
   assigneeName: string;
   assigneeRole: string;
+  assigneeTitle?: string | null;
 }
 
 interface Member {
@@ -115,7 +116,7 @@ export function TaskAssignees({
             key={a.id}
             variant="outline"
             className="text-[11px] font-normal gap-1 pr-1 border-primary/30 bg-primary/5"
-            title={`${a.assigneeName} — ${displayTitle({ role: a.assigneeRole } as any)}`}
+            title={`${a.assigneeName} — ${displayTitleOf(a.assigneeRole, a.assigneeTitle)}`}
           >
             {a.assigneeName}
             {canAssign && (
@@ -148,7 +149,7 @@ export function TaskAssignees({
           <SelectContent>
             {available.map(m => (
               <SelectItem key={m.id} value={String(m.id)} className="text-xs">
-                {m.name} · {displayTitle({ role: m.role } as any)}
+                {m.name} · {displayTitle(m)}
               </SelectItem>
             ))}
           </SelectContent>

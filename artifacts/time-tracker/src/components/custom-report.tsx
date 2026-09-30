@@ -2,6 +2,7 @@ import { Fragment, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { displayTitleOf } from '@/lib/roles';
 
 /**
  * The Custom Reports table.
@@ -20,6 +21,7 @@ export interface CustomRow {
   userId: number;
   userName: string;
   userRole: string;
+  userTitle?: string | null;
   clientId: number;
   clientName: string;
   projectId: number;
@@ -37,13 +39,6 @@ export interface Requester {
   name: string;
   designation: string;
 }
-
-const ROLE_LABEL: Record<string, string> = {
-  analyst: 'Analyst',
-  associate: 'Associate',
-  avp: 'AVP',
-  md: 'MD',
-};
 
 const fmt = (n: number) => n.toFixed(1);
 
@@ -197,7 +192,7 @@ export function CustomReportTable({
                                     {memberOpen ? <ChevronDown className="w-3.5 h-3.5 opacity-50" /> : <ChevronRight className="w-3.5 h-3.5 opacity-50" />}
                                     <span>{memberRows[0].userName}</span>
                                     <Badge variant="outline" className="text-[10px] font-normal">
-                                      {ROLE_LABEL[memberRows[0].userRole] ?? memberRows[0].userRole}
+                                      {displayTitleOf(memberRows[0].userRole, memberRows[0].userTitle)}
                                     </Badge>
                                   </div>
                                 </td>

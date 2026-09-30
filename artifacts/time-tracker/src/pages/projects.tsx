@@ -29,6 +29,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, FolderKanban, ChevronRight, Check, PowerOff, Power } from 'lucide-react';
 import { errorMessage } from '@/lib/errors';
+import { displayTitle } from '@/lib/roles';
 
 // Nothing here is optional. A project with no description, no tasks and
 // nobody on it can be created in seconds and is useless the moment it exists:
@@ -332,7 +333,7 @@ function CreateProjectDialog({ open, onOpenChange, clients }: { open: boolean; o
                 selectedIds={selectedUserIds}
                 onToggle={(id) => toggle('userIds', id)}
                 emptyLabel="No users available."
-                renderLabel={(u) => <span>{u.name} <span className="text-muted-foreground text-xs">({u.role})</span></span>}
+                renderLabel={(u) => <span>{u.name} <span className="text-muted-foreground text-xs">({displayTitle(u)})</span></span>}
               />
               {form.formState.errors.userIds && (
                 <p className="text-sm font-medium text-destructive">{form.formState.errors.userIds.message}</p>

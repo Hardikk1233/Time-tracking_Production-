@@ -11,6 +11,11 @@ export interface Leave {
   userId: number;
   userName: string;
   userRole: string;
+  /**
+     * Overrides the rank label where the person's designation differs from it. Null shows the ordinary role label.
+     * @nullable
+     */
+  userTitle?: string | null;
   date: Date;
   /** How much of the working day was taken: 1 for a full day, 0.5 for a half. */
   portion?: number;

@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Check, X, AlertCircle, Scissors } from 'lucide-react';
+import { displayTitleOf } from '@/lib/roles';
 
 export default function Approvals() {
   const { user } = useAuth();
@@ -130,7 +131,7 @@ export default function Approvals() {
                           </div>
                           <div className="flex flex-col">
                             <span className="font-medium text-foreground">{entry.userName}</span>
-                            <span className="text-[10px] uppercase font-mono text-muted-foreground tracking-wider">{entry.userRole}</span>
+                            <span className="text-[10px] uppercase font-mono text-muted-foreground tracking-wider">{displayTitleOf(entry.userRole, entry.userTitle)}</span>
                           </div>
                         </div>
                       </td>

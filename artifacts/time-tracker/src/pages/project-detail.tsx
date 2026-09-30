@@ -31,6 +31,7 @@ import { Link } from 'wouter';
 import { TaskAssignees } from '@/components/task-assignees';
 import { format } from 'date-fns';
 import { errorMessage } from '@/lib/errors';
+import { displayTitle } from '@/lib/roles';
 
 const ROLE_ORDER = ['md', 'avp', 'associate', 'analyst'] as const;
 const ROLE_LABELS: Record<string, string> = { md: 'Managing Directors', avp: 'AVPs', associate: 'Associates', analyst: 'Analysts' };
@@ -366,7 +367,7 @@ export default function ProjectDetail() {
                     ) : (
                       unassignedUsers.map(u => (
                         <SelectItem key={u.id} value={u.id.toString()}>
-                          {u.name} <span className="text-muted-foreground text-xs capitalize">({u.role})</span>
+                          {u.name} <span className="text-muted-foreground text-xs">({displayTitle(u)})</span>
                         </SelectItem>
                       ))
                     )}

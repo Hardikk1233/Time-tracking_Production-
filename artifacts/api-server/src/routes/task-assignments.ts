@@ -63,6 +63,7 @@ router.get(
         assigneeUserId: projectTaskAssignmentsTable.assigneeUserId,
         assigneeName: usersTable.name,
         assigneeRole: usersTable.role,
+        assigneeTitle: usersTable.title,
         assignedById: projectTaskAssignmentsTable.assignedById,
         assignedAt: projectTaskAssignmentsTable.assignedAt,
       })

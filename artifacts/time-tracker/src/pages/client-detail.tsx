@@ -40,6 +40,7 @@ import {
 import { Link } from 'wouter';
 import { format, parseISO } from 'date-fns';
 import { errorMessage } from '@/lib/errors';
+import { displayTitle } from '@/lib/roles';
 
 // ─── FTE History form schema ──────────────────────────────────────────────────
 const fteSchema = z.object({
@@ -220,7 +221,7 @@ export default function ClientDetail() {
                     ) : (
                       unassignedUsers.map(u => (
                         <SelectItem key={u.id} value={u.id.toString()}>
-                          {u.name} <span className="text-muted-foreground text-xs">({u.role})</span>
+                          {u.name} <span className="text-muted-foreground text-xs">({displayTitle(u)})</span>
                         </SelectItem>
                       ))
                     )}
@@ -243,7 +244,7 @@ export default function ClientDetail() {
                       </div>
                       <div>
                         <p className="text-sm font-medium text-foreground">{u.name}</p>
-                        <p className="text-xs text-muted-foreground capitalize font-mono">{u.role}</p>
+                        <p className="text-xs text-muted-foreground font-mono">{displayTitle(u)}</p>
                       </div>
                     </div>
                     {isManager && (

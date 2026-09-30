@@ -35,6 +35,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { CustomReportTable } from '@/components/custom-report';
+import { displayTitleOf } from '@/lib/roles';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -115,9 +116,9 @@ function SingleSelect({ label, options, value, onChange }: {
 const fmt = (n: number) => n.toFixed(1);
 const pct = (n: number) => `${n.toFixed(1)}%`;
 
-function roleLabel(role: string) {
-  const map: Record<string, string> = { analyst: 'Analyst', associate: 'Associate', avp: 'AVP', md: 'MD' };
-  return map[role] ?? role;
+/** A person's designation, preferring their title over the rank's own label. */
+function roleLabel(role: string, title?: string | null) {
+  return displayTitleOf(role, title);
 }
 
 function utilizationColor(u: number) {
@@ -273,7 +274,7 @@ function ClientSummaryTable({
 // ─── Team Report grouped table ────────────────────────────────────────────────
 
 interface TeamRow {
-  userId: number; userName: string; userRole: string;
+  userId: number; userName: string; userRole: string; userTitle?: string | null;
   clientId: number; clientName: string;
   projectId: number; projectName: string;
   taskId: number; taskName: string;
@@ -311,7 +312,7 @@ function TeamTable({ rows }: { rows: TeamRow[] }) {
           <td colSpan={4} className="px-4 py-2.5">
             <div className="flex items-center gap-2">
               <span className="font-semibold text-foreground">{r.userName}</span>
-              <Badge variant="outline" className="text-xs">{roleLabel(r.userRole)}</Badge>
+              <Badge variant="outline" className="text-xs">{roleLabel(r.userRole, r.userTitle)}</Badge>
             </div>
           </td>
           <td className="px-4 py-2.5 text-right tabular-nums font-semibold">{fmt(ut.total)}h</td>
@@ -570,7 +571,7 @@ export default function Reports() {
     if (!teamReportData) return;
     await exportTableExcel('Team Report',
       ['Member', 'Role', 'Client', 'Project', 'Task', 'Total', 'Billable', 'Non-Billable', 'Efficiency%'],
-      teamReportData.map((r) => [r.userName, roleLabel(r.userRole), r.clientName, r.projectName, r.taskName, r.totalHours, r.billableHours, r.nonBillableHours, r.efficiency]));
+      teamReportData.map((r) => [r.userName, roleLabel(r.userRole, r.userTitle), r.clientName, r.projectName, r.taskName, r.totalHours, r.billableHours, r.nonBillableHours, r.efficiency]));
   }
   async function exportCustomExcel() {
     const rows = customReportData?.rows ?? [];
@@ -582,7 +583,7 @@ export default function Reports() {
         .join('; ');
     await exportTableExcel('Custom Report',
       ['Client', 'Requesters', 'Project', 'Member', 'Role', 'Task', 'Total', 'Billable', 'Non-Billable'],
-      rows.map((r) => [r.clientName, requesterFor(r.clientId), r.projectName, r.userName, roleLabel(r.userRole), r.taskName, r.totalHours, r.billableHours, r.nonBillableHours]));
+      rows.map((r) => [r.clientName, requesterFor(r.clientId), r.projectName, r.userName, roleLabel(r.userRole, r.userTitle), r.taskName, r.totalHours, r.billableHours, r.nonBillableHours]));
   }
 
   async function exportMyExcel() {

@@ -43,6 +43,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Plus, Check, X, Filter, Scissors, CalendarOff, Trash2, Pencil, ChevronsUpDown, CheckSquare, Undo2 } from 'lucide-react';
 import { errorMessage } from '@/lib/errors';
+import { displayTitleOf } from '@/lib/roles';
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -379,7 +380,7 @@ export default function TimeEntries() {
                       <td className="px-6 py-4">
                         <div className="flex flex-col">
                           <span className="font-medium">{entry.userName}</span>
-                          <span className="text-xs text-muted-foreground capitalize">{entry.userRole}</span>
+                          <span className="text-xs text-muted-foreground">{displayTitleOf(entry.userRole, entry.userTitle)}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">

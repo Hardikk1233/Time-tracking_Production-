@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import app from "../src/app";
-import { db, clientRequestersTable } from "@workspace/db";
+import { db, clientRequestersTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { resetDatabase, seedEntry, signIn, type Fixtures } from "./fixtures";
 
@@ -163,6 +163,75 @@ describe("client requesters", () => {
     // A client with none reports an empty list, not a missing field: the UI
     // renders an em dash from it rather than crashing on undefined.
     expect(beta.requesters).toEqual([]);
+  });
+});
+
+/**
+ * Wherever a person is shown, the app must show their designation and not the
+ * rank it authorises on.
+ *
+ * Those are different facts: an administrator holds md so that they can
+ * administer the system, but only the Managing Director is an MD. The rank
+ * alone was being sent on every one of these responses, so eight screens
+ * rendered "Md" at somebody whose card on the Team page said "Admin".
+ */
+describe("a person's designation travels with their rank", () => {
+  let f: Fixtures;
+
+  beforeEach(async () => {
+    f = await resetDatabase();
+    await db.update(usersTable).set({ title: "Admin" }).where(eq(usersTable.id, f.md));
+    await seedEntry({
+      userId: f.md, projectId: f.auditProjectId, taskId: f.taskId,
+      hours: 3, date: "2026-08-03",
+    });
+  });
+
+  it("sends it with a client's assigned team", async () => {
+    const md = await signIn(app, "md@test.local");
+    await md.post(`/api/clients/${f.acmeId}/assignments`).send({ userId: f.md });
+
+    const res = await md.get(`/api/clients/${f.acmeId}/assignments`);
+    const row = res.body.find((u: { id: number }) => u.id === f.md);
+    expect(row.role).toBe("md");
+    expect(row.title).toBe("Admin");
+  });
+
+  it("sends it with a project's team", async () => {
+    const md = await signIn(app, "md@test.local");
+    const res = await md.get(`/api/projects/${f.auditProjectId}/assignments`);
+    // The fixture team is on this project; nobody there has an override, so
+    // the field must still be present and null rather than missing.
+    expect(res.status).toBe(200);
+    for (const row of res.body) expect(row).toHaveProperty("title");
+  });
+
+  it("sends it on time entries, which the queues and feeds all render", async () => {
+    const md = await signIn(app, "md@test.local");
+    const res = await md.get("/api/time-entries");
+    const mine = res.body.find((e: { userId: number }) => e.userId === f.md);
+    expect(mine.userRole).toBe("md");
+    expect(mine.userTitle).toBe("Admin");
+  });
+
+  it("sends it on report rows, so exports carry it too", async () => {
+    const md = await signIn(app, "md@test.local");
+    const range = "startDate=2026-08-01&endDate=2026-08-31";
+
+    for (const path of [`/api/reports/team-report?${range}`, `/api/reports/custom-report?${range}`]) {
+      const res = await md.get(path);
+      const rows = Array.isArray(res.body) ? res.body : res.body.rows;
+      const mine = rows.find((r: { userId: number }) => r.userId === f.md);
+      expect(mine.userTitle).toBe("Admin");
+    }
+  });
+
+  it("leaves it null for everybody who has no override", async () => {
+    const md = await signIn(app, "md@test.local");
+    const res = await md.get("/api/users");
+    const analyst = res.body.find((u: { email: string }) => u.email === "analyst@test.local");
+    expect(analyst.role).toBe("analyst");
+    expect(analyst.title).toBeNull();
   });
 });
 

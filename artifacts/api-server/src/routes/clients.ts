@@ -403,6 +403,9 @@ router.get("/clients/:clientId/assignments", async (req, res): Promise<void> => 
       name: usersTable.name,
       email: usersTable.email,
       role: usersTable.role,
+      // Overrides the rank's label where somebody's designation differs from
+      // it - an administrator holds md but is not the Managing Director.
+      title: usersTable.title,
       reportingToId: usersTable.reportingToId,
       createdAt: usersTable.createdAt,
     })

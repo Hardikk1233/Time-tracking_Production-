@@ -316,6 +316,7 @@ router.get(
         name: usersTable.name,
         email: usersTable.email,
         role: usersTable.role,
+        title: usersTable.title,
         reportingToId: usersTable.reportingToId,
         createdAt: usersTable.createdAt,
       })

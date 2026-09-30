@@ -181,6 +181,7 @@ router.get(
         assigneeUserId: productAssignmentsTable.assigneeUserId,
         assigneeName: assignee.name,
         assigneeRole: assignee.role,
+        assigneeTitle: assignee.title,
         assignedById: productAssignmentsTable.assignedById,
         assignedAt: productAssignmentsTable.assignedAt,
       })

@@ -11,6 +11,11 @@ export interface MemberUtilization {
   userId: number;
   userName: string;
   role: MemberUtilizationRole;
+  /**
+     * Overrides the rank label where the person's designation differs from it. Null shows the ordinary role label.
+     * @nullable
+     */
+  title?: string | null;
   totalHours: number;
   billableHours: number;
   nonBillableHours: number;

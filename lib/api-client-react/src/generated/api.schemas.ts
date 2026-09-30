@@ -262,6 +262,11 @@ export interface ProjectTaskAssignment {
   assigneeUserId: number;
   assigneeName: string;
   assigneeRole: ProjectTaskAssignmentAssigneeRole;
+  /**
+     * Overrides the rank label where the person's designation differs from it. Null shows the ordinary role label.
+     * @nullable
+     */
+  assigneeTitle?: string | null;
   assignedById: number;
   assignedAt: string;
 }
@@ -335,6 +340,11 @@ export interface ProductAssignment {
   assigneeUserId: number;
   assigneeName: string;
   assigneeRole: ProductAssignmentAssigneeRole;
+  /**
+     * Overrides the rank label where the person's designation differs from it. Null shows the ordinary role label.
+     * @nullable
+     */
+  assigneeTitle?: string | null;
   assignedById: number;
   assignedAt: string;
 }
@@ -415,6 +425,11 @@ export interface TimeEntry {
   userId: number;
   userName: string;
   userRole?: string;
+  /**
+     * Overrides the rank label where the person's designation differs from it. Null shows the ordinary role label.
+     * @nullable
+     */
+  userTitle?: string | null;
   taskId: number;
   taskName: string;
   /**
@@ -546,6 +561,11 @@ export interface MemberUtilization {
   userId: number;
   userName: string;
   role: MemberUtilizationRole;
+  /**
+     * Overrides the rank label where the person's designation differs from it. Null shows the ordinary role label.
+     * @nullable
+     */
+  title?: string | null;
   totalHours: number;
   billableHours: number;
   nonBillableHours: number;
@@ -637,6 +657,11 @@ export interface TeamReportRow {
   userId: number;
   userName: string;
   userRole: TeamReportRowUserRole;
+  /**
+     * Overrides the rank label where the person's designation differs from it. Null shows the ordinary role label.
+     * @nullable
+     */
+  userTitle?: string | null;
   clientId: number;
   clientName: string;
   projectId: number;
@@ -755,6 +780,11 @@ export interface Leave {
   userId: number;
   userName: string;
   userRole: string;
+  /**
+     * Overrides the rank label where the person's designation differs from it. Null shows the ordinary role label.
+     * @nullable
+     */
+  userTitle?: string | null;
   date: string;
   /** How much of the working day was taken: 1 for a full day, 0.5 for a half. */
   portion?: number;

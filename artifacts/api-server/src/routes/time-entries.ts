@@ -35,6 +35,7 @@ async function buildEntryRows(conditions?: ReturnType<typeof eq>[]) {
       userId: timeEntriesTable.userId,
       userName: usersTable.name,
       userRole: usersTable.role,
+      userTitle: usersTable.title,
       taskId: timeEntriesTable.taskId,
       taskName: tasksTable.name,
       projectId: projectsTable.id,
