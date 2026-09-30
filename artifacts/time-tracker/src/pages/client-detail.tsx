@@ -195,7 +195,7 @@ export default function ClientDetail() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Assigned Team Members */}
-        <Card className="shadow-sm border-border">
+        <Card className="shadow-sm border-border flex flex-col">
           <CardHeader className="border-b border-border/50 bg-muted/20 pb-4">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-bold flex items-center gap-2">
@@ -207,7 +207,7 @@ export default function ClientDetail() {
               </CardTitle>
             </div>
           </CardHeader>
-          <CardContent className="pt-4 space-y-4">
+          <CardContent className="pt-4 space-y-4 flex-1 flex flex-col min-h-0">
             {isManager && (
               <div className="flex gap-2">
                 <Select value={selectedUserId} onValueChange={setSelectedUserId}>
@@ -234,7 +234,7 @@ export default function ClientDetail() {
             {isLoadingAssignments ? (
               <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
             ) : assignments && assignments.length > 0 ? (
-              <div className="space-y-2">
+              <div className="space-y-2 max-h-[20rem] overflow-y-auto pr-1">
                 {assignments.map(u => (
                   <div key={u.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-md group">
                     <div className="flex items-center gap-3">
@@ -275,7 +275,7 @@ export default function ClientDetail() {
         />
 
         {/* Projects */}
-        <Card className="shadow-sm border-border">
+        <Card className="shadow-sm border-border flex flex-col">
           <CardHeader className="border-b border-border/50 bg-muted/20 pb-4">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-bold flex items-center gap-2">
@@ -292,11 +292,11 @@ export default function ClientDetail() {
               )}
             </div>
           </CardHeader>
-          <CardContent className="pt-4">
+          <CardContent className="pt-4 flex-1 flex flex-col min-h-0">
             {isLoadingProjects ? (
               <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
             ) : projects && projects.length > 0 ? (
-              <div className="space-y-2">
+              <div className="space-y-2 max-h-[20rem] overflow-y-auto pr-1">
                 {projects.map(p => (
                   <Link key={p.id} href={`/projects/${p.id}`}>
                     <div className="flex items-center justify-between p-3 bg-muted/30 rounded-md hover:bg-muted/50 transition-colors cursor-pointer group">
@@ -330,118 +330,122 @@ export default function ClientDetail() {
             )}
           </CardContent>
         </Card>
-      </div>
 
-      {/* The engagement decides which of these is meaningful, so only one shows. */}
-      {engagementType === 'block_hours' && (
-        <HourBlocksCard clientId={clientId} canManage={canAllocate} />
-      )}
-      {/* A product client has no hours commitment and no allocation screen:
-          the engagement type now only changes how the client is measured in
-          reports, which is the whole of what it is for. */}
+        {/* The engagement decides which of these is meaningful, so only one
+            shows - and whichever it is sits beside Projects rather than in a
+            wide band underneath, so the page stays two even columns.
 
-      {/* FTE History */}
-      {engagementType === 'fte' && (
-      <Card className="shadow-sm border-border">
-        <CardHeader className="border-b border-border/50 bg-muted/20 pb-4">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base font-bold flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-primary" />
-              FTE History
-              <Badge variant="secondary" className="font-mono text-[10px]">{sortedFteHistory.length}</Badge>
-            </CardTitle>
-            {isManager && (
-              <AddFtePeriodDialog
-                open={fteDialogOpen}
-                onOpenChange={setFteDialogOpen}
-                clientId={clientId}
-              />
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="pt-4">
-          {/* Current FTE summary */}
-          <div className="mb-4 p-3 bg-primary/5 rounded-md border border-primary/10 flex items-center gap-3">
-            <div className="p-2 bg-primary/10 rounded text-primary">
-              <Users className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-foreground">
-                Current FTE: <span className="text-primary font-mono">{client.fteCount}</span>
-              </p>
-              <p className="text-xs text-muted-foreground font-mono">
-                Baseline — {(client.fteCount * 160).toFixed(0)} h/mo capacity
-              </p>
-            </div>
-          </div>
+            A product client has no hours commitment and no allocation screen:
+            the engagement type then only changes how the client is measured in
+            reports, which is the whole of what it is for. Projects simply
+            takes the full row in that case. */}
+        {engagementType === 'block_hours' && (
+          <HourBlocksCard clientId={clientId} canManage={canAllocate} />
+        )}
 
-          {isLoadingFte ? (
-            <div className="space-y-3">{[1, 2].map(i => <Skeleton key={i} className="h-14 w-full" />)}</div>
-          ) : sortedFteHistory.length > 0 ? (
-            <div className="space-y-2">
-              {sortedFteHistory.map((entry, i) => {
-                const isOpen = entry.effectiveTo === null;
-                const isLatest = i === sortedFteHistory.length - 1;
-                return (
-                  <div
-                    key={entry.id}
-                    className={`flex items-center justify-between p-3 rounded-md border group ${
-                      isLatest && isOpen
-                        ? 'bg-emerald-50 border-emerald-200'
-                        : 'bg-muted/30 border-border'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="p-1.5 rounded bg-primary/10 text-primary">
-                        <Calendar className="w-3.5 h-3.5" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-foreground font-mono">
-                            {entry.fteCount} FTE
-                          </span>
-                          {isLatest && isOpen && (
-                            <Badge className="text-[10px] bg-emerald-100 text-emerald-700 border-emerald-200 border font-mono">
-                              CURRENT
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground font-mono">
-                          {entry.effectiveFrom}
-                          {entry.effectiveTo ? ` → ${entry.effectiveTo}` : ' → present'}
-                          <span className="ml-2 opacity-60">
-                            ({(entry.fteCount * 160).toFixed(0)} h/mo)
-                          </span>
-                        </p>
-                      </div>
-                    </div>
-                    {isManager && (
-                      <Button
-                        variant="ghost" size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => handleDeleteFte(entry.id)}
-                        disabled={deleteFteMutation.isPending}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="py-8 text-center text-muted-foreground font-mono text-sm border border-dashed border-border rounded-md">
-              <p>NO FTE HISTORY RECORDED</p>
+        {/* FTE History */}
+        {engagementType === 'fte' && (
+        <Card className="shadow-sm border-border flex flex-col">
+          <CardHeader className="border-b border-border/50 bg-muted/20 pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-primary" />
+                FTE History
+                <Badge variant="secondary" className="font-mono text-[10px]">{sortedFteHistory.length}</Badge>
+              </CardTitle>
               {isManager && (
-                <p className="text-xs mt-1 opacity-70">
-                  Add periods to track time-weighted FTE changes over time.
-                </p>
+                <AddFtePeriodDialog
+                  open={fteDialogOpen}
+                  onOpenChange={setFteDialogOpen}
+                  clientId={clientId}
+                />
               )}
             </div>
-          )}
-        </CardContent>
-      </Card>
-      )}
+          </CardHeader>
+          <CardContent className="pt-4 flex-1 flex flex-col min-h-0">
+            {/* Current FTE summary */}
+            <div className="mb-4 p-3 bg-primary/5 rounded-md border border-primary/10 flex items-center gap-3">
+              <div className="p-2 bg-primary/10 rounded text-primary">
+                <Users className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  Current FTE: <span className="text-primary font-mono">{client.fteCount}</span>
+                </p>
+                <p className="text-xs text-muted-foreground font-mono">
+                  Baseline — {(client.fteCount * 160).toFixed(0)} h/mo capacity
+                </p>
+              </div>
+            </div>
+
+            {isLoadingFte ? (
+              <div className="space-y-3">{[1, 2].map(i => <Skeleton key={i} className="h-14 w-full" />)}</div>
+            ) : sortedFteHistory.length > 0 ? (
+              <div className="space-y-2 max-h-[20rem] overflow-y-auto pr-1">
+                {sortedFteHistory.map((entry, i) => {
+                  const isOpen = entry.effectiveTo === null;
+                  const isLatest = i === sortedFteHistory.length - 1;
+                  return (
+                    <div
+                      key={entry.id}
+                      className={`flex items-center justify-between p-3 rounded-md border group ${
+                        isLatest && isOpen
+                          ? 'bg-emerald-50 border-emerald-200'
+                          : 'bg-muted/30 border-border'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="p-1.5 rounded bg-primary/10 text-primary">
+                          <Calendar className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-foreground font-mono">
+                              {entry.fteCount} FTE
+                            </span>
+                            {isLatest && isOpen && (
+                              <Badge className="text-[10px] bg-emerald-100 text-emerald-700 border-emerald-200 border font-mono">
+                                CURRENT
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground font-mono">
+                            {entry.effectiveFrom}
+                            {entry.effectiveTo ? ` → ${entry.effectiveTo}` : ' → present'}
+                            <span className="ml-2 opacity-60">
+                              ({(entry.fteCount * 160).toFixed(0)} h/mo)
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+                      {isManager && (
+                        <Button
+                          variant="ghost" size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => handleDeleteFte(entry.id)}
+                          disabled={deleteFteMutation.isPending}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="py-8 text-center text-muted-foreground font-mono text-sm border border-dashed border-border rounded-md">
+                <p>NO FTE HISTORY RECORDED</p>
+                {isManager && (
+                  <p className="text-xs mt-1 opacity-70">
+                    Add periods to track time-weighted FTE changes over time.
+                  </p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        )}
+      </div>
     </div>
   );
 }
@@ -600,7 +604,7 @@ function RequestersCard({
   };
 
   return (
-    <Card className="shadow-sm border-border">
+    <Card className="shadow-sm border-border flex flex-col">
       <CardHeader className="border-b border-border/50 bg-muted/20 pb-4">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base font-bold flex items-center gap-2">
@@ -621,7 +625,7 @@ function RequestersCard({
           Who asks for the work on the client&rsquo;s side. Shown on reports.
         </p>
       </CardHeader>
-      <CardContent className="pt-4 space-y-4">
+      <CardContent className="pt-4 space-y-4 flex-1 flex flex-col min-h-0">
         {adding && (
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3 p-3 bg-muted/30 rounded-md">
@@ -655,7 +659,7 @@ function RequestersCard({
         {isLoading ? (
           <div className="space-y-3">{[1, 2].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
         ) : requesters.length > 0 ? (
-          <div className="space-y-2">
+          <div className="space-y-2 max-h-[20rem] overflow-y-auto pr-1">
             {requesters.map(r => (
               <div key={r.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-md group">
                 <div className="flex items-center gap-3">

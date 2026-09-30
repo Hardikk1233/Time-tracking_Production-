@@ -238,7 +238,7 @@ export default function ProjectDetail() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Tasks */}
-        <Card className="shadow-sm border-border">
+        <Card className="shadow-sm border-border flex flex-col">
           <CardHeader className="border-b border-border/50 bg-muted/20 pb-4">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-bold flex items-center gap-2">
@@ -248,7 +248,7 @@ export default function ProjectDetail() {
               </CardTitle>
             </div>
           </CardHeader>
-          <CardContent className="pt-4 space-y-4">
+          <CardContent className="pt-4 space-y-4 flex-1 flex flex-col min-h-0">
             {isManager && (
               <div className="space-y-2">
                 {/* Defining a catalog task went back to AVP-only after a week of
@@ -304,7 +304,7 @@ export default function ProjectDetail() {
             {isLoadingTasks ? (
               <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
             ) : tasks && tasks.length > 0 ? (
-              <div className="space-y-2">
+              <div className="space-y-2 max-h-[20rem] overflow-y-auto pr-1">
                 {tasks.map(t => (
                   <div key={t.id} className="flex items-start justify-between gap-3 p-3 bg-muted/30 rounded-md group">
                     <div className="flex items-start gap-3 min-w-0">
@@ -343,7 +343,7 @@ export default function ProjectDetail() {
         </Card>
 
         {/* Team Assignments — grouped by role */}
-        <Card className="shadow-sm border-border">
+        <Card className="shadow-sm border-border flex flex-col">
           <CardHeader className="border-b border-border/50 bg-muted/20 pb-4">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-bold flex items-center gap-2">
@@ -353,7 +353,7 @@ export default function ProjectDetail() {
               </CardTitle>
             </div>
           </CardHeader>
-          <CardContent className="pt-4 space-y-4">
+          <CardContent className="pt-4 space-y-4 flex-1 flex flex-col min-h-0">
             {isManager && (
               <div className="flex gap-2">
                 <Select value={selectedUserId} onValueChange={setSelectedUserId}>
@@ -381,7 +381,7 @@ export default function ProjectDetail() {
             {isLoadingAssignments ? (
               <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
             ) : assignments && assignments.length > 0 ? (
-              <div className="space-y-4">
+              <div className="space-y-4 max-h-[20rem] overflow-y-auto pr-1">
                 {ROLE_ORDER.map(role => {
                   const group = assignmentsByRole[role] || [];
                   if (group.length === 0) return null;

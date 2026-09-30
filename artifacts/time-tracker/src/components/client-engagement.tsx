@@ -136,7 +136,7 @@ export function HourBlocksCard({ clientId, canManage }: { clientId: number; canM
             </p>
 
             {data?.blocks && data.blocks.length > 0 ? (
-              <div className="space-y-2">
+              <div className="space-y-2 max-h-[20rem] overflow-y-auto pr-1">
                 {data.blocks.map((b) => (
                   <div key={b.id} className="flex items-center justify-between gap-3 p-3 rounded-md border border-border/50 hover:bg-muted/10 transition-colors">
                     <div className="min-w-0">
