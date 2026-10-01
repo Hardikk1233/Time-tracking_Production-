@@ -11,6 +11,7 @@ import {
   SUMMARY_VIEW,
   BALANCES_VIEW,
   APPROVALS_VIEW,
+  TEAM_VIEW,
 } from "./ui";
 import type { Principal } from "../middlewares/auth";
 import { logger } from "../lib/logger";
@@ -33,6 +34,7 @@ const UI = {
   summary: "ui://timetrack/summary.html",
   balances: "ui://timetrack/balances.html",
   approvals: "ui://timetrack/approvals.html",
+  team: "ui://timetrack/team.html",
 } as const;
 
 interface DashboardSummary {
@@ -166,6 +168,16 @@ export function buildMcpServer(token: string, me: Principal): McpServer {
         uri: uri.href,
         mimeType: RESOURCE_MIME_TYPE,
         text: renderView("Awaiting approval", {}, APPROVALS_VIEW),
+      },
+    ],
+  }));
+
+  registerAppResource(server, "Team report", UI.team, {}, async (uri) => ({
+    contents: [
+      {
+        uri: uri.href,
+        mimeType: RESOURCE_MIME_TYPE,
+        text: renderView("Team report", {}, TEAM_VIEW),
       },
     ],
   }));
@@ -353,22 +365,31 @@ export function buildMcpServer(token: string, me: Principal): McpServer {
         byPerson.set(row.userName, current);
       }
 
-      const lines = [...byPerson.entries()]
-        .sort((a, b) => b[1].hours - a[1].hours)
-        .map(
-          ([name, v]) =>
-            `- ${name}: ${Math.round(v.hours * 10) / 10}h (${Math.round(v.billable * 10) / 10}h billable)`,
-        );
+      const round = (n: number) => Math.round(n * 10) / 10;
+      const people = [...byPerson.entries()]
+        .map(([userName, v]) => ({
+          userName,
+          totalHours: round(v.hours),
+          billableHours: round(v.billable),
+        }))
+        .sort((a, b) => b.totalHours - a.totalHours);
 
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `${from} to ${to}, ${byPerson.size} people:\n${lines.join("\n")}`,
-          },
-        ],
-        structuredContent: { rows } as Record<string, unknown>,
-      };
+      const lines = people.map(
+        (p) => `- ${p.userName}: ${p.totalHours}h (${p.billableHours}h billable)`,
+      );
+
+      return withView(
+        UI.team,
+        `${from} to ${to}, ${people.length} people:` + "\n" + lines.join("\n"),
+        {
+          label: `${from} to ${to}`,
+          people,
+          clientCount: new Set(rows.map((r) => r.clientName).filter(Boolean)).size,
+          // The ungrouped rows stay available for anything the chart does not
+          // show - a question about one project, say.
+          rows,
+        },
+      );
     },
   );
 
