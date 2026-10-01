@@ -731,17 +731,10 @@ export interface ClientPeriodStats {
   contractUtilization?: number | null;
 }
 
-export type ClientUtilizationRowRequestersItem = {
-  name: string;
-  designation: string;
-};
-
 export interface ClientUtilizationRow {
   clientId: number;
   clientName: string;
   engagementType: EngagementType;
-  /** The client-side people who ask for this account's work. */
-  requesters: ClientUtilizationRowRequestersItem[];
   /**
      * Only set on FTE terms; null for block-of-hours and product clients.
      * @nullable

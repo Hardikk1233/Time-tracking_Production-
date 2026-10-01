@@ -1431,10 +1431,6 @@ export const GetClientReportResponse = zod.object({
   "clientId": zod.int(),
   "clientName": zod.string(),
   "engagementType": zod.enum(['fte', 'block_hours', 'product']).describe('How a client is engaged: dedicated FTEs, a purchased block of hours, or defined deliverables'),
-  "requesters": zod.array(zod.object({
-  "name": zod.string(),
-  "designation": zod.string()
-})).describe('The client-side people who ask for this account\'s work.'),
   "fteCount": zod.number().nullable().describe('Only set on FTE terms; null for block-of-hours and product clients.'),
   "selectedRange": zod.object({
   "billableHours": zod.number(),

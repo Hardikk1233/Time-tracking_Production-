@@ -478,25 +478,11 @@ router.get("/client-report", async (req, res): Promise<void> => {
   //                 measured against the same purchased total.
   //   product     - nothing. The client buys deliverables, so there is no
   //                 hours commitment and no honest utilisation figure.
-  // Who asks for the work, per client. The utilisation table is where somebody
-  // decides whether an account is worth its capacity, and "who is asking"
-  // belongs next to that number rather than a click away on the client page.
-  const requesterRows = await db
-    .select({
-      clientId: clientRequestersTable.clientId,
-      name: clientRequestersTable.name,
-      designation: clientRequestersTable.designation,
-    })
-    .from(clientRequestersTable)
-    .where(inArray(clientRequestersTable.clientId, allClientIds))
-    .orderBy(clientRequestersTable.name);
-  const requestersByClient = new Map<number, Array<{ name: string; designation: string }>>();
-  for (const r of requesterRows) {
-    const list = requestersByClient.get(r.clientId) ?? [];
-    list.push({ name: r.name, designation: r.designation });
-    requestersByClient.set(r.clientId, list);
-  }
-
+  // Requesters are deliberately absent here. This table answers whether an
+  // account is worth the capacity it takes, and an account's whole contact
+  // list made one row a column of names that pushed those figures aside. Who
+  // asks lives on the client's own page, and per project on the custom report,
+  // which is the grain where the question has a single answer.
   const clientSummary = clientRows.map((c) => {
     const history = fteHistoryMap.get(c.id) ?? [];
 
@@ -510,7 +496,6 @@ router.get("/client-report", async (req, res): Promise<void> => {
       clientId: c.id,
       clientName: c.name,
       engagementType: c.engagementType,
-      requesters: requestersByClient.get(c.id) ?? [],
       // Only meaningful on FTE terms; the UI hides the column for the others.
       fteCount: c.engagementType === "fte" ? c.fteCount : null,
       selectedRange: buildPeriodStats(billableSelected.get(c.id) ?? 0, commitment(start, end)),

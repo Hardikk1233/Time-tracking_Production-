@@ -2732,7 +2732,7 @@ components:
 
     ClientUtilizationRow:
       type: object
-      required: [clientId, clientName, engagementType, fteCount, requesters, selectedRange, last3m, last6m, last12m]
+      required: [clientId, clientName, engagementType, fteCount, selectedRange, last3m, last6m, last12m]
       properties:
         clientId:
           type: integer
@@ -2740,17 +2740,6 @@ components:
           type: string
         engagementType:
           $ref: "#/components/schemas/EngagementType"
-        requesters:
-          type: array
-          description: The client-side people who ask for this account's work.
-          items:
-            type: object
-            required: [name, designation]
-            properties:
-              name:
-                type: string
-              designation:
-                type: string
         fteCount:
           type: ["number", "null"]
           description: "Only set on FTE terms; null for block-of-hours and product clients."

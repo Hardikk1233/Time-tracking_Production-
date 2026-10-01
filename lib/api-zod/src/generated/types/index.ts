@@ -18,7 +18,6 @@ export * from './clientRequester';
 export * from './clientRequesterInput';
 export * from './clientUpdate';
 export * from './clientUtilizationRow';
-export * from './clientUtilizationRowRequestersItem';
 export * from './customReport';
 export * from './customReportRange';
 export * from './dashboardSummary';

@@ -151,18 +151,19 @@ describe("client requesters", () => {
     });
   });
 
-  it("shows them on the client utilisation report", async () => {
+  it("keeps them off the client utilisation report", async () => {
+    // That table answers whether an account is worth its capacity. An
+    // account's whole contact list turned one row into a column of names and
+    // pushed the figures aside, so the question is answered on the client's
+    // own page and, per project, on the custom report instead.
     const md = await signIn(app, "md@test.local");
     await md.post(`/api/clients/${f.acmeId}/requesters`).send({ name: "Priya Menon", designation: "CFO" });
 
     const res = await md.get("/api/reports/client-report?startDate=2026-08-01&endDate=2026-08-31");
     const acme = res.body.clientSummary.find((c: { clientId: number }) => c.clientId === f.acmeId);
-    const beta = res.body.clientSummary.find((c: { clientId: number }) => c.clientId === f.betaId);
 
-    expect(acme.requesters).toEqual([{ name: "Priya Menon", designation: "CFO" }]);
-    // A client with none reports an empty list, not a missing field: the UI
-    // renders an em dash from it rather than crashing on undefined.
-    expect(beta.requesters).toEqual([]);
+    expect(acme).toBeDefined();
+    expect(acme).not.toHaveProperty("requesters");
   });
 });
 

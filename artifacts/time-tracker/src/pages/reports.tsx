@@ -168,7 +168,6 @@ interface ClientSummaryRow {
   clientName: string;
   engagementType: 'fte' | 'block_hours' | 'product';
   fteCount: number | null;
-  requesters: Array<{ name: string; designation: string }>;
   selectedRange: PeriodStats;
   last3m:  PeriodStats;
   last6m:  PeriodStats;
@@ -220,7 +219,6 @@ function ClientSummaryTable({
         <thead>
           <tr className="border-b bg-muted/50">
             <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Client</th>
-            <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">Requested by</th>
             <th className="text-center px-3 py-2.5 font-medium text-muted-foreground">Engagement</th>
             <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">{rangeLabel}</th>
             <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Last 3 Months</th>
@@ -238,33 +236,6 @@ function ClientSummaryTable({
               <td className="px-4 py-3">
                 <div className="font-medium">{r.clientName}</div>
                 <div className="text-xs text-muted-foreground">Click to view monthly chart</div>
-              </td>
-              {/* An account can have a dozen contacts, and printing all of
-                  them turns one row into a column of names that pushes the
-                  figures - the point of this table - off to the side. Two,
-                  then a count, with the rest on hover and all of them in the
-                  export. */}
-              <td className="px-3 py-3 align-top">
-                {r.requesters.length === 0 ? (
-                  <span className="text-xs text-muted-foreground">—</span>
-                ) : (
-                  <div
-                    className="space-y-0.5 max-w-[14rem]"
-                    title={r.requesters.map((q) => `${q.name} · ${q.designation}`).join(String.fromCharCode(10))}
-                  >
-                    {r.requesters.slice(0, 2).map((q, i) => (
-                      <div key={i} className="text-xs leading-tight truncate">
-                        <span className="font-medium">{q.name}</span>
-                        <span className="text-muted-foreground"> · {q.designation}</span>
-                      </div>
-                    ))}
-                    {r.requesters.length > 2 && (
-                      <div className="text-xs text-muted-foreground">
-                        +{r.requesters.length - 2} more
-                      </div>
-                    )}
-                  </div>
-                )}
               </td>
               <td className="px-3 py-3 text-center">
                 <div className="text-xs font-medium">{ENGAGEMENT_LABEL[r.engagementType] ?? r.engagementType}</div>
@@ -566,20 +537,18 @@ export default function Reports() {
   // a spreadsheet reader cannot tell a real 0% from "the question does not
   // apply", and the second one summed into an average would be wrong.
   const num = (v: number | null) => (v === null ? '—' : v);
-  const requesterList = (r: { requesters: Array<{ name: string; designation: string }> }) =>
-    r.requesters.map((q) => `${q.name} (${q.designation})`).join('; ');
   const asPct = (v: number | null) => (v === null ? '—' : `${v}%`);
   const asHrs = (v: number | null) => (v === null ? '—' : `${v}h`);
 
   async function exportClientExcel() {
     await exportTableExcel('Client Utilization Report',
-      ['Client', 'Requested by', 'Engagement', `${rangeLabel} Util%`, `${rangeLabel} Billable`, `${rangeLabel} Contracted`, 'L3M Util%', 'L6M Util%', 'L12M Util%'],
-      clientSummary.map((r) => [r.clientName, requesterList(r), ENGAGEMENT_LABEL[r.engagementType] ?? r.engagementType, num(r.selectedRange.utilization), r.selectedRange.billableHours, num(r.selectedRange.contractedHours), num(r.last3m.utilization), num(r.last6m.utilization), num(r.last12m.utilization)]));
+      ['Client', 'Engagement', `${rangeLabel} Util%`, `${rangeLabel} Billable`, `${rangeLabel} Contracted`, 'L3M Util%', 'L6M Util%', 'L12M Util%'],
+      clientSummary.map((r) => [r.clientName, ENGAGEMENT_LABEL[r.engagementType] ?? r.engagementType, num(r.selectedRange.utilization), r.selectedRange.billableHours, num(r.selectedRange.contractedHours), num(r.last3m.utilization), num(r.last6m.utilization), num(r.last12m.utilization)]));
   }
   async function exportClientPDF() {
     await exportTablePDF('Client Utilization Report', 'Client Utilization Report',
-      ['Client', 'Requested by', 'Engagement', 'Selected Util%', 'Billable', 'Contracted', 'L3M Util%', 'L6M Util%', 'L12M Util%'],
-      clientSummary.map((r) => [r.clientName, requesterList(r), ENGAGEMENT_LABEL[r.engagementType] ?? r.engagementType, asPct(r.selectedRange.utilization), `${r.selectedRange.billableHours}h`, asHrs(r.selectedRange.contractedHours), asPct(r.last3m.utilization), asPct(r.last6m.utilization), asPct(r.last12m.utilization)]));
+      ['Client', 'Engagement', 'Selected Util%', 'Billable', 'Contracted', 'L3M Util%', 'L6M Util%', 'L12M Util%'],
+      clientSummary.map((r) => [r.clientName, ENGAGEMENT_LABEL[r.engagementType] ?? r.engagementType, asPct(r.selectedRange.utilization), `${r.selectedRange.billableHours}h`, asHrs(r.selectedRange.contractedHours), asPct(r.last3m.utilization), asPct(r.last6m.utilization), asPct(r.last12m.utilization)]));
   }
   async function exportTeamExcel() {
     if (!teamReportData) return;

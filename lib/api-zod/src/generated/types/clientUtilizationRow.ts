@@ -6,15 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ClientPeriodStats } from './clientPeriodStats';
-import type { ClientUtilizationRowRequestersItem } from './clientUtilizationRowRequestersItem';
 import type { EngagementType } from './engagementType';
 
 export interface ClientUtilizationRow {
   clientId: number;
   clientName: string;
   engagementType: EngagementType;
-  /** The client-side people who ask for this account's work. */
-  requesters: ClientUtilizationRowRequestersItem[];
   /**
      * Only set on FTE terms; null for block-of-hours and product clients.
      * @nullable
