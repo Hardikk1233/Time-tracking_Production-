@@ -13,9 +13,12 @@ import {
   useAssignTaskToProject,
   useCreateTask,
   useRemoveTaskFromProject,
+  useUpdateProject,
+  useListClientRequesters,
   getListProjectAssignmentsQueryKey,
   getListProjectTasksQueryKey,
   getListTasksQueryKey,
+  getGetProjectQueryKey,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
@@ -26,7 +29,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, FolderKanban, Users, CheckSquare, UserPlus, UserMinus, ShieldCheck, Plus } from 'lucide-react';
+import { ArrowLeft, FolderKanban, Users, CheckSquare, UserPlus, UserMinus, ShieldCheck, Plus, Contact, Pencil } from 'lucide-react';
 import { Link } from 'wouter';
 import { TaskAssignees } from '@/components/task-assignees';
 import { format } from 'date-fns';
@@ -213,14 +216,11 @@ export default function ProjectDetail() {
             <div className="text-xs font-mono text-primary mb-1 uppercase tracking-wider">{project.clientName}</div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">{project.name}</h1>
             <p className="text-muted-foreground font-mono text-sm mt-1">{project.description || 'No description provided.'}</p>
-            {/* Who commissioned this piece of work, when it is recorded. */}
-            {project.requesterName && (
-              <p className="text-sm text-muted-foreground mt-2">
-                Requested by{' '}
-                <span className="font-medium text-foreground">{project.requesterName}</span>
-                <span className="text-muted-foreground"> · {project.requesterDesignation}</span>
-              </p>
-            )}
+            {/* Who commissioned this piece of work. Editable here rather than
+                only at creation: every project that predates the field has
+                none, and the person who asked changes as people move on at
+                the client. */}
+            <ProjectRequester project={project} canEdit={isManager} />
             <p className="text-xs text-muted-foreground font-mono mt-1 opacity-60">Created {format(new Date(project.createdAt), 'MMMM yyyy')}</p>
           </div>
         </div>
@@ -436,3 +436,115 @@ export default function ProjectDetail() {
   );
 }
 
+
+
+/**
+ * The person at the client who asked for this project.
+ *
+ * Shown as a line of text until somebody wants to change it, because for most
+ * readers it is a fact to glance at rather than a control. Associates and
+ * above may set it - the same rank that may create the project in the first
+ * place, and the same people who learn that the requester has changed.
+ *
+ * The list offered is the project's own client's requesters, which is also
+ * what the API insists on: a project cannot be attributed to somebody at
+ * another firm.
+ */
+function ProjectRequester({
+  project,
+  canEdit,
+}: {
+  project: {
+    id: number;
+    clientId: number;
+    requesterId?: number | null;
+    requesterName?: string | null;
+    requesterDesignation?: string | null;
+  };
+  canEdit: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const updateMutation = useUpdateProject();
+  // Only fetched once the editor is open: most visits never touch it.
+  const { data: requesters } = useListClientRequesters(project.clientId, {
+    query: { enabled: editing } as any,
+  });
+
+  const save = (value: string) => {
+    const requesterId = value === 'none' ? null : Number(value);
+    updateMutation.mutate(
+      { projectId: project.id, data: { requesterId } as any },
+      {
+        onSuccess: () => {
+          toast({ title: requesterId ? 'Requester updated' : 'Requester cleared' });
+          void queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(project.id) });
+          setEditing(false);
+        },
+        onError: (err: any) =>
+          toast({ variant: 'destructive', title: 'Could not update', description: errorMessage(err, 'Please try again.') }),
+      },
+    );
+  };
+
+  if (editing) {
+    const options = requesters ?? [];
+    return (
+      <div className="mt-2 flex items-center gap-2 flex-wrap">
+        <Contact className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        <Select
+          defaultValue={project.requesterId ? String(project.requesterId) : 'none'}
+          onValueChange={save}
+          disabled={updateMutation.isPending}
+        >
+          <SelectTrigger className="h-8 w-[22rem] max-w-full text-sm">
+            <SelectValue placeholder="Select a requester" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">— Not recorded</SelectItem>
+            {options.map(r => (
+              <SelectItem key={r.id} value={String(r.id)}>
+                {r.name} <span className="text-muted-foreground text-xs">· {r.designation}</span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button variant="ghost" size="sm" onClick={() => setEditing(false)} disabled={updateMutation.isPending}>
+          Cancel
+        </Button>
+        {options.length === 0 && (
+          <span className="text-xs text-muted-foreground">
+            This client has no requesters yet — add them on the client page.
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 flex items-center gap-2 group">
+      {project.requesterName ? (
+        <p className="text-sm text-muted-foreground">
+          Requested by{' '}
+          <span className="font-medium text-foreground">{project.requesterName}</span>
+          <span className="text-muted-foreground"> · {project.requesterDesignation}</span>
+        </p>
+      ) : (
+        <p className="text-sm text-muted-foreground italic">No requester recorded</p>
+      )}
+      {canEdit && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 px-2 text-xs text-muted-foreground opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+          onClick={() => setEditing(true)}
+        >
+          <Pencil className="w-3 h-3 mr-1" />
+          {project.requesterName ? 'Change' : 'Add'}
+        </Button>
+      )}
+    </div>
+  );
+}

@@ -239,17 +239,30 @@ function ClientSummaryTable({
                 <div className="font-medium">{r.clientName}</div>
                 <div className="text-xs text-muted-foreground">Click to view monthly chart</div>
               </td>
-              <td className="px-3 py-3">
+              {/* An account can have a dozen contacts, and printing all of
+                  them turns one row into a column of names that pushes the
+                  figures - the point of this table - off to the side. Two,
+                  then a count, with the rest on hover and all of them in the
+                  export. */}
+              <td className="px-3 py-3 align-top">
                 {r.requesters.length === 0 ? (
                   <span className="text-xs text-muted-foreground">—</span>
                 ) : (
-                  <div className="space-y-0.5">
-                    {r.requesters.map((q, i) => (
-                      <div key={i} className="text-xs leading-tight">
+                  <div
+                    className="space-y-0.5 max-w-[14rem]"
+                    title={r.requesters.map((q) => `${q.name} · ${q.designation}`).join(String.fromCharCode(10))}
+                  >
+                    {r.requesters.slice(0, 2).map((q, i) => (
+                      <div key={i} className="text-xs leading-tight truncate">
                         <span className="font-medium">{q.name}</span>
                         <span className="text-muted-foreground"> · {q.designation}</span>
                       </div>
                     ))}
+                    {r.requesters.length > 2 && (
+                      <div className="text-xs text-muted-foreground">
+                        +{r.requesters.length - 2} more
+                      </div>
+                    )}
                   </div>
                 )}
               </td>
