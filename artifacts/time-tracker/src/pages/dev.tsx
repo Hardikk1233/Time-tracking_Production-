@@ -139,7 +139,7 @@ export default function DevConsole() {
           <DevPerformance />
         </TabsContent>
 
-        <TabsContent value="feedback" className="space-y-3 mt-4">
+        <TabsContent value="feedback" className="space-y-3 mt-4 max-h-[36rem] overflow-y-auto pr-1">
           {feedbackItems.length === 0 && (
             <p className="text-sm text-muted-foreground py-8 text-center">
               Nothing yet.
@@ -190,7 +190,7 @@ export default function DevConsole() {
           ))}
         </TabsContent>
 
-        <TabsContent value="errors" className="space-y-3 mt-4">
+        <TabsContent value="errors" className="space-y-3 mt-4 max-h-[36rem] overflow-y-auto pr-1">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex gap-2">
               {(['all', 'client', 'server'] as const).map((value) => (

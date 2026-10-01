@@ -147,7 +147,7 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="flex flex-col divide-y divide-border/40">
+            <div className="flex flex-col divide-y divide-border/40 max-h-[20rem] overflow-y-auto pr-1">
               {myWork.map(w => (
                 <div key={w.id} className="flex items-center justify-between gap-3 py-2">
                   <div className="min-w-0">
@@ -310,7 +310,7 @@ export default function Dashboard() {
               <Activity className="w-4 h-4 text-muted-foreground" />
             </div>
           </CardHeader>
-          <CardContent className="pt-4 flex-1 overflow-y-auto">
+          <CardContent className="pt-4 flex-1 max-h-[26rem] overflow-y-auto">
             {isLoadingActivity ? (
               <div className="space-y-4">
                 {[1, 2, 3, 4].map(i => (
@@ -370,9 +370,9 @@ export default function Dashboard() {
             {isLoadingTeam ? (
               <div className="p-6"><Skeleton className="h-48 w-full" /></div>
             ) : teamUtil && teamUtil.filter(m => m.totalHours > 0).length > 0 ? (
-              <div className="overflow-x-auto">
+              <div className="overflow-auto max-h-[30rem]">
                 <table className="w-full text-sm">
-                  <thead>
+                  <thead className="sticky top-0 z-10 bg-background">
                     <tr className="border-b border-border text-left text-xs uppercase tracking-wider font-mono text-muted-foreground bg-muted/30">
                       <th className="px-6 py-4 font-medium">Team Member</th>
                       <th className="px-6 py-4 font-medium">Role</th>
