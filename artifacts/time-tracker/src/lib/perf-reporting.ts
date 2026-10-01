@@ -21,7 +21,11 @@ interface ApiSample {
   kind: 'api';
   method: string;
   path: string;
-  /** 0 when no response arrived at all - a dropped connection, a timeout. */
+  /**
+   * The response status, or 0 when none arrived at all - a dropped
+   * connection, a timeout. 499 when the caller cancelled before the
+   * answer came, which is what the server calls that case too.
+   */
   status: number;
   durationMs: number;
   /** The SPA page the call was made from, so a slow page can be found by name. */
@@ -77,6 +81,23 @@ function apiPath(input: RequestInfo | URL): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Whether a rejected fetch was cancelled rather than failed.
+ *
+ * Checked three ways because the browser's answer depends on who did the
+ * cancelling: fetch rejects with a DOMException named AbortError, but a
+ * signal already aborted at the moment of the call can reject differently,
+ * and the signal may arrive on the init or on a Request object.
+ */
+function wasAborted(err: unknown, input: RequestInfo | URL, init?: RequestInit): boolean {
+  if (typeof err === 'object' && err !== null && (err as { name?: string }).name === 'AbortError') {
+    return true;
+  }
+  if (init?.signal?.aborted) return true;
+  if (typeof Request !== 'undefined' && input instanceof Request && input.signal?.aborted) return true;
+  return false;
 }
 
 function enqueue(sample: Sample): void {
@@ -207,11 +228,25 @@ export function installPerfReporting(): void {
       });
       return response;
     } catch (err) {
+      // A cancelled request is not a failed one, and the two look identical
+      // here: fetch rejects either way.
+      //
+      // React Query aborts a query in flight whenever its component unmounts
+      // or its key changes, and the generated client passes that signal
+      // straight through to fetch. So opening a page and clicking away before
+      // it finished - or changing a report filter - rejected with an
+      // AbortError and was recorded as "no response", which read on the
+      // console as an outage the server knew nothing about. Two of those were
+      // investigated as incidents before this was noticed.
+      //
+      // 499 is what the server already records when a caller gives up before
+      // the response is finished, so the two sides now agree on what to call
+      // it: abandoned, counted apart from failures.
       enqueue({
         kind: 'api',
         method,
         path,
-        status: 0,
+        status: wasAborted(err, input, init) ? 499 : 0,
         durationMs: round(performance.now() - started),
         page,
       });
