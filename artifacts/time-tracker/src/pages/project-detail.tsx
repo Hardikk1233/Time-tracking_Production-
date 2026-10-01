@@ -523,26 +523,46 @@ function ProjectRequester({
     );
   }
 
+  // Always visible, never hover-revealed. This is the only way into the
+  // feature, and on a project that has no requester the line it would hide
+  // behind reads "No requester recorded" - nothing there invites a hover, so
+  // the control may as well not exist. A bin icon on a row somebody is
+  // already reading can afford to wait for the pointer; this cannot.
+  if (!project.requesterName) {
+    return (
+      <div className="mt-2 flex items-center gap-2 flex-wrap">
+        <span className="text-sm text-muted-foreground italic">No requester recorded</span>
+        {canEdit && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2.5 text-xs gap-1.5"
+            onClick={() => setEditing(true)}
+          >
+            <Contact className="w-3.5 h-3.5" />
+            Add requester
+          </Button>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className="mt-2 flex items-center gap-2 group">
-      {project.requesterName ? (
-        <p className="text-sm text-muted-foreground">
-          Requested by{' '}
-          <span className="font-medium text-foreground">{project.requesterName}</span>
-          <span className="text-muted-foreground"> · {project.requesterDesignation}</span>
-        </p>
-      ) : (
-        <p className="text-sm text-muted-foreground italic">No requester recorded</p>
-      )}
+    <div className="mt-2 flex items-center gap-2 flex-wrap">
+      <p className="text-sm text-muted-foreground">
+        Requested by{' '}
+        <span className="font-medium text-foreground">{project.requesterName}</span>
+        <span className="text-muted-foreground"> · {project.requesterDesignation}</span>
+      </p>
       {canEdit && (
         <Button
           variant="ghost"
           size="sm"
-          className="h-6 px-2 text-xs text-muted-foreground opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+          className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
           onClick={() => setEditing(true)}
         >
-          <Pencil className="w-3 h-3 mr-1" />
-          {project.requesterName ? 'Change' : 'Add'}
+          <Pencil className="w-3 h-3" />
+          Change
         </Button>
       )}
     </div>
