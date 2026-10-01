@@ -29,12 +29,19 @@ export default defineConfig({
       // stands up, so the real jose verification path runs without a tenant.
       ENTRA_TENANT_ID: "00000000-0000-0000-0000-000000000000",
       ENTRA_AUDIENCE: "api://timetrack-test",
+      // The scope a connector asks for. Absent here, the MCP discovery
+      // document advertised no scopes at all and nothing noticed, because
+      // production sets it and the suite did not.
+      ENTRA_API_SCOPE: "api://timetrack-test/access_as_user",
       ENTRA_ISSUER: "https://test-issuer.local/v2.0",
       ENTRA_JWKS_URI: "http://127.0.0.1:8098/keys",
       // The /dev console answers 404 to everyone unless somebody is listed.
       DEV_CONSOLE_EMAILS: "md@test.local",
       // Gives request rows a stable replica name to assert on.
       CONTAINER_APP_REPLICA_NAME: "test-replica",
+      // The MCP endpoint answers 404 without its own address, so the suite
+      // has to give it one to test anything else about it.
+      MCP_PUBLIC_URL: "https://timetrack.test.local/mcp",
     },
     globalSetup: ["./test/global-setup.ts"],
     // The suite shares one database, so files run sequentially rather than

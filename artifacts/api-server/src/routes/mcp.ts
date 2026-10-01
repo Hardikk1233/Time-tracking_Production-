@@ -8,6 +8,7 @@ import {
   EntraAuthError,
 } from "../lib/entra";
 import { resolveEntraPrincipal } from "../middlewares/auth";
+import { atLeast } from "../lib/roles";
 import { buildMcpServer } from "../mcp/server";
 
 const router: IRouter = Router();
@@ -89,20 +90,23 @@ export function protectedResourceMetadata(_req: Request, res: Response): void {
   }
 
   res.json({
-    // The API's Application ID URI, not this endpoint's URL.
+    // This endpoint's own URL, which is what the MCP spec means by the
+    // resource identifier and what a client checks the metadata against.
     //
-    // A client sends this value as the OAuth resource indicator (RFC 8707)
-    // alongside the scope below, and Entra rejects the pair unless the resource
-    // is a registered Application ID URI of the app that owns the scope —
-    // AADSTS9010010, "the resource parameter provided in the request doesn't
-    // match with the requested scopes".
+    // It took a domain to get here. A client sends this value as the OAuth
+    // resource indicator (RFC 8707) alongside the scope below, and Entra
+    // rejects the pair unless the resource is a registered Application ID URI
+    // of the app that owns the scope - AADSTS9010010, "the resource parameter
+    // provided in the request doesn't match with the requested scopes". Entra
+    // will only accept an identifier on a domain the tenant has verified, and
+    // azurecontainerapps.io is not one, so this had to name the API's
+    // api:// URI instead and the connector could not complete the flow.
     //
-    // Naming the endpoint URL here cannot satisfy that: Entra will only accept
-    // an identifier on a domain the tenant has verified, so an
-    // azurecontainerapps.io address is refused outright with
-    // HostNameNotOnVerifiedDomain. Once the app is on a verified domain this
-    // can become the endpoint URL, which is what the spec would prefer.
-    resource: config.entraAudience,
+    // With the app on timetrack.tristone-partners.com that URL is registered
+    // as an Application ID URI on the API app, so it satisfies Entra and the
+    // spec at the same time. It must stay character-for-character identical to
+    // MCP_PUBLIC_URL and to the identifier URI.
+    resource: config.mcpPublicUrl,
     authorization_servers: [
       `https://login.microsoftonline.com/${config.entraTenantId}/v2.0`,
     ],
@@ -147,6 +151,37 @@ async function handle(req: Request, res: Response): Promise<void> {
 
   if (!principal) {
     res.status(403).json({ error: "This account has been deactivated" });
+    return;
+  }
+
+  // Administrators only - the md rank, which is the Managing Director and the
+  // people who administer the system.
+  //
+  // Narrower than the rest of the app on purpose. Every other surface is a
+  // screen somebody opens deliberately, where scope quietly limits what they
+  // see. This one hands a conversational agent a token and lets it ask
+  // open-ended questions on the holder's behalf, and the answers leave the
+  // firm's systems for a third party to process. That is a different kind of
+  // exposure from reading the same figures in a table, and it is worth
+  // confining to the people accountable for the data.
+  //
+  // Scope still applies underneath: the tools call the ordinary API with this
+  // person's token, so nothing here can reach past what they could already see.
+  if (!atLeast(principal.role, "md")) {
+    logger.warn(
+      { email: principal.email, role: principal.role },
+      "Refused MCP access to a non-administrator",
+    );
+    res.status(403).json({
+      jsonrpc: "2.0",
+      error: {
+        code: -32001,
+        message:
+          "The TimeTrack connector is limited to administrators. Your account " +
+          "can use the app itself at https://timetrack.tristone-partners.com.",
+      },
+      id: null,
+    });
     return;
   }
 
