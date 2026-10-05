@@ -14,7 +14,6 @@ import {
   useCreateTask,
   useRemoveTaskFromProject,
   useUpdateProject,
-  useListClientRequesters,
   getListProjectAssignmentsQueryKey,
   getListProjectTasksQueryKey,
   getListTasksQueryKey,
@@ -35,6 +34,7 @@ import { TaskAssignees } from '@/components/task-assignees';
 import { format } from 'date-fns';
 import { errorMessage } from '@/lib/errors';
 import { displayTitle } from '@/lib/roles';
+import { RequesterPicker } from '@/components/requester-picker';
 
 const ROLE_ORDER = ['md', 'avp', 'associate', 'analyst'] as const;
 const ROLE_LABELS: Record<string, string> = { md: 'Managing Directors', avp: 'AVPs', associate: 'Associates', analyst: 'Analysts' };
@@ -468,10 +468,6 @@ function ProjectRequester({
   const { toast } = useToast();
 
   const updateMutation = useUpdateProject();
-  // Only fetched once the editor is open: most visits never touch it.
-  const { data: requesters } = useListClientRequesters(project.clientId, {
-    query: { enabled: editing } as any,
-  });
 
   const save = (value: string) => {
     const requesterId = value === 'none' ? null : Number(value);
@@ -490,35 +486,21 @@ function ProjectRequester({
   };
 
   if (editing) {
-    const options = requesters ?? [];
     return (
-      <div className="mt-2 flex items-center gap-2 flex-wrap">
-        <Contact className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-        <Select
-          defaultValue={project.requesterId ? String(project.requesterId) : 'none'}
-          onValueChange={save}
-          disabled={updateMutation.isPending}
-        >
-          <SelectTrigger className="h-8 w-[22rem] max-w-full text-sm">
-            <SelectValue placeholder="Select a requester" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">— Not recorded</SelectItem>
-            {options.map(r => (
-              <SelectItem key={r.id} value={String(r.id)}>
-                {r.name} <span className="text-muted-foreground text-xs">· {r.designation}</span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="mt-2 flex items-start gap-2 flex-wrap">
+        <Contact className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-2" />
+        <div className="w-[26rem] max-w-full">
+          <RequesterPicker
+            clientId={project.clientId}
+            value={project.requesterId ?? null}
+            onChange={(id) => save(id === null ? 'none' : String(id))}
+            disabled={updateMutation.isPending}
+            triggerClassName="h-8"
+          />
+        </div>
         <Button variant="ghost" size="sm" onClick={() => setEditing(false)} disabled={updateMutation.isPending}>
           Cancel
         </Button>
-        {options.length === 0 && (
-          <span className="text-xs text-muted-foreground">
-            This client has no requesters yet — add them on the client page.
-          </span>
-        )}
       </div>
     );
   }

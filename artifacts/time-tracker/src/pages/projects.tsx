@@ -3,7 +3,6 @@ import { useAuth } from '@/lib/auth';
 import {
   useListProjects,
   useCreateProject,
-  useListClientRequesters,
   useUpdateProject,
   useDeleteProject,
   useListClients,
@@ -30,6 +29,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, FolderKanban, ChevronRight, Check, PowerOff, Power } from 'lucide-react';
 import { errorMessage } from '@/lib/errors';
+import { RequesterPicker } from '@/components/requester-picker';
 import { displayTitle } from '@/lib/roles';
 
 // Nothing here is optional. A project with no description, no tasks and
@@ -250,11 +250,8 @@ function CreateProjectDialog({ open, onOpenChange, clients }: { open: boolean; o
     defaultValues: { name: '', description: '', taskIds: [], userIds: [], requesterId: null },
   });
 
-  // Requesters belong to a client, so the list only exists once one is chosen.
+  // Requesters belong to a client, so the picker needs to know which one.
   const selectedClientId = form.watch('clientId');
-  const { data: requesters } = useListClientRequesters(selectedClientId, {
-    query: { enabled: Number(selectedClientId) > 0 } as any,
-  });
 
   // Changing the client strands a requester chosen under the previous one,
   // which the API would then refuse with a message about a client the person
@@ -320,30 +317,13 @@ function CreateProjectDialog({ open, onOpenChange, clients }: { open: boolean; o
                 <FormLabel>
                   Requester <span className="text-muted-foreground font-normal">(optional)</span>
                 </FormLabel>
-                <Select
-                  onValueChange={(v) => field.onChange(v === 'none' ? null : Number(v))}
-                  value={field.value ? String(field.value) : 'none'}
-                  disabled={!selectedClientId}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder={selectedClientId ? 'Select a requester' : 'Choose a client first'} />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="none">— Not recorded</SelectItem>
-                    {(requesters ?? []).map(r => (
-                      <SelectItem key={r.id} value={String(r.id)}>
-                        {r.name} <span className="text-muted-foreground text-xs">· {r.designation}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {selectedClientId && (requesters ?? []).length === 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    This client has no requesters yet — add them on the client page.
-                  </p>
-                )}
+                <FormControl>
+                  <RequesterPicker
+                    clientId={Number(selectedClientId) || null}
+                    value={field.value ?? null}
+                    onChange={field.onChange}
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )} />
