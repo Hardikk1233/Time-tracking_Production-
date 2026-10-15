@@ -351,8 +351,24 @@ export async function customFetch<T = unknown>(
 
   // Attach bearer token when an auth getter is configured and no
   // Authorization header has been explicitly provided.
+  //
+  // A getter that throws must not sink the request here. Rejecting at this
+  // point happens *before* `fetch` is ever called, so the failure carries no
+  // status and no response body, leaves no trace in the server log, and
+  // reaches the caller as a bare error - which every call site then reports as
+  // whatever it was attempting ("Failed to create project"). The person is
+  // told the feature is broken when the truth is that their session ended, and
+  // retrying cannot help. Sending the request without the header instead
+  // yields a 401: a thing the app can recognise, explain and act on.
   if (_authTokenGetter && !headers.has("authorization")) {
-    const token = await _authTokenGetter();
+    let token: string | null = null;
+    try {
+      token = await _authTokenGetter();
+    } catch {
+      // Deliberately swallowed. Whoever supplied the getter is the only party
+      // that can say why it failed, and is expected to report it there.
+      token = null;
+    }
     if (token) {
       headers.set("authorization", `Bearer ${token}`);
     }

@@ -152,13 +152,23 @@ export async function getAccessToken(): Promise<string | null> {
     if (error instanceof InteractionRequiredAuthError) {
       return null;
     }
-    // Rethrown into customFetch, which has no try/catch around this call, so
-    // it propagates into whichever query triggered it - React Query treats
-    // that as a query error rather than an unhandledrejection, and it would
-    // otherwise vanish. Reported here since this is the last point that sees
-    // the real error object.
+    // Still reported here - this is the last point that holds the real error
+    // object, and the /dev console is where somebody goes to find out why a
+    // person could not work.
     reportError(error, { kind: 'msal-acquire-token-silent' });
-    throw error;
+    // But not rethrown. This used to propagate into customFetch, which awaits
+    // this call outside any try/catch, so the request was abandoned before it
+    // was ever sent: no status, no body, nothing in the server log, and a
+    // toast naming whatever the person had been doing. Somebody filling in the
+    // new-project form was told "Failed to create project" when the real
+    // answer was that their Microsoft session had lapsed - and no amount of
+    // retrying the form could fix that.
+    //
+    // A token we cannot obtain is, to every caller, the same situation as
+    // nobody being signed in, so it gets the same answer. The request then
+    // goes out unauthenticated and comes back 401, which the app can name
+    // honestly and recover from.
+    return null;
   }
 }
 
