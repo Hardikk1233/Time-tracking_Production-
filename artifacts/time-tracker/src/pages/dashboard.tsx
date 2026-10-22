@@ -88,7 +88,7 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Command Center</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
           <p className="text-muted-foreground font-mono text-sm mt-1">
             {format(new Date(), 'EEEE, MMMM do, yyyy')} // SYSTEM STATUS: ACTIVE
           </p>
