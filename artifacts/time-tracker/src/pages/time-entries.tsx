@@ -7,6 +7,7 @@ import {
   useApproveTimeEntry,
   useRejectTimeEntry,
   useReopenTimeEntry,
+  useDeleteTimeEntry,
   useSplitTimeEntry,
   useListClients,
   useListProjects,
@@ -146,9 +147,11 @@ export default function TimeEntries() {
   const approveMutation = useApproveTimeEntry();
   const rejectMutation = useRejectTimeEntry();
   const reopenMutation = useReopenTimeEntry();
+  const deleteMutation = useDeleteTimeEntry();
 
   const isAssociateOrAbove = ['associate', 'avp', 'md'].includes(user?.role ?? '');
   const isAvpOrAbove = ['avp', 'md'].includes(user?.role ?? '');
+  const isMd = user?.role === 'md';
 
   // Associates and above may decide any pending entry they can see, their own
   // included. The list is already scoped to what the caller may see, so
@@ -198,6 +201,33 @@ export default function TimeEntries() {
       },
       onError: (err: any) => {
         toast({ variant: 'destructive', title: 'Could not reopen', description: errorMessage(err, 'Please try again.') });
+      },
+    });
+  };
+
+  // Logging against the wrong project, or twice over, is the commonest mistake
+  // in the app, and until now the only remedy was to ask somebody else to fix
+  // it. The API has always allowed a person to delete their own unapproved
+  // time; nothing in the UI ever called it. Approved time stays locked and
+  // needs a reopen first, which the server enforces either way.
+  const handleDelete = (entry: TimeEntry) => {
+    const when = format(new Date(entry.date), 'MMM dd, yyyy');
+    const whose = entry.userId === user?.id ? 'your' : `${entry.userName}'s`;
+    if (!confirm(
+      `Delete ${whose} ${entry.hours.toFixed(2)}h on ${when} for ${entry.clientName} — ${entry.projectName}?\n\n` +
+      'This cannot be undone.',
+    )) return;
+
+    deleteMutation.mutate({ entryId: entry.id }, {
+      onSuccess: () => {
+        toast({ title: 'Entry deleted' });
+        queryClient.invalidateQueries({ queryKey: getListTimeEntriesQueryKey() });
+        // A deleted row must not stay in a bulk selection that is about to be
+        // approved; the id no longer resolves to anything.
+        setSelectedIds(prev => { const next = new Set(prev); next.delete(entry.id); return next; });
+      },
+      onError: (err: any) => {
+        toast({ variant: 'destructive', title: 'Could not delete', description: errorMessage(err, 'Please try again.') });
       },
     });
   };
@@ -358,6 +388,11 @@ export default function TimeEntries() {
                   const canEdit = entry.status !== 'approved'
                     && (isAvpOrAbove
                       || (entry.status === 'pending' && (entry.userId === user?.id || isAssociateOrAbove)));
+                  // Mirrors the server exactly: your own unapproved time, or an
+                  // MD tidying up after anyone. Deliberately not tied to rank -
+                  // an analyst owns their own mistakes as much as an AVP does.
+                  const canDelete = entry.status !== 'approved'
+                    && (entry.userId === user?.id || isMd);
                   const isChecked = selectedIds.has(entry.id);
                   return (
                     <tr key={entry.id} className={cn('hover:bg-muted/10 transition-colors', isChecked && 'bg-emerald-50/40')}>
@@ -448,6 +483,21 @@ export default function TimeEntries() {
                                 disabled={approveMutation.isPending || rejectMutation.isPending}
                               ><X className="w-4 h-4" /></Button>
                             </>
+                          )}
+                          {/* Last in the row, and the only one that destroys
+                              anything, so it sits apart from the actions a
+                              mis-click can simply be undone from. */}
+                          {canDelete && (
+                            <Button
+                              variant="ghost" size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full"
+                              title="Delete entry"
+                              aria-label="Delete entry"
+                              onClick={() => handleDelete(entry)}
+                              disabled={deleteMutation.isPending}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
                           )}
                         </div>
                       </td>

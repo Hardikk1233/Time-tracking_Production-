@@ -172,14 +172,27 @@ export function ProductTour() {
 
   if (!open) {
     return (
+      // A permanent pill the width of its label sat over the last rows of
+      // every table, and the thing it covers is the thing people are reading.
+      // Worse, it is a one-click detour out of whatever you were doing, so the
+      // cost of brushing it by accident is high and the cost of it being
+      // slightly harder to find is nearly nothing - you take a tour once.
+      //
+      // So: a small dimmed compass that grows its label only on hover or
+      // keyboard focus. Deliberately still visible at rest. An earlier attempt
+      // elsewhere in the app hid a control until hover and it simply could not
+      // be found; opacity is as far as this goes.
       <button
         type="button"
         onClick={() => { setIndex(0); setOpen(true); }}
-        className="fixed bottom-[4.5rem] right-5 z-40 flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-sm font-semibold text-primary shadow-lg transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        className="group fixed bottom-[4.5rem] right-5 z-40 flex items-center gap-2 overflow-hidden rounded-full border border-border bg-background py-2 pl-2.5 pr-2.5 text-sm font-semibold text-primary opacity-60 shadow-sm transition-all duration-200 hover:pr-4 hover:opacity-100 hover:shadow-lg focus-visible:pr-4 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         aria-label="Take the guided tour"
+        title="Take the guided tour"
       >
-        <Compass className="h-4 w-4" />
-        Take the tour
+        <Compass className="h-4 w-4 shrink-0" />
+        <span className="max-w-0 whitespace-nowrap opacity-0 transition-all duration-200 group-hover:max-w-[8rem] group-hover:opacity-100 group-focus-visible:max-w-[8rem] group-focus-visible:opacity-100">
+          Take the tour
+        </span>
       </button>
     );
   }
